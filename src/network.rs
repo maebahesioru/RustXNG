@@ -194,14 +194,15 @@ fn build_client_with(
     if !outgoing.enable_http2 {
         builder = builder.http1_only();
     }
-    for (scheme, proxy) in &outgoing.proxies {
-        let proxy =
-            reqwest::Proxy::all(proxy).map_err(|error| NetworkError::Build(error.to_string()))?;
-        tracing::debug!(scheme, "configured proxy");
-        builder = builder.proxy(proxy);
-    }
     if let Some(proxy) = extra_proxy {
         builder = builder.proxy(proxy);
+    } else {
+        for (scheme, proxy) in &outgoing.proxies {
+            let proxy = reqwest::Proxy::all(proxy)
+                .map_err(|error| NetworkError::Build(error.to_string()))?;
+            tracing::debug!(scheme, "configured proxy");
+            builder = builder.proxy(proxy);
+        }
     }
     builder
         .build()
@@ -251,26 +252,22 @@ impl Network {
     ///
     /// Engines share the default client; a per-engine proxy gets its own so a
     /// blocked engine can be routed elsewhere without moving the rest.
-    fn client_for(&self, proxy: Option<&str>) -> reqwest::Client {
+    fn client_for(&self, proxy: Option<&str>) -> Result<reqwest::Client, NetworkError> {
         let Some(proxy) = proxy.map(str::trim).filter(|value| !value.is_empty()) else {
-            return self.client.clone();
+            return Ok(self.client.clone());
         };
-        tracing::debug!(proxy, "using a per-engine proxy");
         if let Ok(cache) = self.proxied.lock() {
             if let Some(client) = cache.get(proxy) {
-                return client.clone();
+                return Ok(client.clone());
             }
         }
-        let Ok(configured) = reqwest::Proxy::all(proxy) else {
-            return self.client.clone();
-        };
-        let Ok(client) = build_client(&self.outgoing, Some(configured)) else {
-            return self.client.clone();
-        };
+        let configured =
+            reqwest::Proxy::all(proxy).map_err(|error| NetworkError::Build(error.to_string()))?;
+        let client = build_client(&self.outgoing, Some(configured))?;
         if let Ok(mut cache) = self.proxied.lock() {
             cache.insert(proxy.to_string(), client.clone());
         }
-        client
+        Ok(client)
     }
 
     /// Cookies remembered for the host of `url`.
@@ -498,7 +495,7 @@ impl Network {
         max_bytes: Option<usize>,
     ) -> Result<EngineResponse, NetworkError> {
         let deadline = tokio::time::Instant::now() + timeout;
-        let client = self.client_for(proxy);
+        let client = self.client_for(proxy)?;
         let request = self.with_solver_cookies(request);
         let mut headers: Vec<_> = request
             .headers
@@ -1016,6 +1013,79 @@ fn build_user_agents() -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn invalid_engine_proxy_does_not_contact_origin() {
+        use axum::Router;
+        use std::sync::Arc;
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let requests = Arc::clone(&calls);
+        let app = Router::new().fallback(move || {
+            requests.fetch_add(1, Ordering::Relaxed);
+            async { "origin" }
+        });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let mut network = Network::from_settings(&Settings::defaults()).unwrap();
+        network.client = reqwest::Client::builder().no_proxy().build().unwrap();
+
+        let result = network
+            .fetch(
+                EngineRequest::get(url),
+                Duration::from_secs(2),
+                None,
+                Some("http://[::1"),
+            )
+            .await;
+        server.abort();
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+        assert!(matches!(result, Err(NetworkError::Build(_))));
+    }
+
+    #[tokio::test]
+    async fn engine_proxy_overrides_global_proxy() {
+        use axum::Router;
+
+        let mut proxies = Vec::new();
+        let mut servers = Vec::new();
+        for name in ["global", "engine"] {
+            let app = Router::new().fallback(move || async move { name });
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            proxies.push(format!("http://{}", listener.local_addr().unwrap()));
+            servers.push(tokio::spawn(async move {
+                axum::serve(listener, app).await.unwrap()
+            }));
+        }
+        let mut settings = Settings::defaults();
+        settings
+            .outgoing
+            .proxies
+            .insert("http".into(), proxies[0].clone());
+        let network = Network::from_settings(&settings).unwrap();
+        let mut responses = Vec::new();
+        for proxy in [None, Some(proxies[1].as_str()), Some(proxies[1].as_str())] {
+            responses.push(
+                network
+                    .fetch(
+                        EngineRequest::get("http://example.invalid/"),
+                        Duration::from_secs(2),
+                        None,
+                        proxy,
+                    )
+                    .await,
+            );
+        }
+        for server in servers {
+            server.abort();
+        }
+        let bodies: Vec<_> = responses
+            .into_iter()
+            .map(|response| response.unwrap().text().to_string())
+            .collect();
+        assert_eq!(bodies, ["global", "engine", "engine"]);
+    }
 
     #[tokio::test]
     async fn cached_responses_respect_request_cookies_headers_and_forms() {
