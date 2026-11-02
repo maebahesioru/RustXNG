@@ -16,8 +16,11 @@
 
 ### Fixed
 
+- Image and favicon reads now use the direct-only public-address client shared with page reads. Engine endpoint exceptions and proxies cannot authorize private media destinations; disabling image proxying also disables favicon fetching.
+
 - CLI bind/port overrides now reach generated feed and OpenSearch URLs, while an explicitly configured public base URL is preserved.
 - Docker runtime files have explicit read/execute permissions for the non-root user, independent of checkout file modes.
+- MCP `read_page` selects passages at `。！？` sentence boundaries and accepts single Han, kana and Hangul query characters, instead of dropping those queries or returning an unrelated page prefix.
 
 ### Changed
 

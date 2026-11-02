@@ -12,7 +12,7 @@ Copy this instruction into an agent that can run commands, or send it this READM
 > Keep the first response short; request page text only when evidence is needed.
 > Report the binary version, endpoint, and one working search command. If setup fails, report the actual error.
 
-[日本語](README.ja.md) · [Agent setup guide](docs/AGENT-SETUP.md)
+[日本語](README.ja.md) · [한국어](README.ko.md) · [Agent setup guide](docs/AGENT-SETUP.md)
 
 [![CI](https://github.com/sahenjp/RustXNG/actions/workflows/ci.yml/badge.svg)](https://github.com/sahenjp/RustXNG/actions/workflows/ci.yml)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
@@ -72,6 +72,8 @@ The browser UI is at <http://127.0.0.1:29483/>. JSON, CSV, RSS, and HTML outputs
 
 ### MCP server
 
+Image and favicon proxy fetches also require direct connections: configured or environment proxies disable these reads. Private engine endpoints remain available for search and do not grant access to third-party media. `server.image_proxy = false` disables both image and favicon fetches.
+
 Run `rustxng mcp` to serve the read-only `search` and `read_page` tools over
 stdio. Search returns ranked snippets and source metadata; page text is fetched
 only when `read_page` is called with a URL returned by search in that session.
@@ -82,7 +84,8 @@ within the advertised bounds. The server shortens snippets first, then omits
 trailing results while preserving complete URLs and metadata for the returned results. `truncated`,
 `source_truncated`, and `next_offset` report whether to continue. `read_page`
 uses Unicode character offsets and reports the same truncation state. Supplying
-a `query` to `read_page` also returns up to three matching passages.
+a `query` to `read_page` also returns up to three matching passages from the requested slice.
+Sentence boundaries include `。！？`, and single Han, kana or Hangul query characters are supported.
 
 Page reads require direct connections so DNS answers and redirects can be
 checked against public addresses. They fail closed when configured or

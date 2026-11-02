@@ -117,6 +117,57 @@ impl Resolve for PublicResolver {
     }
 }
 
+/// Build the direct-only client shared by untrusted page and media reads.
+/// Configured engine endpoints never grant exceptions to this client.
+pub(crate) fn public_client(
+    outgoing: &crate::settings::Outgoing,
+    overrides: &[(String, SocketAddr)],
+) -> Result<(reqwest::Client, bool), String> {
+    let redirects = reqwest::redirect::Policy::custom(|attempt| {
+        if attempt.previous().len() >= MAX_REDIRECTS {
+            attempt.error("too many redirects")
+        } else if is_fetchable(attempt.url()) {
+            attempt.follow()
+        } else {
+            attempt.error("redirect to a non-public address")
+        }
+    });
+    let mut builder = reqwest::Client::builder()
+        .no_proxy()
+        .redirect(redirects)
+        .dns_resolver(Arc::new(PublicResolver))
+        .timeout(FETCH_TIMEOUT)
+        .connect_timeout(Duration::from_secs(4))
+        .danger_accept_invalid_certs(!outgoing.verify)
+        .user_agent(crate::network::default_user_agent());
+    if !outgoing.enable_http2 {
+        builder = builder.http1_only();
+    }
+    // A proxy can resolve names itself and bypass PublicResolver. Disable
+    // implicit environment proxies. Explicit proxy configurations fail page
+    // reads closed, while search remains available through the proxy.
+    let proxy_blocked =
+        !outgoing.proxies.is_empty() || outgoing.using_tor_proxy || environment_proxy_configured();
+    if let Some(path) = &outgoing.ca_bundle {
+        let pem = std::fs::read(path).map_err(|e| format!("cannot read CA bundle: {e}"))?;
+        let certificates = reqwest::Certificate::from_pem_bundle(&pem)
+            .map_err(|e| format!("invalid CA bundle: {e}"))?;
+        if certificates.is_empty() {
+            return Err("CA bundle contains no certificates".into());
+        }
+        for certificate in certificates {
+            builder = builder.add_root_certificate(certificate);
+        }
+    }
+    for (host, address) in overrides {
+        builder = builder.resolve(host, *address);
+    }
+    Ok((
+        builder.build().map_err(|error| error.to_string())?,
+        proxy_blocked,
+    ))
+}
+
 /// Extracted pages as (URL, text), oldest first.
 type Pages = VecDeque<(String, usize, std::time::Instant, PageContent)>;
 
@@ -145,48 +196,9 @@ impl PageReader {
         outgoing: &crate::settings::Outgoing,
         overrides: &[(String, SocketAddr)],
     ) -> Result<Self, String> {
-        let redirects = reqwest::redirect::Policy::custom(|attempt| {
-            if attempt.previous().len() >= MAX_REDIRECTS {
-                attempt.error("too many redirects")
-            } else if is_fetchable(attempt.url()) {
-                attempt.follow()
-            } else {
-                attempt.error("redirect to a non-public address")
-            }
-        });
-        let mut builder = reqwest::Client::builder()
-            .no_proxy()
-            .redirect(redirects)
-            .dns_resolver(Arc::new(PublicResolver))
-            .timeout(FETCH_TIMEOUT)
-            .connect_timeout(Duration::from_secs(4))
-            .danger_accept_invalid_certs(!outgoing.verify)
-            .user_agent(crate::network::default_user_agent());
-        if !outgoing.enable_http2 {
-            builder = builder.http1_only();
-        }
-        // A proxy can resolve names itself and bypass PublicResolver. Disable
-        // implicit environment proxies. Explicit proxy configurations fail page
-        // reads closed, while search remains available through the proxy.
-        let proxy_blocked = !outgoing.proxies.is_empty()
-            || outgoing.using_tor_proxy
-            || environment_proxy_configured();
-        if let Some(path) = &outgoing.ca_bundle {
-            let pem = std::fs::read(path).map_err(|e| format!("cannot read CA bundle: {e}"))?;
-            let certificates = reqwest::Certificate::from_pem_bundle(&pem)
-                .map_err(|e| format!("invalid CA bundle: {e}"))?;
-            if certificates.is_empty() {
-                return Err("CA bundle contains no certificates".into());
-            }
-            for certificate in certificates {
-                builder = builder.add_root_certificate(certificate);
-            }
-        }
-        for (host, address) in overrides {
-            builder = builder.resolve(host, *address);
-        }
+        let (client, proxy_blocked) = public_client(outgoing, overrides)?;
         Ok(Self {
-            client: builder.build().map_err(|error| error.to_string())?,
+            client,
             proxy_blocked,
             cache_ttl: None,
             permits: Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT)),

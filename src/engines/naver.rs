@@ -26,6 +26,7 @@ const DEFAULTS: EngineDefaults = EngineDefaults {
 };
 
 const BASE_URL: &str = "https://search.naver.com";
+const TITLE: &str = "span[class~='sds-comps-text-type-headline1']";
 
 /// Naver, the Korean search engine.
 pub struct Naver {
@@ -110,9 +111,14 @@ impl Engine for Naver {
             return Ok(results);
         };
         for item in items {
-            let title =
-                text_of(item, "span[class~='sds-comps-text-type-headline1']").unwrap_or_default();
-            let Some(href) = child(item, "a[href]").and_then(|link| attr(link, "href")) else {
+            let title = text_of(item, TITLE).unwrap_or_default();
+            // A block can start with the site profile link (for example
+            // `https://github.com/`); the document link is the anchor around the title.
+            let link = children(item, "a[href]")
+                .into_iter()
+                .find(|link| child(*link, TITLE).is_some())
+                .or_else(|| child(item, "a[href]"));
+            let Some(href) = link.and_then(|link| attr(link, "href")) else {
                 continue;
             };
             if !href.starts_with("http") || href.contains("keep.naver.com") {
@@ -170,6 +176,38 @@ mod tests {
                 assert_eq!(result.title, "Rust 언어");
                 assert_eq!(result.url, "https://www.rust-lang.org/");
                 assert_eq!(result.content, "시스템 프로그래밍 언어");
+            }
+            _ => panic!("expected a result"),
+        }
+    }
+
+    // Shape of a live block where the site profile link comes before the document link.
+    const PROFILE_FIRST: &str = r#"<html><body>
+      <div class="fds-web-normal-doc-root">
+        <a class="fds-anchor" href="https://github.com/"><span>GitHub</span></a>
+        <a class="fds-anchor" href="https://github.com/"><span>github.com</span></a>
+        <a class="fds-anchor" href="https://github.com/CapSoftware/Cap/issues/345">
+          <span class="sds-comps-text sds-comps-text-type-headline1">error[E0502] · Issue #345</span>
+        </a>
+        <a href="https://keep.naver.com/">keep</a>
+        <span class="sds-comps-text-type-body1">The source code is not building</span>
+      </div>
+    </body></html>"#;
+
+    #[test]
+    fn uses_the_title_link_instead_of_the_site_profile_link() {
+        let response = EngineResponse::new(
+            200,
+            "https://search.naver.com/search.naver",
+            PROFILE_FIRST.as_bytes().to_vec(),
+        );
+        let query = Query::parse("E0502", &crate::engine::EngineRegistry::default(), &[]);
+        let items = engine().parse(&response, &query).unwrap();
+        assert_eq!(items.len(), 1);
+        match &items[0] {
+            EngineItem::Result(result) => {
+                assert_eq!(result.url, "https://github.com/CapSoftware/Cap/issues/345");
+                assert_eq!(result.title, "error[E0502] · Issue #345");
             }
             _ => panic!("expected a result"),
         }

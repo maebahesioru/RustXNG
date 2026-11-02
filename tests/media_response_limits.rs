@@ -13,7 +13,7 @@ use rustxng::web::{AppState, favicons, image_proxy, router};
 use rustxng::{Searcher, Settings};
 
 #[tokio::test]
-async fn media_proxies_stop_at_their_body_limits_without_retrying() {
+async fn media_proxies_refuse_remote_dns_proxies_without_connecting() {
     let requests = Arc::new(AtomicUsize::new(0));
     let counter = requests.clone();
     let upstream = Router::new().fallback(move |uri: Uri| {
@@ -67,6 +67,6 @@ async fn media_proxies_stop_at_their_body_limits_without_retrying() {
         .unwrap();
         assert_eq!(response.status(), expected);
     }
-    assert_eq!(requests.load(Ordering::SeqCst), 3);
+    assert_eq!(requests.load(Ordering::SeqCst), 0);
     server.abort();
 }

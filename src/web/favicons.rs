@@ -93,7 +93,15 @@ pub async fn handler(
     Query(params): Query<FaviconParams>,
     _headers: HeaderMap,
 ) -> Response {
-    let secret = state.settings().server.secret_key.clone();
+    let settings = state.settings();
+    if !settings.server.image_proxy {
+        return (
+            StatusCode::FORBIDDEN,
+            "the image proxy is disabled on this instance",
+        )
+            .into_response();
+    }
+    let secret = settings.server.secret_key.clone();
     let Some(origin) = origin_of(&params.url) else {
         return (
             StatusCode::FORBIDDEN,
@@ -145,7 +153,9 @@ mod tests {
     use crate::settings::Settings;
 
     fn state() -> AppState {
-        AppState::new(Searcher::new(Settings::defaults()).expect("searcher"))
+        let mut settings = Settings::defaults();
+        settings.server.image_proxy = true;
+        AppState::new(Searcher::new(settings).expect("searcher"))
     }
 
     fn secret() -> String {
@@ -211,6 +221,21 @@ mod tests {
         assert_eq!(CACHE_MAX_AGE, 604_800);
         assert_eq!(CANDIDATE_PATHS, &["/favicon.ico", "/favicon.png"]);
         const { assert!(MAX_SIZE >= 64 * 1024) };
+    }
+
+    #[tokio::test]
+    async fn disabled_image_proxy_also_disables_favicons() {
+        let state = AppState::new(Searcher::new(Settings::defaults()).unwrap());
+        let response = handler(
+            State(state),
+            Query(FaviconParams {
+                url: "https://example.com".into(),
+                h: Some(signature(&secret(), "https://example.com")),
+            }),
+            HeaderMap::new(),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]

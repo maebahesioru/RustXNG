@@ -550,17 +550,40 @@ fn fit_search_payload(
     Ok(())
 }
 
+fn is_cjk_letter(character: char) -> bool {
+    // Han, kana and Hangul blocks also contain marks and punctuation.
+    character.is_alphabetic()
+        && matches!(
+            character as u32,
+            0x1100..=0x11ff
+                | 0x3040..=0x30ff
+                | 0x3130..=0x318f
+                | 0x31f0..=0x31ff
+                | 0x3400..=0x4dbf
+                | 0x4e00..=0x9fff
+                | 0xa960..=0xa97f
+                | 0xac00..=0xd7ff
+                | 0xf900..=0xfaff
+                | 0xff66..=0xff9d
+                | 0x1aff0..=0x1afff
+                | 0x1b000..=0x1b16f
+                | 0x20000..=0x2ee5f
+                | 0x2f800..=0x2fa1f
+                | 0x30000..=0x323af
+        )
+}
+
 fn relevant_passages(text: &str, query: &str) -> Vec<String> {
     let terms: Vec<String> = query
         .split_whitespace()
         .map(str::to_lowercase)
-        .filter(|term| term.chars().count() > 1)
+        .filter(|term| term.chars().nth(1).is_some() || term.chars().any(is_cjk_letter))
         .collect();
     if terms.is_empty() {
         return Vec::new();
     }
     let mut ranked: Vec<(usize, usize, String)> = text
-        .split(['.', '!', '?', '\n'])
+        .split(['.', '!', '?', '\n', '。', '！', '？'])
         .enumerate()
         .filter_map(|(index, part)| {
             let passage = part.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -860,6 +883,76 @@ mod tests {
         assert_eq!(
             passages,
             ["Rust ownership enables safe systems programming"]
+        );
+    }
+
+    #[test]
+    fn relevant_passages_select_late_japanese_sentences() {
+        let text = format!(
+            "{}非同期ランタイムはタスクを実行します。最後の文です。",
+            "関係のない前置きです。".repeat(60)
+        );
+        assert_eq!(
+            relevant_passages(&text, "非同期"),
+            ["非同期ランタイムはタスクを実行します"]
+        );
+    }
+
+    #[test]
+    fn relevant_passages_split_fullwidth_sentence_terminators() {
+        assert_eq!(
+            relevant_passages(
+                "无关介绍。内存安全吗？内存由所有权管理！内存可以被安全访问。其他内容。",
+                "内存",
+            ),
+            ["内存安全吗", "内存由所有权管理", "内存可以被安全访问"]
+        );
+    }
+
+    #[test]
+    fn relevant_passages_accept_single_cjk_characters() {
+        for (query, text) in [
+            ("猫", "犬が寝ています。猫が起きました。"),
+            ("あ", "いの説明です。あの説明です。"),
+            ("カ", "キの説明です。カの説明です。"),
+            ("한", "다른 문장。한 글자 검색。"),
+            ("𠮷", "普通の名前。𠮷という名前。"),
+        ] {
+            let expected = text.split('。').nth(1).unwrap();
+            assert_eq!(relevant_passages(text, query), [expected], "{query}");
+        }
+    }
+
+    #[test]
+    fn relevant_passages_preserve_latin_and_mixed_query_matching() {
+        assert_eq!(
+            relevant_passages(
+                "Other opening. Go uses goroutines! Use c++ for systems? rust 猫の説明。",
+                "go c++ rust 猫",
+            ),
+            ["rust 猫の説明", "Go uses goroutines", "Use c++ for systems"]
+        );
+        for query in ["a", "я", "。", "！", "？", "、", "・", "　"] {
+            assert!(
+                relevant_passages("a я。！？、・", query).is_empty(),
+                "{query}"
+            );
+        }
+    }
+
+    #[test]
+    fn relevant_passages_keep_character_and_count_limits() {
+        let text = format!(
+            "猫{}。猫が二番目です。猫が三番目です。猫が四番目です。",
+            "の".repeat(600)
+        );
+        assert_eq!(
+            relevant_passages(&text, "猫"),
+            [
+                format!("猫{}", "の".repeat(499)),
+                "猫が二番目です".into(),
+                "猫が三番目です".into(),
+            ]
         );
     }
 }

@@ -273,11 +273,54 @@ impl Plugin for Calculator {
     }
 }
 
+/// Maximum characters accepted in a calculator expression.
+const MAX_EXPRESSION_CHARS: usize = 4_096;
+
+/// Maximum lexical tokens accepted in one calculator expression.
+const MAX_TOKENS: usize = 512;
+
+/// Maximum recursive parser entries. One parenthesis nesting costs three
+/// entries (expression, power, unary).
+const MAX_PARSE_DEPTH: usize = 128;
+
+/// Counts the lexical tokens of an expression without whitespace. The lexer
+/// must match the one in `Parser::atom`.
+fn count_tokens(input: &[char]) -> usize {
+    let mut tokens = 0;
+    let mut index = 0;
+    while index < input.len() {
+        let character = input[index];
+        index += 1;
+        if character.is_ascii_digit() || character == '.' {
+            while index < input.len() && (input[index].is_ascii_digit() || input[index] == '.') {
+                index += 1;
+            }
+        } else if character.is_ascii_alphabetic() {
+            while index < input.len() && input[index].is_ascii_alphabetic() {
+                index += 1;
+            }
+        }
+        tokens += 1;
+    }
+    tokens
+}
+
 /// Evaluate a mathematical expression (\`+ - * / % ^\` and parentheses).
 pub fn evaluate(expression: &str) -> Option<f64> {
+    let mut input = Vec::with_capacity(expression.len().min(MAX_EXPRESSION_CHARS));
+    for character in expression.chars().filter(|c| !c.is_whitespace()) {
+        if input.len() == MAX_EXPRESSION_CHARS {
+            return None;
+        }
+        input.push(character);
+    }
+    if count_tokens(&input) > MAX_TOKENS {
+        return None;
+    }
     let mut parser = Parser {
-        input: expression.chars().filter(|c| !c.is_whitespace()).collect(),
+        input,
         position: 0,
+        depth: 0,
     };
     let value = parser.expression()?;
     if parser.position != parser.input.len() || !value.is_finite() {
@@ -289,6 +332,8 @@ pub fn evaluate(expression: &str) -> Option<f64> {
 struct Parser {
     input: Vec<char>,
     position: usize,
+    /// Current recursion depth. A failed parse abandons the parser, so it is only unwound on success.
+    depth: usize,
 }
 
 impl Parser {
@@ -304,7 +349,17 @@ impl Parser {
         character
     }
 
+    /// Enters one recursion level, or fails once the depth budget is spent.
+    fn enter(&mut self) -> Option<()> {
+        self.depth += 1;
+        if self.depth > MAX_PARSE_DEPTH {
+            return None;
+        }
+        Some(())
+    }
+
     fn expression(&mut self) -> Option<f64> {
+        self.enter()?;
         let mut value = self.term()?;
         while let Some(operator) = self.peek() {
             match operator {
@@ -319,6 +374,7 @@ impl Parser {
                 _ => break,
             }
         }
+        self.depth -= 1;
         Some(value)
     }
 
@@ -345,27 +401,33 @@ impl Parser {
     }
 
     fn power(&mut self) -> Option<f64> {
+        self.enter()?;
         let base = self.unary()?;
-        if self.peek() == Some('^') {
+        let value = if self.peek() == Some('^') {
             self.bump();
-            let exponent = self.power()?;
-            return Some(base.powf(exponent));
-        }
-        Some(base)
+            base.powf(self.power()?)
+        } else {
+            base
+        };
+        self.depth -= 1;
+        Some(value)
     }
 
     fn unary(&mut self) -> Option<f64> {
-        match self.peek() {
+        self.enter()?;
+        let value = match self.peek() {
             Some('-') => {
                 self.bump();
-                Some(-self.unary()?)
+                -self.unary()?
             }
             Some('+') => {
                 self.bump();
-                self.unary()
+                self.unary()?
             }
-            _ => self.atom(),
-        }
+            _ => self.atom()?,
+        };
+        self.depth -= 1;
+        Some(value)
     }
 
     fn atom(&mut self) -> Option<f64> {
@@ -505,6 +567,50 @@ mod tests {
         assert_eq!(evaluate("sqrt(16) + 1"), Some(5.0));
         assert!(evaluate("1 + ").is_none());
         assert!(evaluate("hello").is_none());
+    }
+
+    #[test]
+    fn calculator_rejects_deeply_nested_expressions() {
+        let expression = format!("{}1{}", "(".repeat(1000), ")".repeat(1000));
+        assert!(evaluate(&expression).is_none());
+    }
+
+    #[test]
+    fn calculator_accepts_nesting_within_the_depth_budget() {
+        let expression = format!("{}1{}", "(".repeat(41), ")".repeat(41));
+        assert_eq!(evaluate(&expression), Some(1.0));
+    }
+
+    #[test]
+    fn calculator_rejects_nesting_over_the_depth_budget() {
+        let expression = format!("{}1{}", "(".repeat(42), ")".repeat(42));
+        assert!(evaluate(&expression).is_none());
+    }
+
+    #[test]
+    fn calculator_rejects_overlong_expressions() {
+        let expression = format!("{}1", "0".repeat(4_096));
+        assert!(evaluate(&expression).is_none());
+    }
+
+    #[test]
+    fn calculator_rejects_expressions_over_the_token_budget() {
+        let expression = format!("{}1", "1+".repeat(256));
+        assert!(evaluate(&expression).is_none());
+    }
+
+    #[test]
+    fn calculator_accepts_expressions_within_the_budget() {
+        let expression = format!("{}1", "1+".repeat(100));
+        assert_eq!(evaluate(&expression), Some(101.0));
+    }
+
+    #[test]
+    fn calculator_skips_queries_over_the_budget() {
+        let query = format!("{}1{}", "(".repeat(1000), ")".repeat(1000));
+        let mut response = empty_response(&query);
+        Calculator.post_search(&mut response, &context(&query));
+        assert!(response.answers.is_empty());
     }
 
     #[test]

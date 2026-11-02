@@ -12,7 +12,7 @@
 > 最初は短い検索結果を使い、根拠が必要な場合だけページ本文を取得してください。
 > 完了後、バイナリのバージョン、接続先、動作した検索コマンドを報告してください。失敗時は実際のエラーを報告してください。
 
-[English](README.md) · [エージェント向け導入ガイド](docs/AGENT-SETUP.md)
+[English](README.md) · [한국어](README.ko.md) · [エージェント向け導入ガイド](docs/AGENT-SETUP.md)
 
 [![CI](https://github.com/sahenjp/RustXNG/actions/workflows/ci.yml/badge.svg)](https://github.com/sahenjp/RustXNG/actions/workflows/ci.yml)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
@@ -71,9 +71,13 @@ curl --fail --get 'http://127.0.0.1:29483/search' \
 
 ### MCPサーバー
 
+画像・faviconの取得にも直接接続が必要です。設定や環境変数にプロキシがある場合、これらの取得を拒否します。検索用の私設エンジン設定は、第三者の画像へのアクセスを許可するものではありません。`server.image_proxy = false` は画像とfaviconの両方の取得を無効にします。
+
 `rustxng mcp --config settings.toml` で、組み込みの `search` と `read_page` を標準入出力経由で利用できます。検索は URL・タイトル・抜粋・出典を返し、本文は同じセッションの検索で返った URL を `read_page` に渡したときだけ取得します。
 
 `max_payload_chars` と `max_payload_bytes` の既定値は12,000文字と24,000バイトです。計数対象は構造化 JSON で、JSON-RPC の外枠、SDK によるテキスト表示、呼出し側のプロンプトは含みません。必要な URL とメタデータを収められない場合はエラーを返します。`truncated`、`source_truncated`、`next_offset` で打切りと続きを確認できます。`read_page` の `query` には関連する段落を選ぶための検索語を指定できます。文字数・バイト数の上限はトークン数の保証ではありません。
+
+関連する段落は要求した本文範囲内から選びます。文の区切りには `。！？` も使い、漢字・仮名・ハングル1文字の検索語にも対応します。
 
 本文取得では DNS 解決先とリダイレクト先を検査し、展開後の本文を4 MiB、同時取得を4件までに制限します。設定や環境変数で外向きプロキシを指定している場合は、接続先を検証できないため本文取得を拒否します。検索は通常のプロキシ設定で続けられます。HTTP の `include_raw_content=1` にも同じ取得制限が適用され、本文を文字数上限で打ち切った場合は `raw_content_truncated` を返します。
 

@@ -90,6 +90,9 @@ pub fn classify_status(status: u16, body: &str) -> FailureKind {
 /// The HTTP client used by every engine.
 pub struct Network {
     client: reqwest::Client,
+    /// Direct-only client for third-party media; no engine host exemptions.
+    media_client: reqwest::Client,
+    media_proxy_blocked: bool,
     /// Clients for engines that need their own proxy, keyed by proxy URL.
     proxied: std::sync::Mutex<std::collections::HashMap<String, reqwest::Client>>,
     /// Settings kept so a proxied client can be rebuilt on demand.
@@ -233,8 +236,12 @@ impl Network {
     pub fn from_settings(settings: &Settings) -> Result<Self, NetworkError> {
         let outgoing = &settings.outgoing;
         let client = build_client(outgoing, None)?;
+        let (media_client, media_proxy_blocked) =
+            crate::mcp::page::public_client(outgoing, &[]).map_err(NetworkError::Build)?;
         Ok(Self {
             client,
+            media_client,
+            media_proxy_blocked,
             proxied: std::sync::Mutex::new(std::collections::HashMap::new()),
             outgoing: outgoing.clone(),
             user_agents: build_user_agents(),
@@ -495,7 +502,23 @@ impl Network {
         max_bytes: Option<usize>,
     ) -> Result<EngineResponse, NetworkError> {
         let deadline = tokio::time::Instant::now() + timeout;
-        let client = self.client_for(proxy)?;
+        let client = if max_bytes.is_some() {
+            if self.media_proxy_blocked {
+                return Err(NetworkError::Build(
+                    "media reads require direct connections; configured proxies cannot validate destinations".into(),
+                ));
+            }
+            let url = reqwest::Url::parse(&request.url)
+                .map_err(|error| NetworkError::Build(error.to_string()))?;
+            if !crate::mcp::page::is_fetchable(&url) {
+                return Err(NetworkError::Build(
+                    "only public http(s) media can be fetched".into(),
+                ));
+            }
+            self.media_client.clone()
+        } else {
+            self.client_for(proxy)?
+        };
         let request = self.with_solver_cookies(request);
         let mut headers: Vec<_> = request
             .headers
@@ -1175,6 +1198,8 @@ mod tests {
     fn user_agents_are_diverse_and_plausible() {
         let network = Network {
             client: reqwest::Client::new(),
+            media_client: reqwest::Client::new(),
+            media_proxy_blocked: false,
             proxied: std::sync::Mutex::new(std::collections::HashMap::new()),
             outgoing: crate::settings::Outgoing::default(),
             user_agents: build_user_agents(),
@@ -1190,6 +1215,137 @@ mod tests {
         let second = network.user_agent();
         assert!(first.starts_with("Mozilla/5.0"));
         assert_ne!(first, second);
+    }
+
+    #[tokio::test]
+    async fn media_does_not_inherit_private_engine_endpoints() {
+        use axum::{Router, routing::get};
+        use std::sync::Arc;
+        let hits = Arc::new(AtomicUsize::new(0));
+        let counter = hits.clone();
+        let app = Router::new().route(
+            "/",
+            get(move || {
+                counter.fetch_add(1, Ordering::SeqCst);
+                async { "engine" }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let mut settings = Settings::defaults();
+        let mut engine = crate::settings::EngineConfig::new("private", "mwmbl", "", &["general"]);
+        engine.base_url = Some(url.clone());
+        settings.engines = vec![engine];
+        let network = Network::from_settings(&settings).unwrap();
+        assert!(matches!(
+            network
+                .fetch_image(EngineRequest::get(&url), Duration::from_secs(2), 32)
+                .await,
+            Err(NetworkError::Build(_))
+        ));
+        assert_eq!(hits.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            network
+                .fetch(EngineRequest::get(&url), Duration::from_secs(2), None, None)
+                .await
+                .unwrap()
+                .text(),
+            "engine"
+        );
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn media_redirects_cannot_contact_private_targets() {
+        use axum::{Router, routing::get};
+        use std::sync::Arc;
+        let hits = Arc::new(AtomicUsize::new(0));
+        let counter = hits.clone();
+        let target = Router::new().fallback(move || {
+            counter.fetch_add(1, Ordering::SeqCst);
+            async { "private" }
+        });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let target_port = listener.local_addr().unwrap().port();
+        let private_server =
+            tokio::spawn(async move { axum::serve(listener, target).await.unwrap() });
+        let app = Router::new()
+            .route(
+                "/literal",
+                get(move || async move {
+                    axum::response::Redirect::temporary(&format!("http://127.0.0.1:{target_port}/"))
+                }),
+            )
+            .route(
+                "/name",
+                get(move || async move {
+                    axum::response::Redirect::temporary(&format!("http://localhost:{target_port}/"))
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let mut network = Network::from_settings(&Settings::defaults()).unwrap();
+        network.media_client = crate::mcp::page::public_client(
+            &crate::settings::Outgoing::default(),
+            &[("example.com".into(), address)],
+        )
+        .unwrap()
+        .0;
+        network.retries = 0;
+        for path in ["literal", "name"] {
+            let url = format!("http://example.com:{}/{path}", address.port());
+            assert!(
+                network
+                    .fetch_image(EngineRequest::get(url), Duration::from_secs(2), 32)
+                    .await
+                    .is_err()
+            );
+        }
+        assert_eq!(hits.load(Ordering::SeqCst), 0);
+        server.abort();
+        private_server.abort();
+    }
+
+    #[tokio::test]
+    async fn media_size_limit_stops_before_end_of_stream() {
+        use axum::{Router, body::Body, routing::get};
+        use futures::StreamExt;
+        let app = Router::new().route(
+            "/",
+            get(|| async {
+                Body::from_stream(
+                    futures::stream::once(async {
+                        Ok::<_, std::convert::Infallible>(vec![b'x'; 33])
+                    })
+                    .chain(futures::stream::pending()),
+                )
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let mut network = Network::from_settings(&Settings::defaults()).unwrap();
+        network.media_client = crate::mcp::page::public_client(
+            &crate::settings::Outgoing::default(),
+            &[("example.com".into(), address)],
+        )
+        .unwrap()
+        .0;
+        let result = tokio::time::timeout(
+            Duration::from_secs(2),
+            network.fetch_image(
+                EngineRequest::get(format!("http://example.com:{}/", address.port())),
+                Duration::from_secs(8),
+                32,
+            ),
+        )
+        .await
+        .expect("must reject without waiting for EOF");
+        assert!(matches!(result, Err(NetworkError::TooLarge(32))));
+        server.abort();
     }
 
     #[tokio::test]
@@ -1232,11 +1388,16 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let mut network = Network::from_settings(&Settings::defaults()).unwrap();
-        network.client = reqwest::Client::builder().no_proxy().build().unwrap();
+        network.media_client = crate::mcp::page::public_client(
+            &crate::settings::Outgoing::default(),
+            &[("example.com".into(), address)],
+        )
+        .unwrap()
+        .0;
         network.retries = 2;
         let response = network
             .fetch_image(
-                EngineRequest::get(format!("http://{address}/exact")),
+                EngineRequest::get(format!("http://example.com:{}/exact", address.port())),
                 Duration::from_secs(2),
                 32,
             )
@@ -1247,7 +1408,7 @@ mod tests {
         assert_eq!(response.body, [b'x'; 32]);
         let error = network
             .fetch_image(
-                EngineRequest::get(format!("http://{address}/compressed")),
+                EngineRequest::get(format!("http://example.com:{}/compressed", address.port())),
                 Duration::from_secs(2),
                 32,
             )

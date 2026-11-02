@@ -39,6 +39,10 @@ struct Fixture {
 /// returns pages on `example.com:PORT`, pages that redirect to loopback, a
 /// literal loopback URL and an oversized page.
 async fn connect() -> Fixture {
+    connect_with_page(PAGE).await
+}
+
+async fn connect_with_page(page: &'static str) -> Fixture {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let origin = format!("http://example.com:{port}");
@@ -75,7 +79,7 @@ async fn connect() -> Fixture {
                 "/rust",
                 get(move || {
                     counter.fetch_add(1, Ordering::SeqCst);
-                    async { ([(header::CONTENT_TYPE, "text/html")], PAGE) }
+                    async move { ([(header::CONTENT_TYPE, "text/html")], page) }
                 }),
             )
             .route(
@@ -259,6 +263,54 @@ async fn read_page_pages_through_a_returned_url_by_character() {
         page_fetches.load(Ordering::SeqCst),
         1,
         "the page is fetched once and then paged from memory"
+    );
+    client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn read_page_selects_cjk_passages_within_the_requested_slice() {
+    let Fixture { client, origin, .. } = connect_with_page(
+        "<html><body><article>前置きです。猫は眠っています！内存安全吗？\
+         Rust ownership keeps memory safe.猫は起きました。</article></body></html>",
+    )
+    .await;
+    call(&client, "search", json!({"query": "rust", "limit": 10})).await;
+    let url = format!("{origin}/rust");
+
+    let read = call(
+        &client,
+        "read_page",
+        json!({"url": url, "query": "猫 内存"}),
+    )
+    .await;
+    let value = structured(&read);
+    assert_eq!(
+        value["passages"],
+        json!(["猫は眠っています", "内存安全吗", "猫は起きました"])
+    );
+    assert_eq!(value["truncated"], false);
+    assert_eq!(value["source_truncated"], false);
+    assert!(value.get("next_offset").is_none());
+
+    let prefix = call(
+        &client,
+        "read_page",
+        json!({"url": url, "query": "猫", "max_chars": 6}),
+    )
+    .await;
+    assert_eq!(structured(&prefix)["text"], "前置きです。");
+    assert_eq!(structured(&prefix)["passages"], json!([]));
+    assert_eq!(structured(&prefix)["next_offset"], 6);
+
+    let continued = call(
+        &client,
+        "read_page",
+        json!({"url": url, "query": "猫", "offset": 6}),
+    )
+    .await;
+    assert_eq!(
+        structured(&continued)["passages"],
+        json!(["猫は眠っています", "猫は起きました"])
     );
     client.cancel().await.unwrap();
 }

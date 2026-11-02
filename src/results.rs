@@ -1165,6 +1165,16 @@ pub fn filter_results(
 
 /// The deduplication key of a URL: scheme independent, without fragment and
 /// without the usual tracking parameters.
+///
+/// The key is assembled from the parsed URL structure, not by concatenating
+/// decoded text, so values and separators stay distinguishable:
+///
+/// - the host keeps its port, except the https default (443). The key always
+///   assumes https, so `http://e.test/p`, `https://e.test/p` and
+///   `https://e.test:443/p` share one key, while `:8443` and `:9443` differ;
+/// - query pairs are re-encoded as pairs, so `?a=b%26c%3Dd` (one value holding
+///   `&c=d`) never collapses into `?a=b&c=d` (two parameters);
+/// - query order is preserved, since servers may treat it as significant.
 pub fn dedup_key(url: &str) -> String {
     let trimmed = url.trim();
     let Ok(mut parsed) = url::Url::parse(trimmed) else {
@@ -1173,23 +1183,27 @@ pub fn dedup_key(url: &str) -> String {
     parsed.set_fragment(None);
     let _ = parsed.set_scheme("https");
     let host = parsed.host_str().unwrap_or_default().to_lowercase();
-    let path = parsed.path().trim_end_matches('/').to_string();
-    let mut query: Vec<(String, String)> = parsed
-        .query_pairs()
-        .filter(|(key, _)| !is_tracking_param(key))
-        .map(|(key, value)| (key.to_string(), value.to_string()))
-        .collect();
-    query.sort();
-    let query: Vec<String> = query
-        .into_iter()
-        .map(|(key, value)| format!("{key}={value}"))
-        .collect();
+    // `port()` keeps an explicit port unless it is the default for the current
+    // scheme, and `set_scheme` does not renormalise, so compare explicitly.
+    let authority = match parsed.port().filter(|port| *port != 443) {
+        Some(port) => format!("{host}:{port}"),
+        None => host,
+    };
+    let path = parsed.path().trim_end_matches('/');
+    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+    for (key, value) in parsed.query_pairs() {
+        if is_tracking_param(&key) {
+            continue;
+        }
+        serializer.append_pair(&key, &value);
+    }
+    let query = serializer.finish();
     format!(
-        "{host}{path}{}",
+        "{authority}{path}{}",
         if query.is_empty() {
             String::new()
         } else {
-            format!("?{}", query.join("&"))
+            format!("?{query}")
         }
     )
 }
@@ -1471,6 +1485,49 @@ mod tests {
         assert_eq!(
             dedup_key("http://Example.com/a/?utm_source=x#frag"),
             dedup_key("https://example.com/a")
+        );
+    }
+
+    #[test]
+    fn query_delimiters_inside_a_value_do_not_collide_with_parameter_boundaries() {
+        // `b%26c%3Dd` is one value that contains "&c=d", not two parameters.
+        assert_eq!(
+            dedup_key("https://e.test/p?a=b%26c%3Dd"),
+            "e.test/p?a=b%26c%3Dd"
+        );
+        assert_eq!(dedup_key("https://e.test/p?a=b&c=d"), "e.test/p?a=b&c=d");
+        assert_ne!(
+            dedup_key("https://e.test/p?a=b%26c%3Dd"),
+            dedup_key("https://e.test/p?a=b&c=d")
+        );
+    }
+
+    #[test]
+    fn the_port_is_part_of_the_identity() {
+        assert_eq!(dedup_key("https://e.test:8443/p"), "e.test:8443/p");
+        assert_eq!(dedup_key("https://e.test:9443/p"), "e.test:9443/p");
+        assert_ne!(
+            dedup_key("https://e.test:8443/p"),
+            dedup_key("https://e.test:9443/p")
+        );
+    }
+
+    #[test]
+    fn the_https_default_port_is_elided() {
+        // Spec: the key is scheme independent and always assumes https, so the
+        // explicit default port and the absent port produce the same key.
+        assert_eq!(dedup_key("https://e.test:443/p"), "e.test/p");
+        assert_eq!(dedup_key("http://e.test/p"), "e.test/p");
+        assert_eq!(dedup_key("https://e.test:8443/p"), "e.test:8443/p");
+    }
+
+    #[test]
+    fn query_parameter_order_is_significant() {
+        assert_eq!(dedup_key("https://e.test/p?a=1&b=2"), "e.test/p?a=1&b=2");
+        assert_eq!(dedup_key("https://e.test/p?b=2&a=1"), "e.test/p?b=2&a=1");
+        assert_ne!(
+            dedup_key("https://e.test/p?a=1&b=2"),
+            dedup_key("https://e.test/p?b=2&a=1")
         );
     }
 
