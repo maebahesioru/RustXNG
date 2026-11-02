@@ -208,6 +208,64 @@ async fn html_search_renders_the_result_page() {
 }
 
 #[tokio::test]
+async fn html_search_rejects_executable_result_and_infobox_urls() {
+    let upstream = Router::new()
+        .route(
+            "/api/v1/search/",
+            get(|| async {
+                axum::Json(serde_json::json!([
+                    {"url": "javascript:void(0)", "title": "unsafe"},
+                    {"url": "JaVaScRiPt:void(0)", "title": "unsafe case"},
+                    {"url": "java\nscript:void(0)", "title": "unsafe whitespace"},
+                    {"url": "https://example.com/safe", "title": "safe"},
+                    {"url": "/docs/a.pdf", "title": "local document"}
+                ]))
+            }),
+        )
+        .route(
+            "/",
+            get(|| async {
+                axum::Json(serde_json::json!({
+                    "Heading": "reference",
+                    "Abstract": "reference content",
+                    "AbstractURL": "https://example.com/reference",
+                    "AbstractSource": "safe reference",
+                    "DefinitionURL": "JaVaScRiPt:void(0)",
+                    "DefinitionSource": "unsafe reference"
+                }))
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, upstream).await.unwrap() });
+
+    let mut settings = settings_for(&format!("http://{address}/api/v1"));
+    let mut definitions =
+        EngineConfig::new("definitions", "duckduckgo_definitions", "dd", &["general"]);
+    definitions.base_url = Some(format!("http://{address}"));
+    settings.engines.push(definitions);
+    let app = app(settings);
+    let (status, body, _) = get_uri(&app, "/search?q=example").await;
+    assert_eq!(status, StatusCode::OK);
+    let html = scraper::Html::parse_document(&body);
+    let selector = scraper::Selector::parse("a.result-title, .infobox a").unwrap();
+    let mut links: Vec<_> = html
+        .select(&selector)
+        .map(|anchor| anchor.value().attr("href").unwrap())
+        .collect();
+    links.sort_unstable();
+    assert_eq!(
+        links,
+        vec![
+            "/docs/a.pdf",
+            "https://example.com/reference",
+            "https://example.com/reference",
+            "https://example.com/safe",
+        ]
+    );
+}
+
+#[tokio::test]
 async fn csv_and_rss_formats_are_served() {
     let base_url = start_fake_engine().await;
     let app = app(settings_for(&base_url));

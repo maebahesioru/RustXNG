@@ -299,6 +299,9 @@ impl ResultContainer {
                     }
                 }
                 EngineItem::Infobox(mut infobox) => {
+                    infobox.img_src = infobox.img_src.filter(|url| is_web_url(url));
+                    infobox.url = infobox.url.filter(|url| is_web_url(url));
+                    infobox.urls.retain(|link| is_web_url(&link.url));
                     infobox.engine = engine_name.to_string();
                     if infobox.id.is_empty() {
                         infobox.id = format!("{engine_name}-{}", self.infoboxes.len());
@@ -326,6 +329,13 @@ impl ResultContainer {
                         Some(url) => result.url = url,
                         None => continue,
                     }
+                    let keyvalue = result.template == Template::KeyValue
+                        && result.url.starts_with("keyvalue:");
+                    if !keyvalue && !is_web_url(&result.url) {
+                        continue;
+                    }
+                    result.img_src = result.img_src.filter(|url| is_web_url(url));
+                    result.thumbnail = result.thumbnail.filter(|url| is_web_url(url));
                     position += 1;
                     result.positions = vec![position];
                     result.engine = engine_name.to_string();
@@ -444,6 +454,15 @@ impl ResultContainer {
 
     pub fn set_redirect_url(&mut self, url: impl Into<String>) {
         self.redirect_url = Some(url.into());
+    }
+}
+
+/// Allow web links and relative Recoll paths.
+fn is_web_url(value: &str) -> bool {
+    match url::Url::parse(value) {
+        Ok(url) => matches!(url.scheme(), "http" | "https"),
+        Err(url::ParseError::RelativeUrlWithoutBase) => !value.trim().is_empty(),
+        Err(_) => false,
     }
 }
 
@@ -1236,6 +1255,130 @@ mod tests {
         container.extend("b", 1.0, vec![result("http://example.com/x#anchor", "one")]);
         assert_eq!(container.main_results().len(), 1);
         assert_eq!(container.main_results()[0].engines.len(), 2);
+    }
+
+    #[test]
+    fn executable_result_urls_are_rejected() {
+        for url in [
+            "javascript:void(0)",
+            "JaVaScRiPt:void(0)",
+            "\tjava\nscript:void(0)",
+            "data:text/html,example",
+            "vbscript:example",
+            "https://",
+            "",
+        ] {
+            for template in [Template::Default, Template::KeyValue] {
+                let mut container = ResultContainer::new();
+                let item = SearchResult::new(url, "unsafe").with_template(template);
+                container.extend("a", 1.0, vec![EngineItem::Result(item)]);
+                assert!(container.main_results().is_empty(), "{url:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn web_relative_and_keyvalue_results_are_preserved() {
+        for url in [
+            "https://example.com/a",
+            "http://example.com/b",
+            "/docs/a.pdf",
+            "../docs/b.pdf",
+            "//example.com/c",
+            "?page=2",
+            "#section",
+        ] {
+            let mut container = ResultContainer::new();
+            container.extend("a", 1.0, vec![result(url, "safe")]);
+            assert_eq!(container.main_results()[0].url, url);
+        }
+
+        let mut container = ResultContainer::new();
+        let row = SearchResult::new("keyvalue:0", "database row")
+            .with_template(Template::KeyValue)
+            .with_metadata("magnetlink", "magnet:?xt=urn:btih:example");
+        container.extend("db", 1.0, vec![EngineItem::Result(row)]);
+        assert_eq!(container.main_results()[0].url, "keyvalue:0");
+        assert_eq!(
+            container.main_results()[0].metadata["magnetlink"],
+            "magnet:?xt=urn:btih:example"
+        );
+    }
+
+    #[test]
+    fn merged_images_and_infobox_links_reject_executable_urls() {
+        let mut container = ResultContainer::new();
+        container.extend("a", 1.0, vec![result("https://example.com/a", "safe")]);
+        let mut duplicate = SearchResult::new("https://example.com/a", "safe");
+        duplicate.img_src = Some("JaVaScRiPt:void(0)".into());
+        duplicate.thumbnail = Some("data:text/html,example".into());
+        let infobox = Infobox {
+            id: "box".into(),
+            title: "reference".into(),
+            ..Default::default()
+        };
+        container.extend("a", 1.0, vec![EngineItem::Infobox(infobox.clone())]);
+        container.extend(
+            "b",
+            1.0,
+            vec![
+                EngineItem::Result(duplicate),
+                EngineItem::Infobox(Infobox {
+                    img_src: Some("java\tscript:void(0)".into()),
+                    url: Some("javascript:void(0)".into()),
+                    urls: vec![
+                        InfoboxUrl {
+                            title: "unsafe".into(),
+                            url: "JaVaScRiPt:void(0)".into(),
+                        },
+                        InfoboxUrl {
+                            title: "safe".into(),
+                            url: "https://example.com/reference".into(),
+                        },
+                    ],
+                    ..infobox
+                }),
+            ],
+        );
+        assert!(container.main_results()[0].img_src.is_none());
+        assert!(container.main_results()[0].thumbnail.is_none());
+        assert!(container.infoboxes[0].img_src.is_none());
+        assert!(container.infoboxes[0].url.is_none());
+        assert_eq!(container.infoboxes[0].urls.len(), 1);
+        assert_eq!(
+            container.infoboxes[0].urls[0].url,
+            "https://example.com/reference"
+        );
+
+        let mut safe = SearchResult::new("https://example.com/a", "safe");
+        safe.img_src = Some("https://example.com/image.png".into());
+        safe.thumbnail = Some("/thumb.png".into());
+        container.extend(
+            "c",
+            1.0,
+            vec![
+                EngineItem::Result(safe),
+                EngineItem::Infobox(Infobox {
+                    id: "box".into(),
+                    img_src: Some("https://example.com/image.png".into()),
+                    url: Some("/reference".into()),
+                    ..Default::default()
+                }),
+            ],
+        );
+        assert_eq!(
+            container.main_results()[0].img_src.as_deref(),
+            Some("https://example.com/image.png")
+        );
+        assert_eq!(
+            container.main_results()[0].thumbnail.as_deref(),
+            Some("/thumb.png")
+        );
+        assert_eq!(
+            container.infoboxes[0].img_src.as_deref(),
+            Some("https://example.com/image.png")
+        );
+        assert_eq!(container.infoboxes[0].url.as_deref(), Some("/reference"));
     }
 
     #[test]
