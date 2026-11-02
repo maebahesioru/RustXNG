@@ -147,11 +147,10 @@ pub async fn handler(
     let response = match state
         .searcher
         .network
-        .fetch(
+        .fetch_image(
             request,
             std::time::Duration::from_secs_f64(settings.outgoing.request_timeout.max(1.0)),
-            None,
-            None,
+            MAX_SIZE,
         )
         .await
     {
@@ -160,9 +159,6 @@ pub async fn handler(
             return (StatusCode::BAD_GATEWAY, format!("upstream error: {error}")).into_response();
         }
     };
-    if response.body.len() > MAX_SIZE {
-        return (StatusCode::BAD_GATEWAY, "image is too large").into_response();
-    }
     let content_type = response
         .header("content-type")
         .unwrap_or("application/octet-stream")

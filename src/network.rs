@@ -35,6 +35,8 @@ const USER_AGENT_TEMPLATE: &str =
 pub enum NetworkError {
     #[error("request timed out")]
     Timeout,
+    #[error("response exceeds the {0} byte decoded body limit")]
+    TooLarge(usize),
     #[error("http status {status}")]
     Status {
         status: u16,
@@ -52,6 +54,7 @@ impl NetworkError {
     pub fn failure_kind(&self) -> FailureKind {
         match self {
             Self::Timeout => FailureKind::Timeout,
+            Self::TooLarge(_) => FailureKind::Other,
             Self::Build(_) => FailureKind::Other,
             Self::Transport(_) => FailureKind::Other,
             Self::Status { status, body, .. } => classify_status(*status, body),
@@ -472,6 +475,28 @@ impl Network {
         cache: Option<&Cache>,
         proxy: Option<&str>,
     ) -> Result<EngineResponse, NetworkError> {
+        self.fetch_inner(request, timeout, cache, proxy, None).await
+    }
+
+    /// Fetch an uncached image with a body limit.
+    pub(crate) async fn fetch_image(
+        &self,
+        request: EngineRequest,
+        timeout: Duration,
+        max_bytes: usize,
+    ) -> Result<EngineResponse, NetworkError> {
+        self.fetch_inner(request, timeout, None, None, Some(max_bytes))
+            .await
+    }
+
+    async fn fetch_inner(
+        &self,
+        request: EngineRequest,
+        timeout: Duration,
+        cache: Option<&Cache>,
+        proxy: Option<&str>,
+        max_bytes: Option<usize>,
+    ) -> Result<EngineResponse, NetworkError> {
         let deadline = tokio::time::Instant::now() + timeout;
         let client = self.client_for(proxy);
         let request = self.with_solver_cookies(request);
@@ -514,7 +539,9 @@ impl Network {
             if remaining.is_zero() {
                 return Err(NetworkError::Timeout);
             }
-            let outcome = self.send(client.clone(), &request, remaining).await;
+            let outcome = self
+                .send(client.clone(), &request, remaining, max_bytes)
+                .await;
             match outcome {
                 Ok(response) => {
                     let marker = String::from_utf8_lossy(&response.body);
@@ -722,6 +749,7 @@ impl Network {
         client: reqwest::Client,
         request: &EngineRequest,
         timeout: Duration,
+        max_bytes: Option<usize>,
     ) -> Result<EngineResponse, NetworkError> {
         let method = match request.method {
             Method::Get => reqwest::Method::GET,
@@ -763,7 +791,7 @@ impl Network {
         }
 
         let send = async {
-            let response = builder.send().await.map_err(|error| {
+            let mut response = builder.send().await.map_err(|error| {
                 if error.is_timeout() {
                     NetworkError::Timeout
                 } else {
@@ -778,11 +806,26 @@ impl Network {
                     headers.insert(name.as_str().to_lowercase(), value.to_string());
                 }
             }
-            let body = response
-                .bytes()
-                .await
-                .map_err(|error| NetworkError::Transport(error.to_string()))?
-                .to_vec();
+            let body = if let Some(limit) = max_bytes {
+                let mut body = Vec::new();
+                while let Some(chunk) = response
+                    .chunk()
+                    .await
+                    .map_err(|error| NetworkError::Transport(error.to_string()))?
+                {
+                    if chunk.len() > limit - body.len() {
+                        return Err(NetworkError::TooLarge(limit));
+                    }
+                    body.extend_from_slice(&chunk);
+                }
+                body
+            } else {
+                response
+                    .bytes()
+                    .await
+                    .map_err(|error| NetworkError::Transport(error.to_string()))?
+                    .to_vec()
+            };
             Ok(EngineResponse {
                 status,
                 final_url,
@@ -943,7 +986,7 @@ fn is_retryable(error: &NetworkError) -> bool {
         // a timeout already consumed the whole engine budget
         NetworkError::Timeout => false,
         NetworkError::Status { status, .. } => *status == 429 || *status >= 500,
-        NetworkError::Build(_) => false,
+        NetworkError::Build(_) | NetworkError::TooLarge(_) => false,
     }
 }
 
@@ -1077,6 +1120,72 @@ mod tests {
         let second = network.user_agent();
         assert!(first.starts_with("Mozilla/5.0"));
         assert_ne!(first, second);
+    }
+
+    #[tokio::test]
+    async fn image_limits_apply_to_decoded_bytes_and_accept_the_exact_limit() {
+        use axum::{Router, routing::get};
+        use std::sync::Arc;
+
+        let requests = Arc::new(AtomicUsize::new(0));
+        let counter = requests.clone();
+        let app = Router::new()
+            .route(
+                "/exact",
+                get(|| async {
+                    (
+                        [(reqwest::header::CONTENT_TYPE, "image/png")],
+                        vec![b'x'; 32],
+                    )
+                }),
+            )
+            .route(
+                "/compressed",
+                get(move || {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    async {
+                        // Compressed 33 bytes; decoded limit is 32.
+                        (
+                            [
+                                (reqwest::header::CONTENT_TYPE, "image/png"),
+                                (reqwest::header::CONTENT_ENCODING, "gzip"),
+                            ],
+                            vec![
+                                31, 139, 8, 0, 0, 0, 0, 0, 2, 3, 171, 168, 32, 0, 0, 172, 211, 191,
+                                111, 33, 0, 0, 0,
+                            ],
+                        )
+                    }
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let mut network = Network::from_settings(&Settings::defaults()).unwrap();
+        network.client = reqwest::Client::builder().no_proxy().build().unwrap();
+        network.retries = 2;
+        let response = network
+            .fetch_image(
+                EngineRequest::get(format!("http://{address}/exact")),
+                Duration::from_secs(2),
+                32,
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status, 200);
+        assert_eq!(response.header("content-type"), Some("image/png"));
+        assert_eq!(response.body, [b'x'; 32]);
+        let error = network
+            .fetch_image(
+                EngineRequest::get(format!("http://{address}/compressed")),
+                Duration::from_secs(2),
+                32,
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(error, NetworkError::TooLarge(32)), "{error}");
+        assert_eq!(requests.load(Ordering::SeqCst), 1);
+        server.abort();
     }
 
     #[test]
