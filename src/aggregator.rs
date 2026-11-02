@@ -453,6 +453,14 @@ impl Searcher {
             results = self.rerank_by_embedding(&request.query, results).await;
         }
 
+        // Canonical re-ranking (opt-in): let the top pages' own
+        // <link rel="canonical"> declarations consolidate mirror copies
+        // into the original page. Single-engine keeps upstream order,
+        // like the other re-ranking stages.
+        if request.engines.len() != 1 && self.settings.search.canonical_rerank {
+            results = self.rerank_by_canonical(results).await;
+        }
+
         // Site-scoped second pass: when the query names a known site but that
         // site barely shows up, search within it explicitly. Metasearch engines
         // answer "python dict get method" with a tutorial page; asking for a
@@ -1147,6 +1155,60 @@ impl Searcher {
             .collect()
     }
 
+    /// Consolidate the top results by their pages' canonical declarations.
+    ///
+    /// Each checked page is fetched once, through the same SSRF guard and
+    /// cache as the raw-content fetch. The score changes themselves live
+    /// in `apply_canonical_votes`, which is pure and unit-tested; a fetch
+    /// failure simply leaves that result unchecked (neutral).
+    async fn rerank_by_canonical(&self, mut results: Vec<SearchResult>) -> Vec<SearchResult> {
+        let settings = &self.settings.search;
+        let topk = results.len().min(settings.canonical_topk);
+        if topk < 2 {
+            return results;
+        }
+        let canonicals = futures::future::join_all(
+            results
+                .iter()
+                .take(topk)
+                .map(|result| self.page_canonical(&result.url)),
+        )
+        .await;
+        for (result, canonical) in results.iter_mut().take(topk).zip(&canonicals) {
+            if canonical.is_some() {
+                result.canonical_url = canonical.clone();
+            }
+        }
+        apply_canonical_votes(results, topk, &canonicals, settings.canonical_weight)
+    }
+
+    /// The canonical URL a page declares for itself, `None` when the page
+    /// cannot be fetched or declares none.
+    async fn page_canonical(&self, url: &str) -> Option<String> {
+        let html = self.fetch_page_html(url).await?;
+        crate::content::canonical_url(&html, url)
+    }
+
+    /// Fetch and parse one result page, refusing non-public URLs.
+    ///
+    /// Result URLs come from third-party engines, so treat them as untrusted:
+    /// an engine (or a poisoned result) must not make us fetch localhost or
+    /// the cloud metadata endpoint on its behalf.
+    async fn fetch_page_html(&self, url: &str) -> Option<scraper::Html> {
+        if !crate::web::image_proxy::is_public_url(url) {
+            tracing::debug!(url, "refusing to fetch a non-public page");
+            return None;
+        }
+        let request = crate::engine::EngineRequest::get(url)
+            .header("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8");
+        let response = self
+            .network
+            .fetch(request, Duration::from_secs(4), Some(&self.cache), None)
+            .await
+            .ok()?;
+        response.html().ok()
+    }
+
     async fn attach_raw_content(&self, results: &mut [SearchResult]) {
         let limit = self.settings.search.raw_content_limit.max(1);
         let count = results.len().min(limit);
@@ -1188,6 +1250,117 @@ impl Searcher {
     pub fn engine_snapshots(&self) -> Vec<EngineSnapshot> {
         self.states.snapshot()
     }
+}
+
+/// How many canonical votes for one target are counted at most. A page in
+/// the checked set can only be boosted so far by other pages pointing at
+/// it, so a cluster of copies cannot manufacture unlimited score.
+const MAX_CANONICAL_VOTES: usize = 3;
+
+/// Normalise a URL for canonical matching: lowercase host, no fragment,
+/// no trailing slash (except the root), no default port. Deliberately
+/// conservative — two URLs that fail to normalise to the same string are
+/// simply not merged, which is the safe failure mode.
+fn normalise_url_for_canonical_match(raw: &str) -> Option<String> {
+    let mut parsed = url::Url::parse(raw.trim()).ok()?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return None;
+    }
+    parsed.set_fragment(None);
+    if (parsed.scheme() == "http" && parsed.port() == Some(80))
+        || (parsed.scheme() == "https" && parsed.port() == Some(443))
+    {
+        let _ = parsed.set_port(None);
+    }
+    let mut out = parsed.to_string();
+    if out.ends_with('/') && parsed.path() != "/" {
+        out.pop();
+    }
+    Some(out)
+}
+
+/// Apply the canonical declarations of the first `topk` results.
+///
+/// `canonicals[i]` is the canonical URL result `i` declares for itself
+/// (already resolved to an absolute URL), or `None` when the page was not
+/// fetched or declares none. Rules, in order:
+///
+/// - Self-canonical, no declaration, or a target outside the checked set:
+///   neutral. A copy is better than nothing when the original page is not
+///   among the results, so a lone voter is never punished.
+/// - A result whose canonical target *is* in the checked set is a copy:
+///   it is removed and merged into the target (engines are unioned), and
+///   the target gains `weight` per merged copy, capped at
+///   `MAX_CANONICAL_VOTES` votes. This applies across hosts (a mirror
+///   pointing at the official docs) and within one host (a page that
+///   canonicalises to its own newer path).
+/// - Results beyond `topk` are never touched, and their relative order
+///   is preserved; the checked head is re-sorted by score at the end.
+///
+/// The hand-maintained `AUTHORITIES` boost in `ResultContainer::close`
+/// has already run at this point and is *not* overridden: this stage only
+/// consolidates copies, it never demotes a result the list lifted unless
+/// that result's own page declares it is a copy of another result.
+fn apply_canonical_votes(
+    results: Vec<SearchResult>,
+    topk: usize,
+    canonicals: &[Option<String>],
+    weight: f64,
+) -> Vec<SearchResult> {
+    let topk = topk.min(results.len()).min(canonicals.len());
+    if topk < 2 || weight <= 0.0 {
+        return results;
+    }
+    let (head, tail) = results.split_at(topk);
+    let mut head: Vec<SearchResult> = head.to_vec();
+    // Normalised URL -> index of the first result with that URL.
+    let mut by_url: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for (index, result) in head.iter().enumerate() {
+        if let Some(key) = normalise_url_for_canonical_match(&result.url) {
+            by_url.entry(key).or_insert(index);
+        }
+    }
+    let mut votes: Vec<usize> = vec![0; head.len()];
+    let mut merged_away: Vec<bool> = vec![false; head.len()];
+    for (index, canonical) in canonicals.iter().take(topk).enumerate() {
+        let Some(canonical) = canonical else { continue };
+        let Some(target_key) = normalise_url_for_canonical_match(canonical) else {
+            continue;
+        };
+        let Some(&target) = by_url.get(&target_key) else {
+            continue;
+        };
+        if target == index {
+            continue; // self-canonical: no signal
+        }
+        // This result declares itself a copy of `target`: consolidate.
+        merged_away[index] = true;
+        votes[target] += 1;
+        let engines = head[index].engines.clone();
+        for engine in engines {
+            if !head[target].engines.contains(&engine) {
+                head[target].engines.push(engine);
+            }
+        }
+    }
+    for (index, result) in head.iter_mut().enumerate() {
+        if votes[index] > 0 {
+            result.score += weight * votes[index].min(MAX_CANONICAL_VOTES) as f64;
+        }
+    }
+    let mut head: Vec<SearchResult> = head
+        .into_iter()
+        .zip(&merged_away)
+        .filter(|(_, away)| !**away)
+        .map(|(result, _)| result)
+        .collect();
+    head.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    head.extend(tail.iter().cloned());
+    head
 }
 
 /// Reject a parsed response that looks fabricated or unrelated.
@@ -1603,6 +1776,107 @@ mod orchestration_tests {
             now,
         );
         assert_eq!(budget, Some(Duration::from_millis(300)));
+    }
+
+    fn scored(url: &str, score: f64) -> SearchResult {
+        let mut result = SearchResult::new(url, "title");
+        result.score = score;
+        result.engines = vec!["engine".to_string()];
+        result
+    }
+
+    #[test]
+    fn canonical_mirror_is_merged_into_its_target() {
+        let results = vec![
+            scored("https://mirror.example.com/guide", 10.0),
+            scored("https://docs.example.com/guide", 9.0),
+        ];
+        let canonicals = vec![
+            Some("https://docs.example.com/guide".to_string()),
+            Some("https://docs.example.com/guide".to_string()),
+        ];
+        let out = apply_canonical_votes(results, 2, &canonicals, 4.0);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].url, "https://docs.example.com/guide");
+        // One merged copy = one vote of weight.
+        assert_eq!(out[0].score, 13.0);
+    }
+
+    #[test]
+    fn canonical_self_declaration_is_neutral() {
+        let results = vec![
+            scored("https://a.example.com/x", 10.0),
+            scored("https://b.example.com/y", 9.0),
+        ];
+        let canonicals = vec![
+            Some("https://a.example.com/x".to_string()),
+            Some("https://b.example.com/y".to_string()),
+        ];
+        let out = apply_canonical_votes(results, 2, &canonicals, 4.0);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].score, 10.0);
+        assert_eq!(out[1].score, 9.0);
+    }
+
+    #[test]
+    fn canonical_target_outside_the_checked_set_is_neutral() {
+        // The original page is not among the results: the copy is the
+        // only accessible version and must not be punished.
+        let results = vec![
+            scored("https://mirror.example.com/guide", 10.0),
+            scored("https://other.example.com/z", 9.0),
+        ];
+        let canonicals = vec![Some("https://docs.example.com/guide".to_string()), None];
+        let out = apply_canonical_votes(results, 2, &canonicals, 4.0);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].url, "https://mirror.example.com/guide");
+        assert_eq!(out[0].score, 10.0);
+    }
+
+    #[test]
+    fn canonical_votes_are_capped() {
+        let mut results = vec![scored("https://docs.example.com/guide", 1.0)];
+        let mut canonicals = vec![Some("https://docs.example.com/guide".to_string())];
+        for i in 0..6 {
+            results.push(scored(&format!("https://m{i}.example.com/guide"), 0.5));
+            canonicals.push(Some("https://docs.example.com/guide".to_string()));
+        }
+        let out = apply_canonical_votes(results, 7, &canonicals, 4.0);
+        assert_eq!(out.len(), 1);
+        // 6 copies but only MAX_CANONICAL_VOTES votes count.
+        assert_eq!(out[0].score, 1.0 + 4.0 * MAX_CANONICAL_VOTES as f64);
+    }
+
+    #[test]
+    fn canonical_stage_never_touches_results_beyond_topk() {
+        let results = vec![
+            scored("https://a.example.com/x", 10.0),
+            scored("https://docs.example.com/guide", 9.0),
+            scored("https://mirror.example.com/guide", 8.0),
+        ];
+        // The mirror is result #3 and outside the checked top 2, even
+        // though a canonical entry is (incorrectly) supplied for it.
+        let canonicals = vec![
+            None,
+            None,
+            Some("https://docs.example.com/guide".to_string()),
+        ];
+        let out = apply_canonical_votes(results, 2, &canonicals, 4.0);
+        assert_eq!(out.len(), 3);
+        assert_eq!(out[2].url, "https://mirror.example.com/guide");
+        assert_eq!(out[2].score, 8.0);
+    }
+
+    #[test]
+    fn canonical_match_ignores_fragment_and_trailing_slash() {
+        let results = vec![
+            scored("https://mirror.example.com/guide", 10.0),
+            scored("https://docs.example.com/guide/", 9.0),
+        ];
+        let canonicals = vec![Some("https://docs.example.com/guide#top".to_string()), None];
+        let out = apply_canonical_votes(results, 2, &canonicals, 4.0);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].score, 13.0);
     }
 
     /// A request whose deadline has already passed must not start engines at all.

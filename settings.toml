@@ -88,6 +88,14 @@ embedding_weight = 2.5
 authority_weight = 8.0
 # 何件の上位結果を埋め込みで並べ替えるか
 embedding_topk = 25
+# 実験的: ページ自身の <link rel="canonical"> 宣言で上位結果を再順位付けする。
+# ミラーが正規ページを指していれば、正規ページが結果内にある場合に限り
+# ミラーを正規ページへ統合する。取得に1結果あたり1フェッチかかるため既定は false。
+canonical_rerank = false
+# canonical リランクで確認する上位件数
+canonical_topk = 20
+# 統合されたコピー1件あたり正規ページへ加えるスコア（票数には上限あり）
+canonical_weight = 4.0
 
 [ui]
 default_theme = "simple"

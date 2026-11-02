@@ -502,6 +502,18 @@ pub struct Search {
     pub embedding_weight: f64,
     /// How many of the top results are re-ranked by embedding similarity.
     pub embedding_topk: usize,
+    /// EXPERIMENTAL: re-rank the top results by the pages' own canonical
+    /// declarations (`<link rel="canonical">`, falling back to `og:url`).
+    /// Off by default: it costs one page fetch per checked result. When on,
+    /// a result whose page declares a different canonical URL is merged
+    /// into that canonical result when the canonical page is also in the
+    /// checked set; self-canonicals and fetch failures stay neutral.
+    pub canonical_rerank: bool,
+    /// How many of the top results the canonical re-ranking checks.
+    pub canonical_topk: usize,
+    /// Score added to a canonical target per result merged into it
+    /// (the number of votes counted is capped).
+    pub canonical_weight: f64,
 }
 
 /// Search execution strategy, upstream's default is "parallel".
@@ -556,6 +568,9 @@ impl Default for Search {
             authority_weight: 8.0,
             embedding_weight: 2.5,
             embedding_topk: 25,
+            canonical_rerank: false,
+            canonical_topk: 20,
+            canonical_weight: 4.0,
         }
     }
 }
