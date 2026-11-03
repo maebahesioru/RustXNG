@@ -29,9 +29,13 @@ jobs:
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --locked --all-targets -- -D warnings
       - name: Build and test
-        run: cargo test --all-targets
+        run: cargo test --locked --all-targets
+      - name: Offline evaluation tests
+        run: |
+          python -m unittest discover -s tools -p "test_*.py"
+          python tools/provider_inventory.py --check
       - name: Build the server binary
         run: cargo build --locked --bin rustxng
       - name: Agent setup smoke test (offline)
@@ -41,7 +45,33 @@ jobs:
         run: cargo build --release --example benchmark
       - name: Lint the Japanese docs
         if: runner.os == 'Linux'
-        run: npx --yes markdownlint-cli2 "*.md" "docs/*.md" 
+        run: npx --yes markdownlint-cli2@0.24.0 "*.md" "docs/*.md"
+
+  mysql-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mariadb:
+        image: mariadb:11.8@sha256:c4124d1afa875e47f2892edf26b482fa54f796e2f342d3717a04ca091a22a9bd
+        env:
+          MARIADB_RANDOM_ROOT_PASSWORD: "yes"
+          MARIADB_DATABASE: rustxng_test
+          MARIADB_USER: rustxng
+          MARIADB_PASSWORD: fixture-password
+        ports:
+          - 3306/tcp
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          key: mysql-integration
+      - run: cargo test --locked --test mysql -- --ignored
+        env:
+          MYSQL_TEST_PORT: ${{ job.services.mariadb.ports['3306'] }}
 
   no-default-features:
     # The documented slim build (no database engines) must keep compiling.
@@ -58,7 +88,7 @@ jobs:
   linux-arm64:
     # Native Linux ARM64 (aarch64-unknown-linux-gnu) on the GitHub-hosted arm64
     # runner: no cross toolchain and no emulation. Mirrors the release build,
-    # which publishes this target. Containers stay x86_64 only.
+    # which publishes this target and also validates a native ARM64 container.
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     steps:

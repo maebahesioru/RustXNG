@@ -307,6 +307,19 @@ struct Connection {
 }
 
 impl Connection {
+    fn io_error(error: std::io::Error) -> EngineError {
+        // Blocking socket timeouts are WouldBlock on some Unix platforms and
+        // TimedOut on others. Both mean this connection's I/O budget expired.
+        if matches!(
+            error.kind(),
+            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+        ) {
+            EngineError::Message("valkey: search I/O deadline exceeded".into())
+        } else {
+            EngineError::Message(format!("valkey: {error}"))
+        }
+    }
+
     fn command(&mut self, args: &[&str]) -> Result<Reply, EngineError> {
         if Instant::now() >= self.deadline {
             return Err(EngineError::Message(
@@ -319,18 +332,14 @@ impl Connection {
         }
         self.writer
             .write_all(request.as_bytes())
-            .map_err(|error| EngineError::Message(format!("valkey: {error}")))?;
-        self.writer
-            .flush()
-            .map_err(|error| EngineError::Message(format!("valkey: {error}")))?;
+            .map_err(Self::io_error)?;
+        self.writer.flush().map_err(Self::io_error)?;
         self.read_reply()
     }
 
     fn read_reply(&mut self) -> Result<Reply, EngineError> {
         let mut line = String::new();
-        self.reader
-            .read_line(&mut line)
-            .map_err(|error| EngineError::Message(format!("valkey: {error}")))?;
+        self.reader.read_line(&mut line).map_err(Self::io_error)?;
         if line.is_empty() {
             return Err(EngineError::Message("valkey: connection closed".into()));
         }
@@ -348,7 +357,7 @@ impl Connection {
                     let mut buffer = vec![0u8; length as usize + 2];
                     self.reader
                         .read_exact(&mut buffer)
-                        .map_err(|error| EngineError::Message(format!("valkey: {error}")))?;
+                        .map_err(Self::io_error)?;
                     buffer.truncate(length as usize);
                     Reply::Bulk(Some(String::from_utf8_lossy(&buffer).to_string()))
                 }
@@ -372,6 +381,22 @@ mod tests {
     use std::net::TcpListener;
     use std::sync::Mutex;
     use std::thread;
+
+    #[test]
+    fn socket_deadline_errors_are_portable() {
+        for kind in [std::io::ErrorKind::WouldBlock, std::io::ErrorKind::TimedOut] {
+            assert!(
+                Connection::io_error(std::io::Error::from(kind))
+                    .to_string()
+                    .contains("deadline")
+            );
+        }
+        assert!(
+            !Connection::io_error(std::io::Error::from(std::io::ErrorKind::ConnectionReset))
+                .to_string()
+                .contains("deadline")
+        );
+    }
 
     /// Start a stub server that answers the engine in script order and records
     /// the raw request bytes. Commands are parsed leniently so malformed bytes

@@ -10,6 +10,8 @@ pub mod handlers;
 pub mod image_proxy;
 pub mod limiter;
 pub mod preferences;
+#[cfg(test)]
+mod ssrf_tests;
 
 use std::sync::Arc;
 

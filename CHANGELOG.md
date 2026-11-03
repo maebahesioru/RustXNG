@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD004 MD012 -->
 # Changelog
 
 このファイルの形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に従います。バージョニング方針は本文末尾の「セマンティックバージョニング」を参照してください。

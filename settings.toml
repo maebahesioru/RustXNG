@@ -15,7 +15,9 @@ port = 29483
 # rdsh などが起動するサイドカーが残り続けるのを防ぐ用途。
 # 環境変数 RUSTXNG_IDLE_TIMEOUT でも指定できる。
 idle_timeout = 0
-secret_key = "ultrasecretkey"
+# Empty or the legacy sample key generates a random key at startup. Set your
+# own shared secret for stable signatures across restarts or multiple workers.
+secret_key = ""
 # The limiter is a simplified per-client rate limit (upstream uses botdetection).
 limiter = false
 limiter_window = 60

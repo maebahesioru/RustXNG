@@ -94,11 +94,12 @@ GitHub CLIを使い、Linux x86_64のバイナリをユーザー用ディレク�
 ```bash
 set -eu
 mkdir -p rustxng-download && cd rustxng-download
-gh release download v0.26.0 --repo sahenjp/RustXNG \
-  --pattern 'rustxng-v0.26.0-x86_64-unknown-linux-musl*' \
-  --pattern LICENSE --pattern NOTICE
-sha256sum --check rustxng-v0.26.0-x86_64-unknown-linux-musl.sha256
-install -Dm755 rustxng-v0.26.0-x86_64-unknown-linux-musl "$HOME/.local/bin/rustxng"
+tag=v0.26.0
+asset="rustxng-${tag}-x86_64-unknown-linux-musl"
+gh release download "$tag" --repo sahenjp/RustXNG \
+  --pattern "${asset}*" --pattern LICENSE --pattern NOTICE
+sha256sum --check "${asset}.sha256"
+install -Dm755 "$asset" "$HOME/.local/bin/rustxng"
 mkdir -p "$HOME/.local/share/rustxng"
 cp LICENSE NOTICE "$HOME/.local/share/rustxng/"
 "$HOME/.local/bin/rustxng" --version

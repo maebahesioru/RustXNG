@@ -186,7 +186,8 @@ fn open_local_index(settings: &Settings) -> Option<Arc<crate::localindex::LocalI
 }
 
 impl Searcher {
-    pub fn new(settings: Settings) -> Result<Self, String> {
+    pub fn new(mut settings: Settings) -> Result<Self, String> {
+        settings.ensure_secret_key()?;
         let registry = EngineRegistry::from_settings(&settings)?;
         let network = Network::from_settings(&settings).map_err(|error| error.to_string())?;
         let cache = match settings.cache.backend.as_str() {

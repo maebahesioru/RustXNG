@@ -30,10 +30,11 @@ quick-xml = { version = "0.41", features = ["serialize"] }
 thiserror = "2"
 regex = "1"
 sha2 = "0.10"
+getrandom = "0.3"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 base64 = "0.22"
 postgres = { version = "0.19", optional = true }
-mysql = { version = "26", default-features = false, features = ["minimal"], optional = true }
+mysql = { version = "28.0.3", default-features = false, features = ["minimal"], optional = true }
 rusqlite = { version = "0.32", features = ["bundled"], optional = true }
 mongodb = { version = "3", default-features = false, features = ["bson-3", "compat-3-3-0", "rustls-tls"], optional = true }
 bson = { version = "3", optional = true }

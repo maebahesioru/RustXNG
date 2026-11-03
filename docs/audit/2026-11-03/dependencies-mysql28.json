@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-03",
+  "mysql": "28.0.4",
+  "lru": "0.18.5",
+  "serde_with": "3.21.0",
+  "rustsec_database": {
+    "advisory-count": 1402,
+    "last-commit": "263a4d951a0867d4bddc29dddd6d59427c78f9a7",
+    "last-updated": "2026-11-02T12:45:44+01:00"
+  },
+  "vulnerabilities": {
+    "found": false,
+    "count": 0,
+    "list": []
+  },
+  "warnings": {
+    "unmaintained": [
+      {
+        "advisory": "RUSTSEC-2026-0374",
+        "package": "basic-toml",
+        "version": "0.1.10"
+      },
+      {
+        "advisory": "RUSTSEC-2025-0057",
+        "package": "fxhash",
+        "version": "0.2.1"
+      },
+      {
+        "advisory": "RUSTSEC-2024-0449",
+        "package": "unsafe-libyaml",
+        "version": "0.2.11"
+      }
+    ]
+  }
+}

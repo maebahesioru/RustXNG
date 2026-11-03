@@ -155,11 +155,12 @@ mod tests {
     fn state() -> AppState {
         let mut settings = Settings::defaults();
         settings.server.image_proxy = true;
+        settings.server.secret_key = "favicon-test-key".into();
         AppState::new(Searcher::new(settings).expect("searcher"))
     }
 
     fn secret() -> String {
-        Settings::defaults().server.secret_key
+        "favicon-test-key".into()
     }
 
     #[test]

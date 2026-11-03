@@ -230,7 +230,7 @@ impl Default for Server {
             port: 29483,
             idle_timeout: 0,
             base_url: None,
-            secret_key: "ultrasecretkey".into(),
+            secret_key: String::new(),
             limiter: LimiterSettings::default(),
             limiter_window: 60,
             limiter_max: 30,
@@ -757,6 +757,18 @@ fn yaml_key(value: &serde_yaml::Value) -> Option<String> {
 }
 
 impl Settings {
+    /// Initialise the proxy signing key once per Searcher. Never retain the
+    /// historical sample key, including when loaded from an older config.
+    pub(crate) fn ensure_secret_key(&mut self) -> Result<(), String> {
+        if self.server.secret_key.trim().is_empty() || self.server.secret_key == "ultrasecretkey" {
+            let mut bytes = [0u8; 32];
+            getrandom::fill(&mut bytes)
+                .map_err(|error| format!("cannot generate a proxy signing key: {error}"))?;
+            self.server.secret_key = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+        }
+        Ok(())
+    }
+
     /// Parse a SearXNG `settings.yml` (YAML) document and merge it onto the
     /// built-in defaults. Upstream's configuration format is YAML, so a
     /// drop-in `settings.yml` is converted to TOML values first (the merge
@@ -1131,6 +1143,31 @@ fn merge_engines_by_name(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn signing_keys_are_random_for_empty_or_legacy_defaults_and_custom_keys_survive() {
+        let mut first = Settings::defaults();
+        first.ensure_secret_key().unwrap();
+        let mut second = Settings::defaults();
+        second.server.secret_key = "ultrasecretkey".into();
+        second.ensure_secret_key().unwrap();
+        assert_eq!(first.server.secret_key.len(), 64);
+        assert!(
+            first
+                .server
+                .secret_key
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit())
+        );
+        assert_eq!(second.server.secret_key.len(), 64);
+        assert_ne!(first.server.secret_key, second.server.secret_key);
+        let original = first.server.secret_key.clone();
+        first.ensure_secret_key().unwrap();
+        assert_eq!(first.server.secret_key, original);
+        second.server.secret_key = "operator-managed-key".into();
+        second.ensure_secret_key().unwrap();
+        assert_eq!(second.server.secret_key, "operator-managed-key");
+    }
 
     /// Merge `text` the way `Settings::load` does, but without the `SEARXNG_*`
     /// overrides, so an ambient environment variable cannot flip an assertion.

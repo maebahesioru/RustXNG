@@ -54,6 +54,7 @@ fn is_global_v4(address: Ipv4Addr) -> bool {
         || (a == 192 && b == 168)
         || (a == 192 && b == 0 && c == 0)
         || (a == 192 && b == 0 && c == 2)
+        || (a == 192 && b == 88 && c == 99)
         || (a == 198 && (18..20).contains(&b))
         || (a == 198 && b == 51 && c == 100)
         || (a == 203 && b == 0 && c == 113))
@@ -69,7 +70,9 @@ fn is_global_v6(address: Ipv6Addr) -> bool {
     };
     match segments[0] {
         // NAT64 (64:ff9b::/96) reaches the embedded IPv4 address.
-        0x0064 if segments[1] == 0xff9b => is_global_v4(embedded_v4(segments[6], segments[7])),
+        0x0064 if segments[1] == 0xff9b && segments[2..6] == [0; 4] => {
+            is_global_v4(embedded_v4(segments[6], segments[7]))
+        }
         // 6to4 (2002::/16) reaches the embedded IPv4 address.
         0x2002 => is_global_v4(embedded_v4(segments[1], segments[2])),
         // Teredo, benchmarking and other IETF protocol assignments; documentation.
@@ -98,19 +101,30 @@ pub fn is_fetchable(url: &reqwest::Url) -> bool {
     }
 }
 
-/// Resolves with the system resolver and keeps only global addresses.
-struct PublicResolver;
+struct SystemResolver;
 
-impl Resolve for PublicResolver {
+impl Resolve for SystemResolver {
     fn resolve(&self, name: Name) -> Resolving {
         Box::pin(async move {
             let host = name.as_str().to_string();
-            let addresses: Vec<SocketAddr> = tokio::net::lookup_host((host.as_str(), 0))
-                .await?
-                .filter(|address| is_global(address.ip()))
-                .collect();
-            if addresses.is_empty() {
-                return Err(format!("{host} has no public address").into());
+            let addresses: Vec<SocketAddr> =
+                tokio::net::lookup_host((host.as_str(), 0)).await?.collect();
+            Ok(Box::new(addresses.into_iter()) as Addrs)
+        })
+    }
+}
+
+/// Resolve once, reject the entire answer if any address is non-global, and
+/// pass those exact checked addresses to the connector (no second lookup).
+struct PublicResolver(Arc<dyn Resolve>);
+
+impl Resolve for PublicResolver {
+    fn resolve(&self, name: Name) -> Resolving {
+        let answer = self.0.resolve(name);
+        Box::pin(async move {
+            let addresses: Vec<SocketAddr> = answer.await?.collect();
+            if addresses.is_empty() || addresses.iter().any(|a| !is_global(a.ip())) {
+                return Err("DNS answer contains no addresses or a non-public address".into());
             }
             Ok(Box::new(addresses.into_iter()) as Addrs)
         })
@@ -122,6 +136,14 @@ impl Resolve for PublicResolver {
 pub(crate) fn public_client(
     outgoing: &crate::settings::Outgoing,
     overrides: &[(String, SocketAddr)],
+) -> Result<(reqwest::Client, bool), String> {
+    public_client_with_resolver(outgoing, overrides, Arc::new(SystemResolver))
+}
+
+fn public_client_with_resolver(
+    outgoing: &crate::settings::Outgoing,
+    overrides: &[(String, SocketAddr)],
+    resolver: Arc<dyn Resolve>,
 ) -> Result<(reqwest::Client, bool), String> {
     let redirects = reqwest::redirect::Policy::custom(|attempt| {
         if attempt.previous().len() >= MAX_REDIRECTS {
@@ -135,7 +157,7 @@ pub(crate) fn public_client(
     let mut builder = reqwest::Client::builder()
         .no_proxy()
         .redirect(redirects)
-        .dns_resolver(Arc::new(PublicResolver))
+        .dns_resolver(Arc::new(PublicResolver(resolver)))
         .timeout(FETCH_TIMEOUT)
         .connect_timeout(Duration::from_secs(4))
         .danger_accept_invalid_certs(!outgoing.verify)
@@ -168,6 +190,19 @@ pub(crate) fn public_client(
     ))
 }
 
+/// Inject DNS before the production address check; address overrides are only
+/// for an owned redirect entry server and bypass DNS deliberately.
+#[cfg(test)]
+pub(crate) fn test_public_client(
+    outgoing: &crate::settings::Outgoing,
+    overrides: &[(String, SocketAddr)],
+    resolver: Arc<dyn Resolve>,
+) -> reqwest::Client {
+    public_client_with_resolver(outgoing, overrides, resolver)
+        .unwrap()
+        .0
+}
+
 /// Extracted pages as (URL, text), oldest first.
 type Pages = VecDeque<(String, usize, std::time::Instant, PageContent)>;
 
@@ -189,6 +224,12 @@ pub struct PageReader {
 }
 
 impl PageReader {
+    #[cfg(test)]
+    pub(crate) fn with_test_client(mut self, client: reqwest::Client) -> Self {
+        self.client = client;
+        self
+    }
+
     /// A reader using the outgoing settings' TLS, HTTP/2 and proxy choices.
     /// `overrides` pin hostnames to addresses without checks; tests use it
     /// to serve pages from loopback.
@@ -377,6 +418,7 @@ mod tests {
             "172.16.0.1",
             "192.0.0.8",
             "192.0.2.1",
+            "192.88.99.1",
             "192.168.1.1",
             "198.18.0.1",
             "224.0.0.1",
@@ -387,6 +429,7 @@ mod tests {
             "::ffff:127.0.0.1",
             "::ffff:10.0.0.1",
             "64:ff9b::a9fe:a9fe",
+            "64:ff9b:1::808:808",
             "2002:7f00:1::",
             "2001::1",
             "2001:db8::1",
@@ -456,11 +499,57 @@ mod tests {
 
     #[tokio::test]
     async fn names_resolving_to_private_addresses_are_refused() {
-        let error = PublicResolver
+        let error = PublicResolver(Arc::new(SystemResolver))
             .resolve("localhost".parse().unwrap())
             .await
             .err()
             .expect("localhost must not resolve");
-        assert!(error.to_string().contains("no public address"), "{error}");
+        assert!(error.to_string().contains("non-public address"), "{error}");
+    }
+
+    struct Answers(Mutex<VecDeque<Vec<SocketAddr>>>);
+
+    impl Resolve for Answers {
+        fn resolve(&self, _: Name) -> Resolving {
+            let addresses = self.0.lock().unwrap().pop_front().unwrap();
+            Box::pin(async move { Ok(Box::new(addresses.into_iter()) as Addrs) })
+        }
+    }
+
+    #[tokio::test]
+    async fn dns_answers_are_checked_as_a_whole_and_never_resolved_twice() {
+        let public: SocketAddr = "8.8.8.8:80".parse().unwrap();
+        for unsafe_answer in [
+            vec![],
+            vec!["127.0.0.1:80".parse().unwrap()],
+            vec![public, "127.0.0.1:80".parse().unwrap()],
+            vec!["[fd00::1]:80".parse().unwrap(), public],
+            vec!["[::ffff:127.0.0.1]:80".parse().unwrap()],
+            vec!["[64:ff9b::a9fe:a9fe]:80".parse().unwrap()],
+        ] {
+            let inner = Arc::new(Answers(Mutex::new(VecDeque::from([
+                vec![public],
+                unsafe_answer,
+            ]))));
+            let resolver = PublicResolver(inner.clone());
+            let checked: Vec<_> = resolver
+                .resolve("example.test".parse().unwrap())
+                .await
+                .unwrap()
+                .collect();
+            assert_eq!(checked, [public]);
+            assert_eq!(
+                inner.0.lock().unwrap().len(),
+                1,
+                "one lookup per connection"
+            );
+            assert!(
+                resolver
+                    .resolve("example.test".parse().unwrap())
+                    .await
+                    .is_err()
+            );
+            assert!(inner.0.lock().unwrap().is_empty());
+        }
     }
 }
