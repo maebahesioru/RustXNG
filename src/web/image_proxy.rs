@@ -159,19 +159,47 @@ pub async fn handler(
             return (StatusCode::BAD_GATEWAY, format!("upstream error: {error}")).into_response();
         }
     };
-    let content_type = response
-        .header("content-type")
-        .unwrap_or("application/octet-stream")
-        .to_string();
-    if !content_type.starts_with("image/") {
+    let Some(content_type) = image_content_type(response.header("content-type")) else {
         return (StatusCode::BAD_GATEWAY, "upstream did not return an image").into_response();
-    }
+    };
+    image_response(content_type, "max-age=86400".to_string(), response.body)
+}
+
+/// Content-Security-Policy for proxied third-party images.  An `<img>` ignores
+/// it, but a proxied SVG opened directly as a document would otherwise run its
+/// scripts on this instance's origin; `sandbox` without `allow-scripts` and
+/// `default-src 'none'` prevent that.
+pub(crate) const PROXIED_IMAGE_CSP: &str =
+    "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox";
+
+/// Normalise an upstream `Content-Type` to a bare `image/<subtype>` essence, or
+/// `None` when it is not an image.  Parameters are dropped so that nothing the
+/// upstream sent besides the media type is reflected.
+pub(crate) fn image_content_type(raw: Option<&str>) -> Option<String> {
+    let essence = raw?.split(';').next()?.trim().to_ascii_lowercase();
+    let subtype = essence.strip_prefix("image/")?;
+    let token = |c: char| c.is_ascii_alphanumeric() || "!#$&-^_.+".contains(c);
+    (!subtype.is_empty() && subtype.chars().all(token)).then_some(essence)
+}
+
+/// Response for a proxied image, hardened so that it can only be rendered as
+/// an image and never as an active document of this origin.
+pub(crate) fn image_response(
+    content_type: String,
+    cache_control: String,
+    body: Vec<u8>,
+) -> Response {
     (
         [
             (header::CONTENT_TYPE, content_type),
-            (header::CACHE_CONTROL, "max-age=86400".to_string()),
+            (header::CACHE_CONTROL, cache_control),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_string()),
+            (
+                header::CONTENT_SECURITY_POLICY,
+                PROXIED_IMAGE_CSP.to_string(),
+            ),
         ],
-        response.body,
+        body,
     )
         .into_response()
 }
@@ -198,6 +226,41 @@ mod tests {
         assert!(!is_public_url("http://localhost/x.png"));
         assert!(!is_public_url("file:///etc/passwd"));
         assert!(is_public_url("https://upload.wikimedia.org/x.png"));
+    }
+
+    #[test]
+    fn only_image_media_types_are_accepted_and_normalised() {
+        let ct = |raw| image_content_type(Some(raw));
+        assert_eq!(ct("image/png").as_deref(), Some("image/png"));
+        assert_eq!(
+            ct(" Image/SVG+XML ; charset=utf-8").as_deref(),
+            Some("image/svg+xml")
+        );
+        assert_eq!(ct("image/x-icon").as_deref(), Some("image/x-icon"));
+        assert_eq!(ct("text/html"), None);
+        assert_eq!(ct("image/"), None);
+        assert_eq!(ct("image/svg+xml\"><script>"), None);
+        assert_eq!(ct("imagex/png"), None);
+        assert_eq!(image_content_type(None), None);
+    }
+
+    #[test]
+    fn proxied_images_cannot_become_active_documents() {
+        let response = image_response(
+            "image/svg+xml".into(),
+            "max-age=1".into(),
+            b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>".to_vec(),
+        );
+        let headers = response.headers();
+        assert_eq!(headers[header::CONTENT_TYPE], "image/svg+xml");
+        assert_eq!(headers[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+        let csp = headers[header::CONTENT_SECURITY_POLICY].to_str().unwrap();
+        assert!(csp.contains("default-src 'none'"));
+        assert!(
+            csp.split(';')
+                .any(|directive| directive.trim() == "sandbox")
+        );
+        assert!(!csp.contains("allow-scripts"));
     }
 
     #[test]
