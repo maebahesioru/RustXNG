@@ -48,7 +48,7 @@ jobs:
         with:
           ref: ${{ steps.current.outputs.sha }}
           persist-credentials: false
-      - uses: googleapis/release-please-action@8b8fd2cc23b2e18957157a9d923d75aa0c6f6ad5 # v4
+      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
         id: release
         if: steps.current.outputs.ready == 'true'
         with:
@@ -77,7 +77,7 @@ jobs:
           else
             echo 'A newer main is waiting for CI; skip PR preparation.'
           fi
-      - uses: googleapis/release-please-action@8b8fd2cc23b2e18957157a9d923d75aa0c6f6ad5 # v4
+      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
         if: steps.baseline.outputs.ready == 'true'
         with:
           config-file: release-please-config.json
