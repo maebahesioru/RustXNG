@@ -80,7 +80,7 @@ pub fn proxied_url(base_url: &str, secret: &str, url: &str) -> String {
 
 /// Whether a URL may be fetched by the proxy (public http/https host only).
 pub fn is_public_url(url: &str) -> bool {
-    url::Url::parse(url).is_ok_and(|parsed| crate::mcp::page::is_fetchable(&parsed))
+    url::Url::parse(url).is_ok_and(|parsed| crate::fetch::is_fetchable(&parsed))
 }
 
 /// `GET /image_proxy`.

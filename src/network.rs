@@ -146,6 +146,7 @@ fn refuses(error: &crate::solver::SolverError) -> bool {
 fn build_client(
     outgoing: &crate::settings::Outgoing,
     extra_proxy: Option<reqwest::Proxy>,
+    redirects: reqwest::redirect::Policy,
 ) -> Result<reqwest::Client, NetworkError> {
     build_client_with(
         outgoing,
@@ -211,6 +212,7 @@ fn build_client_with(
         .build()
         .map_err(|error| NetworkError::Build(error.to_string()))
 }
+
 /// Build the optional browser solver, or None when it is switched off.
 fn build_solver(settings: &crate::settings::SolverSettings) -> Option<std::sync::Arc<Solver>> {
     if !settings.enabled {
@@ -232,6 +234,16 @@ fn build_solver(settings: &crate::settings::SolverSettings) -> Option<std::sync:
     }
 }
 
+/// A normal (non-public-only) client for a trusted API endpoint.
+/// It honours the outgoing proxy, TLS and CA settings, but never follows
+/// redirects: the configured endpoint is fixed and a redirect must not make
+/// the local process contact another destination.
+pub(crate) fn api_client(
+    outgoing: &crate::settings::Outgoing,
+) -> Result<reqwest::Client, NetworkError> {
+    build_client(outgoing, None, reqwest::redirect::Policy::none())
+}
+
 impl Network {
     #[cfg(test)]
     pub(crate) fn with_test_media_client(mut self, client: reqwest::Client) -> Self {
@@ -241,9 +253,13 @@ impl Network {
 
     pub fn from_settings(settings: &Settings) -> Result<Self, NetworkError> {
         let outgoing = &settings.outgoing;
-        let client = build_client(outgoing, None)?;
+        let client = build_client(
+            outgoing,
+            None,
+            reqwest::redirect::Policy::limited(outgoing.max_redirects),
+        )?;
         let (media_client, media_proxy_blocked) =
-            crate::mcp::page::public_client(outgoing, &[]).map_err(NetworkError::Build)?;
+            crate::fetch::public_client(outgoing, &[]).map_err(NetworkError::Build)?;
         Ok(Self {
             client,
             media_client,
@@ -276,7 +292,11 @@ impl Network {
         }
         let configured =
             reqwest::Proxy::all(proxy).map_err(|error| NetworkError::Build(error.to_string()))?;
-        let client = build_client(&self.outgoing, Some(configured))?;
+        let client = build_client(
+            &self.outgoing,
+            Some(configured),
+            reqwest::redirect::Policy::limited(self.outgoing.max_redirects),
+        )?;
         if let Ok(mut cache) = self.proxied.lock() {
             cache.insert(proxy.to_string(), client.clone());
         }
@@ -516,7 +536,7 @@ impl Network {
             }
             let url = reqwest::Url::parse(&request.url)
                 .map_err(|error| NetworkError::Build(error.to_string()))?;
-            if !crate::mcp::page::is_fetchable(&url) {
+            if !crate::fetch::is_fetchable(&url) {
                 return Err(NetworkError::Build(
                     "only public http(s) media can be fetched".into(),
                 ));
@@ -1194,9 +1214,9 @@ mod tests {
         let file = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(file.path(), b"not a certificate").unwrap();
         outgoing.ca_bundle = Some(file.path().to_string_lossy().into_owned());
-        assert!(build_client(&outgoing, None).is_err());
+        assert!(build_client(&outgoing, None, reqwest::redirect::Policy::none()).is_err());
         outgoing.ca_bundle = Some("/nonexistent/rustxng-ca.pem".into());
-        assert!(build_client(&outgoing, None).is_err());
+        assert!(build_client(&outgoing, None, reqwest::redirect::Policy::none()).is_err());
         assert!(outgoing.verify);
     }
 
@@ -1294,7 +1314,7 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let mut network = Network::from_settings(&Settings::defaults()).unwrap();
-        network.media_client = crate::mcp::page::public_client(
+        network.media_client = crate::fetch::public_client(
             &crate::settings::Outgoing::default(),
             &[("example.com".into(), address)],
         )
@@ -1334,7 +1354,7 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let mut network = Network::from_settings(&Settings::defaults()).unwrap();
-        network.media_client = crate::mcp::page::public_client(
+        network.media_client = crate::fetch::public_client(
             &crate::settings::Outgoing::default(),
             &[("example.com".into(), address)],
         )
@@ -1394,7 +1414,7 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let mut network = Network::from_settings(&Settings::defaults()).unwrap();
-        network.media_client = crate::mcp::page::public_client(
+        network.media_client = crate::fetch::public_client(
             &crate::settings::Outgoing::default(),
             &[("example.com".into(), address)],
         )

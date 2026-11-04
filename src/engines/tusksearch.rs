@@ -155,7 +155,7 @@ fn search_result(item: &serde_json::Value) -> EngineItem {
     let thumbnail = json_str(item, "thumbnail.src");
     let mut builder =
         ResultBuilder::new(url, title).content(strip_tags(&json_str(item, "description")));
-    if !json_path(item, "thumbnail.logo").is_some_and(|logo| !logo.is_null()) {
+    if json_path(item, "thumbnail.logo").is_none_or(|logo| logo.is_null()) {
         builder = builder.thumbnail(thumbnail);
     }
     if let Some(date) = json_path(item, "page_age").and_then(serde_json::Value::as_i64) {

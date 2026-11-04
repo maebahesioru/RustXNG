@@ -45,7 +45,7 @@ python3 tools/coverage.py /path/to/searxng settings.toml
 
 上流と同じく、次は認証情報や自前インスタンスの設定が必要なため `disabled = true` にしています。
 
-- API キー: `braveapi`, `kagi`, `exaapi`, `wolframalpha_api`, `springer`, `flickr`, `giphy`, `soundcloud`, `marginalia`, `jina`, `ollama`, `spotify` など
+- API キー: `braveapi`, `kagi`, `exaapi`, `deepseek`, `wolframalpha_api`, `springer`, `flickr`, `giphy`, `soundcloud`, `marginalia`, `jina`, `ollama`, `spotify` など
 - 自前インスタンス: `lemmy`, `mastodon`, `peertube`, `sepiasearch`, `discourse`, `torznab`, `annas_archive`, `yacy`, `zlibrary`, `searx 系`
 - 翻訳系: `deepl`, `libretranslate`, `translated`
 

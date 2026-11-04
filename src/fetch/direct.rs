@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Page fetching for `read_page`, safe against server-side request forgery.
+//! Direct page fetching shared by MCP `read_page` and HTTP raw content, safe
+//! against server-side request forgery.
 //!
 //! Search results come from third parties, so a returned URL may point at a
 //! private service, a hostname may resolve to one, and a public page may
@@ -216,11 +217,7 @@ enum PageBody {
 }
 
 /// Extracted page text and whether the readable source exceeded the limit.
-#[derive(Clone, Debug)]
-pub struct PageContent {
-    pub text: Arc<str>,
-    pub source_truncated: bool,
-}
+pub use crate::fetch::FetchedPage as PageContent;
 
 /// Fetches pages and keeps their extracted text for the session.
 #[derive(Clone)]
@@ -230,6 +227,9 @@ pub struct PageReader {
     pages: Arc<Mutex<Pages>>,
     proxy_blocked: bool,
     cache_ttl: Option<Duration>,
+    /// Optional external backend, such as a provider API. `None` keeps the
+    /// direct fetcher.
+    source: Option<Arc<dyn crate::fetch::PageSource>>,
     renderer_command: Arc<[String]>,
 }
 
@@ -255,7 +255,25 @@ impl PageReader {
             renderer_command: Arc::from([]),
             permits: Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT)),
             pages: Arc::new(Mutex::new(VecDeque::new())),
+            source: None,
         })
+    }
+
+    /// A reader with the backend selected by `[fetch]`. Provider-specific code
+    /// lives in [`crate::fetch`], not in this module.
+    pub fn from_settings(
+        outgoing: &crate::settings::Outgoing,
+        fetch: &crate::settings::FetchSettings,
+        overrides: &[(String, SocketAddr)],
+    ) -> Result<Self, String> {
+        Ok(Self::new(outgoing, overrides)?
+            .with_source(crate::fetch::from_settings(fetch, outgoing)?))
+    }
+
+    /// Replace the optional external backend. `None` keeps the direct fetcher.
+    pub fn with_source(mut self, source: Option<Arc<dyn crate::fetch::PageSource>>) -> Self {
+        self.source = source;
+        self
     }
 
     /// HTTP callers preserve their configured cache expiry; MCP callers keep
@@ -281,7 +299,7 @@ impl PageReader {
     /// Fetch and extract a page. `source_truncated` is set when readable text
     /// exceeded `max_chars`; callers can keep it distinct from output slicing.
     pub async fn read(&self, url: &str, max_chars: usize) -> Result<PageContent, String> {
-        if self.proxy_blocked {
+        if self.source.is_none() && self.proxy_blocked {
             return Err("page reads are unavailable with configured proxies: destination validation requires direct connections".into());
         }
         if let Some(content) = self.remembered(url, max_chars) {
@@ -296,6 +314,11 @@ impl PageReader {
             .acquire()
             .await
             .map_err(|error| error.to_string())?;
+        if let Some(source) = &self.source {
+            let content = source.fetch(&parsed, max_chars).await?;
+            self.remember(url, max_chars, content.clone());
+            return Ok(content);
+        }
         let body = tokio::time::timeout(FETCH_TIMEOUT, self.fetch(parsed))
             .await
             .map_err(|_| "the page took too long to load".to_string())??;
@@ -554,6 +577,38 @@ mod tests {
         let reader = PageReader::new(&outgoing, &[]).unwrap();
         let error = reader.text("https://example.com/", 100).await.unwrap_err();
         assert!(error.contains("configured proxies"));
+    }
+
+    #[tokio::test]
+    async fn external_sources_are_used_instead_of_the_direct_fetcher() {
+        use crate::fetch::{FetchedPage, PageSource};
+        use futures::future::BoxFuture;
+
+        struct StaticSource;
+        impl PageSource for StaticSource {
+            fn fetch<'a>(
+                &'a self,
+                _url: &'a reqwest::Url,
+                _max_chars: usize,
+            ) -> BoxFuture<'a, Result<FetchedPage, String>> {
+                Box::pin(async {
+                    Ok(FetchedPage {
+                        text: Arc::from("from an external source"),
+                        source_truncated: false,
+                    })
+                })
+            }
+        }
+
+        let reader = PageReader::new(&crate::settings::Outgoing::default(), &[])
+            .unwrap()
+            .with_source(Some(Arc::new(StaticSource)));
+        let page = reader
+            .read("https://example.com/article", 100)
+            .await
+            .unwrap();
+        assert_eq!(&*page.text, "from an external source");
+        assert!(!page.source_truncated);
     }
 
     #[tokio::test]

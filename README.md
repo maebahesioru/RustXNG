@@ -273,6 +273,12 @@ For the HTTP API, use `max_results`, domain filters, and client-side projection.
 MCP also offers related passages and serialized character/byte limits. Strict
 tokenizer-specific budgets remain future work.
 
+DeepSeek's Search API is available as the `deepseek` engine. It needs `api_key`
+or `DEEPSEEK_API_KEY` and is disabled by default. To use the DeepSeek Fetch API
+for page text, set `[fetch] provider = "deepseek"` and provide credentials under
+`[fetch.deepseek]`. Search and fetch are billed per successful request, and
+fetch sends the target URL to DeepSeek.
+
 Engines that keep returning empty results are automatically rested. Configure with `search.empty_result_limit` (default 8, 0 disables) and `search.empty_result_cooldown` (default 300 seconds). Monitor via `/stats` (HTML Resting column), `/stats/errors` (JSON `resting` / `resting_for` fields), or `/metrics` (`searxng_engines_resting` and `searxng_engines_resting_seconds` gauges)
 
 ## Documentation

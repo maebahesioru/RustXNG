@@ -154,7 +154,7 @@ pub struct Searcher {
     pub registry: Arc<EngineRegistry>,
     pub network: Arc<Network>,
     /// Checked, bounded page fetcher shared by optional raw-content requests.
-    pub page_reader: crate::mcp::page::PageReader,
+    pub page_reader: crate::fetch::PageReader,
     pub cache: Arc<Cache>,
     pub states: Arc<EngineStates>,
     pub metrics: Arc<Metrics>,
@@ -200,9 +200,10 @@ impl Searcher {
                 settings.cache.max_bytes.max(1024),
             ),
         };
-        let page_reader = crate::mcp::page::PageReader::new(&settings.outgoing, &[])?
-            .with_renderer(settings.search.page_renderer_command.clone())
-            .with_cache_ttl(Duration::from_secs(settings.cache.ttl.max(1)));
+        let page_reader =
+            crate::fetch::PageReader::from_settings(&settings.outgoing, &settings.fetch, &[])?
+                .with_renderer(settings.search.page_renderer_command.clone())
+                .with_cache_ttl(Duration::from_secs(settings.cache.ttl.max(1)));
         Ok(Self {
             page_reader,
             local_index: open_local_index(&settings),
@@ -1137,7 +1138,7 @@ impl Searcher {
 
     /// Optional page reads use the same DNS, redirect, body and concurrency
     /// checks as MCP. Unchecked engine-response cache entries are not reused.
-    async fn page_text(&self, url: &str) -> Option<crate::mcp::page::PageContent> {
+    async fn page_text(&self, url: &str) -> Option<crate::fetch::PageContent> {
         match self
             .page_reader
             .read(url, self.settings.search.raw_content_chars.max(1))
@@ -1444,7 +1445,7 @@ mod orchestration_tests {
         }
         let network = Network::from_settings(&settings).unwrap();
         Searcher {
-            page_reader: crate::mcp::page::PageReader::new(&settings.outgoing, &[]).unwrap(),
+            page_reader: crate::fetch::PageReader::new(&settings.outgoing, &[]).unwrap(),
             local_index: None,
             plugins: Arc::new(PluginManager::new()),
             settings: Arc::new(settings),

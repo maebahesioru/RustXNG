@@ -10,7 +10,7 @@ use serde::Deserialize;
 use serde_json::json;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
-use super::page::{MAX_BODY_BYTES, is_fetchable};
+use super::direct::{MAX_BODY_BYTES, is_fetchable};
 
 const RENDER_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_REQUESTS: usize = 64;

@@ -242,6 +242,8 @@ Seal-0はSeal-Hardの部分集合で、重複する質問には同一の観測�
 サーバー側の返却項目指定、関連段落の抽出、厳密なトークン予算は今後の課題です。
 現在は`max_results`、ドメイン指定、取得後の項目抽出を利用できます。
 
+DeepSeek の Search API は `deepseek` エンジンとして利用できます。`api_key` または `DEEPSEEK_API_KEY` が必要で、既定では無効です。本文取得を DeepSeek Fetch API に切り替える場合は、`[fetch]` の `provider = "deepseek"` と `[fetch.deepseek]` の認証情報を設定します。Search と Fetch は成功したリクエストごとに課金され、Fetch は取得対象の URL を DeepSeek へ送信します。
+
 ## ドキュメント
 
 | ドキュメント | 内容 |

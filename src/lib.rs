@@ -32,6 +32,7 @@ pub mod deep_research;
 pub mod engine;
 pub mod engines;
 pub mod external_bangs;
+pub mod fetch;
 pub mod i18n;
 pub mod locales;
 pub mod localindex;

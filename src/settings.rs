@@ -59,6 +59,9 @@ pub struct Settings {
     /// Optional external browser solver for WAF / CAPTCHA guarded engines.
     #[serde(default)]
     pub solver: SolverSettings,
+    /// Page fetching for MCP `read_page` and HTTP `include_raw_content`.
+    #[serde(default)]
+    pub fetch: FetchSettings,
     /// Categories shown as tabs (upstream `categories_as_tabs`).
     pub categories_as_tabs: Vec<String>,
     /// Accepted for compatibility with SearXNG configs.
@@ -166,6 +169,54 @@ impl SolverSettings {
             return None;
         }
         Some(self.suspension_cap_secs)
+    }
+}
+
+/// Page fetching backend. `direct` keeps the built-in fetcher that validates
+/// every destination locally. `deepseek` sends the URL to the DeepSeek Fetch
+/// API, which returns Markdown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FetchProvider {
+    #[default]
+    Direct,
+    DeepSeek,
+}
+
+/// Page fetching configuration for MCP `read_page` and HTTP raw content.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct FetchSettings {
+    pub provider: FetchProvider,
+    /// Request timeout for one page fetch, in seconds.
+    pub timeout: f64,
+    pub deepseek: DeepSeekFetchSettings,
+}
+
+impl Default for FetchSettings {
+    fn default() -> Self {
+        Self {
+            provider: FetchProvider::Direct,
+            timeout: 20.0,
+            deepseek: DeepSeekFetchSettings::default(),
+        }
+    }
+}
+
+/// Credentials of the DeepSeek Fetch API.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DeepSeekFetchSettings {
+    pub base_url: String,
+    pub api_key: String,
+}
+
+impl Default for DeepSeekFetchSettings {
+    fn default() -> Self {
+        Self {
+            base_url: "https://api.deepseek.com".into(),
+            api_key: String::new(),
+        }
     }
 }
 
@@ -969,6 +1020,14 @@ impl Settings {
                 "search.safe_search must be 0, 1 or 2".into(),
             ));
         }
+        if !self.fetch.timeout.is_finite()
+            || self.fetch.timeout <= 0.0
+            || std::time::Duration::try_from_secs_f64(self.fetch.timeout).is_err()
+        {
+            return Err(SettingsError::Validation(
+                "fetch.timeout must be a finite positive duration".into(),
+            ));
+        }
         if self.outgoing.request_timeout <= 0.0 || self.outgoing.max_request_timeout <= 0.0 {
             return Err(SettingsError::Validation(
                 "outgoing timeouts must be positive".into(),
@@ -1604,6 +1663,48 @@ engines:
         let mut settings = Settings::defaults();
         settings.search.formats.push("yaml".into());
         assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn deepseek_fetch_settings_are_parsed() {
+        let settings = merged_toml(
+            r#"
+            [fetch]
+            provider = "deepseek"
+            timeout = 12.0
+            [fetch.deepseek]
+            base_url = "https://api.deepseek.com"
+            api_key = "KEY"
+            "#,
+        );
+        assert_eq!(settings.fetch.provider, FetchProvider::DeepSeek);
+        assert_eq!(settings.fetch.timeout, 12.0);
+        assert_eq!(settings.fetch.deepseek.api_key, "KEY");
+    }
+
+    #[test]
+    fn fetch_timeout_must_be_finite_and_representable() {
+        for (name, value) in [
+            ("zero", "0.0"),
+            ("negative", "-1.0"),
+            ("infinity", "inf"),
+            ("negative infinity", "-inf"),
+            ("not a number", "nan"),
+            ("out of range", "1e300"),
+        ] {
+            let settings = merged_toml(&format!("[fetch]\ntimeout = {value}\n"));
+            assert!(
+                settings.validate().is_err(),
+                "fetch.timeout = {value} ({name}) must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn deepseek_engine_is_disabled_by_default() {
+        let settings = Settings::defaults();
+        let engine = settings.engine("deepseek").expect("deepseek entry");
+        assert_eq!(engine.disabled, Some(true));
     }
 
     #[test]

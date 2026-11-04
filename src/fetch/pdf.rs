@@ -121,7 +121,7 @@ mod tests {
 
     fn output_child(mode: &str) -> Child {
         Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "mcp::pdf::tests::child_output", "--nocapture"])
+            .args(["--exact", "fetch::pdf::tests::child_output", "--nocapture"])
             .env("RUSTXNG_PDF_TEST_CHILD", mode)
             .stdout(Stdio::piped())
             .stderr(Stdio::null())

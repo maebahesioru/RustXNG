@@ -103,7 +103,7 @@ impl Engine for Findborg {
 fn search_result(item: &serde_json::Value) -> EngineItem {
     let mut builder = ResultBuilder::new(json_str(item, "url"), json_str(item, "title"))
         .content(strip_tags(&json_str(item, "description")));
-    if !json_path(item, "thumbnail.logo").is_some_and(|logo| !logo.is_null()) {
+    if json_path(item, "thumbnail.logo").is_none_or(|logo| logo.is_null()) {
         builder = builder.thumbnail(json_str(item, "thumbnail.src"));
     }
     if let Some(age) = json_path(item, "page_age").and_then(serde_json::Value::as_str) {

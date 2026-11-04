@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use axum::http::header;
 use axum::response::Redirect;
 use axum::{Router, routing::get};
-use rustxng::mcp::page::{MAX_BODY_BYTES, PageReader};
+use rustxng::fetch::{MAX_BODY_BYTES, PageReader};
 use rustxng::settings::Outgoing;
 
 #[tokio::test]

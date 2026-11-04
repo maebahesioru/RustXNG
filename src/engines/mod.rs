@@ -67,6 +67,7 @@ pub mod crossref;
 pub mod currency_convert;
 pub mod dailymotion;
 pub mod deepl;
+pub mod deepseek;
 pub mod deezer;
 pub mod destatis;
 pub mod deviantart;
@@ -473,6 +474,7 @@ pub fn build(config: &EngineConfig) -> Result<EngineHandle, String> {
         "vuhuv" => vuhuv::Vuhuv::from_config(config)?,
         "xprivo" => xprivo::Xprivo::from_config(config)?,
         "exaapi" => exaapi::ExaApi::from_config(config)?,
+        "deepseek" => deepseek::DeepSeek::from_config(config)?,
         "freesound" => freesound::Freesound::from_config(config)?,
         "kagi" => kagi::Kagi::from_config(config)?,
         "ollama" => ollama::Ollama::from_config(config)?,

@@ -8,12 +8,8 @@
 //! Two read-only tools keep the model's context small: `search` returns ranked
 //! snippets only, and `read_page` returns a bounded slice of the readable text
 //! of a page that an earlier search in the same session returned. There is no
-//! arbitrary URL fetch, and pages are fetched by [`page::PageReader`], which
-//! only connects to public addresses and bounds what it downloads.
-
-pub mod page;
-mod pdf;
-mod render;
+//! arbitrary URL fetch, and pages are fetched by [`crate::fetch::PageReader`],
+//! which only connects to public addresses and bounds what it downloads.
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
@@ -199,7 +195,7 @@ pub struct McpServer {
     searcher: Arc<Searcher>,
     /// URLs returned by recent searches, oldest first.
     seen: Arc<Mutex<VecDeque<String>>>,
-    pages: page::PageReader,
+    pages: crate::fetch::PageReader,
     tool_router: ToolRouter<Self>,
 }
 
@@ -215,8 +211,12 @@ impl McpServer {
         searcher: Arc<Searcher>,
         overrides: &[(String, std::net::SocketAddr)],
     ) -> Result<Self, String> {
-        let pages = page::PageReader::new(&searcher.settings.outgoing, overrides)?
-            .with_renderer(searcher.settings.search.page_renderer_command.clone());
+        let pages = crate::fetch::PageReader::from_settings(
+            &searcher.settings.outgoing,
+            &searcher.settings.fetch,
+            overrides,
+        )?
+        .with_renderer(searcher.settings.search.page_renderer_command.clone());
         Ok(Self {
             searcher,
             seen: Arc::new(Mutex::new(VecDeque::new())),

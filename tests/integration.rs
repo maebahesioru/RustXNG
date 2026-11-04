@@ -12,7 +12,7 @@ use http_body_util::BodyExt;
 use tower::ServiceExt;
 
 use rustxng::aggregator::Searcher;
-use rustxng::mcp::page::PageReader;
+use rustxng::fetch::PageReader;
 use rustxng::settings::{EngineConfig, LimiterSettings, Settings};
 use rustxng::web::{AppState, router};
 

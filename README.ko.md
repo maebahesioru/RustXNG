@@ -224,6 +224,8 @@ HTTP API에서는 `max_results`, 도메인 필터, 클라이언트 쪽 필드 �
 MCP는 관련 단락과 직렬화 기준 문자·바이트 한도도 제공합니다. 특정 토크나이저 기준의
 엄격한 예산은 향후 과제입니다.
 
+DeepSeek Search API는 `deepseek` 엔진으로 사용할 수 있습니다. `api_key` 또는 `DEEPSEEK_API_KEY`가 필요하며 기본적으로 비활성화되어 있습니다. 페이지 본문을 DeepSeek Fetch API로 가져오려면 `[fetch]`의 `provider = "deepseek"`와 `[fetch.deepseek]`의 인증 정보를 설정하세요. Search와 Fetch는 성공한 요청마다 과금되며, Fetch는 대상 URL을 DeepSeek로 전송합니다.
+
 빈 결과를 계속 반환하는 엔진은 자동으로 휴식 상태가 됩니다. `search.empty_result_limit`(기본 8, 0이면 끔)와 `search.empty_result_cooldown`(기본 300초)으로 설정합니다. `/stats`(HTML의 Resting 열), `/stats/errors`(JSON의 `resting` / `resting_for` 필드), `/metrics`(`searxng_engines_resting`, `searxng_engines_resting_seconds` 게이지)에서 확인할 수 있습니다.
 
 ## 문서

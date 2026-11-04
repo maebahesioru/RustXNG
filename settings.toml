@@ -143,6 +143,18 @@ max_queries = 5
 max_sources = 10
 timeout = 60
 
+# MCP の read_page と HTTP の include_raw_content が使う本文取得。
+# provider = "direct" は宛先をローカルで検証する従来の取得を使う。
+# provider = "deepseek" は URL を DeepSeek Fetch API へ送り、Markdown を受け取る。
+# 成功した取得ごとに課金されるため、既定は direct のままにしている。
+[fetch]
+provider = "direct"
+timeout = 20.0
+
+[fetch.deepseek]
+base_url = "https://api.deepseek.com"
+api_key = ""
+
 [plugins]
 enabled = []
 disabled = []
@@ -2049,6 +2061,18 @@ engine = "exaapi"
 shortcut = "exa"
 categories = ["general", "web"]
 disabled = true  # unverified; remove when confirmed working
+
+# DeepSeek Search API. Needs api_key here or DEEPSEEK_API_KEY. Billed per
+# successful request; see https://api-docs.deepseek.com/guides/search
+[[engines]]
+name = "deepseek"
+engine = "deepseek"
+shortcut = "ds"
+categories = ["general", "web"]
+disabled = true
+api_key = ""
+# count = 10            # 1-50
+# need_content = false  # true also returns the full page text
 
 [[engines]]
 name = "freesound"

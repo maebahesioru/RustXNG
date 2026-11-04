@@ -12,7 +12,7 @@ use tower::ServiceExt;
 
 use super::{AppState, image_proxy, router};
 use crate::aggregator::Searcher;
-use crate::mcp::page::{PageReader, test_public_client};
+use crate::fetch::{PageReader, test_public_client};
 use crate::network::Network;
 use crate::settings::{EngineConfig, Settings};
 
