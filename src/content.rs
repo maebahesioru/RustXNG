@@ -4,6 +4,10 @@
 //! article/main containers, falls back to the body, drops script and style
 //! text, and normalises the whitespace, which is enough for an agent to read
 //! the page behind a search result.
+//!
+//! Block boundaries (paragraphs, headings, list items, table rows, `<br>`)
+//! become line breaks, and `<pre>` blocks keep their own lines and
+//! indentation, so code, configuration files and lists stay usable.
 
 use scraper::{ElementRef, Html};
 
@@ -50,32 +54,156 @@ fn body_text(html: &Html) -> Option<String> {
 }
 
 fn readable_text(element: ElementRef<'_>) -> String {
-    let mut out = String::new();
-    collect_text(element, &mut out);
-    normalise(&out)
+    let mut segments = Vec::new();
+    collect_text(element, &mut segments);
+    join_lines(&segments)
 }
 
-/// Append every text node under the element except non-content subtrees.
+/// A piece of extracted text, before whitespace is normalised.
+enum Segment {
+    /// Flowing text whose whitespace collapses.
+    Flow(String),
+    /// A block boundary: the following text starts on a new line.
+    Break,
+    /// Preformatted text whose lines and indentation are kept.
+    Pre(String),
+}
+
+/// Elements that start and end a line of their own.
+const BLOCKS: &[&str] = &[
+    "address",
+    "article",
+    "aside",
+    "blockquote",
+    "dd",
+    "details",
+    "div",
+    "dl",
+    "dt",
+    "figcaption",
+    "figure",
+    "footer",
+    "form",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "header",
+    "hr",
+    "li",
+    "main",
+    "nav",
+    "ol",
+    "p",
+    "section",
+    "summary",
+    "table",
+    "tr",
+    "ul",
+];
+
+/// A step of the walk: visit a node, or close the block it opened.
+enum Step<N> {
+    Enter(N),
+    Break,
+}
+
+/// Collect every text node under the element except non-content subtrees,
+/// marking block boundaries and keeping `<pre>` text verbatim.
 ///
 /// The walk is iterative so that a deeply nested page cannot overflow the
 /// stack of the process that extracts its text.
-fn collect_text(element: ElementRef<'_>, out: &mut String) {
-    let mut stack = vec![*element];
+fn collect_text(element: ElementRef<'_>, out: &mut Vec<Segment>) {
+    let mut stack = vec![Step::Enter(*element)];
+    while let Some(step) = stack.pop() {
+        let node = match step {
+            Step::Break => {
+                out.push(Segment::Break);
+                continue;
+            }
+            Step::Enter(node) => node,
+        };
+        if let Some(text) = node.value().as_text() {
+            out.push(Segment::Flow(text.to_string()));
+            continue;
+        }
+        let Some(element) = ElementRef::wrap(node) else {
+            stack.extend(node.children().rev().map(Step::Enter));
+            continue;
+        };
+        let name = element.value().name();
+        if NON_CONTENT.contains(&name) {
+            continue;
+        }
+        match name {
+            "br" => out.push(Segment::Break),
+            "pre" => out.push(Segment::Pre(preformatted_text(element))),
+            _ if BLOCKS.contains(&name) => {
+                out.push(Segment::Break);
+                stack.push(Step::Break);
+                stack.extend(node.children().rev().map(Step::Enter));
+            }
+            _ => stack.extend(node.children().rev().map(Step::Enter)),
+        }
+    }
+}
+
+/// The text of a `<pre>` subtree as written, without non-content subtrees;
+/// `<br>` inside it is a line break. Syntax highlighting splits code into many
+/// inline elements, so text nodes are joined without separators.
+fn preformatted_text(pre: ElementRef<'_>) -> String {
+    let mut out = String::new();
+    let mut stack = vec![*pre];
     while let Some(node) = stack.pop() {
         if let Some(text) = node.value().as_text() {
             out.push_str(text);
-            out.push(' ');
             continue;
         }
-        if node
-            .value()
-            .as_element()
-            .is_some_and(|element| NON_CONTENT.contains(&element.name()))
-        {
-            continue;
+        match node.value().as_element().map(|element| element.name()) {
+            Some(name) if NON_CONTENT.contains(&name) => {}
+            Some("br") => out.push('\n'),
+            _ => stack.extend(node.children().rev()),
         }
-        stack.extend(node.children().rev());
     }
+    out
+}
+
+/// Join the segments into lines: flowing text is normalised line by line and
+/// empty lines are dropped. Preformatted blocks keep their lines and
+/// indentation, minus trailing spaces and the blank lines around them.
+fn join_lines(segments: &[Segment]) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    let mut line = String::new();
+    let flush = |line: &mut String, lines: &mut Vec<String>| {
+        let collapsed = normalise(line);
+        if !collapsed.is_empty() {
+            lines.push(collapsed);
+        }
+        line.clear();
+    };
+    for segment in segments {
+        match segment {
+            Segment::Flow(text) => {
+                line.push_str(text);
+                line.push(' ');
+            }
+            Segment::Break => flush(&mut line, &mut lines),
+            Segment::Pre(text) => {
+                flush(&mut line, &mut lines);
+                let text = text.replace("\r\n", "\n").replace('\r', "\n");
+                let pre: Vec<&str> = text.lines().map(str::trim_end).collect();
+                let first = pre.iter().position(|line| !line.is_empty());
+                let last = pre.iter().rposition(|line| !line.is_empty());
+                if let (Some(first), Some(last)) = (first, last) {
+                    lines.extend(pre[first..=last].iter().map(|line| line.to_string()));
+                }
+            }
+        }
+    }
+    flush(&mut line, &mut lines);
+    lines.join("\n")
 }
 
 /// The canonical URL a page declares for itself, if any.
@@ -235,7 +363,7 @@ mod tests {
              <style>.ad{color:red}</style><template><p>雛形</p></template>\
              <noscript>JSなし</noscript><p>続き</p></article></body></html>",
         );
-        assert_eq!(main_text(&html), "本文 続き");
+        assert_eq!(main_text(&html), "本文\n続き");
     }
 
     #[test]
@@ -252,5 +380,40 @@ mod tests {
             "<html><body><article><p>短い</p></article><article><p>{long}</p></article></body></html>"
         ));
         assert_eq!(main_text_limited(&html, 10), "xxxxxxxxxx…");
+    }
+
+    #[test]
+    fn blocks_become_lines_and_inline_text_stays_on_one_line() {
+        let html = Html::parse_document(
+            "<html><body><article><h2>설치</h2><p>먼저 <b>tmux</b>를   설치한다.</p>\
+             <ul><li>하나</li><li>둘<br>셋</li></ul>\
+             <table><tr><td>키</td><td>값</td></tr><tr><td>a</td><td>1</td></tr></table>\
+             </article></body></html>",
+        );
+        assert_eq!(
+            main_text(&html),
+            "설치\n먼저 tmux 를 설치한다.\n하나\n둘\n셋\n키 값\na 1"
+        );
+    }
+
+    #[test]
+    fn preformatted_code_keeps_lines_and_indentation() {
+        let html = Html::parse_document(
+            "<html><body><article><p>Put this in <code>config.yaml</code>:</p>\
+             <pre><code>\n<span class=\"k\">server</span>:\n  port: <span>8080</span>\n    \n  \
+             host: 0.0.0.0   \n</code></pre><p>Then restart.</p></article></body></html>",
+        );
+        assert_eq!(
+            main_text(&html),
+            "Put this in config.yaml :\nserver:\n  port: 8080\n\n  host: 0.0.0.0\nThen restart."
+        );
+    }
+
+    #[test]
+    fn preformatted_text_skips_scripts_and_honours_br() {
+        let html = Html::parse_document(
+            "<html><body><pre>a<br>  b<script>x=1</script>\r\nc</pre></body></html>",
+        );
+        assert_eq!(main_text(&html), "a\n  b\nc");
     }
 }
