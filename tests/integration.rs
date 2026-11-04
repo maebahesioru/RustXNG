@@ -12,6 +12,7 @@ use http_body_util::BodyExt;
 use tower::ServiceExt;
 
 use rustxng::aggregator::Searcher;
+use rustxng::mcp::page::PageReader;
 use rustxng::settings::{EngineConfig, LimiterSettings, Settings};
 use rustxng::web::{AppState, router};
 
@@ -101,6 +102,67 @@ async fn json_search_returns_merged_results() {
     assert_eq!(json["results"][0]["title"], "The Rust Programming Language");
     assert_eq!(json["results"][0]["engines"][0], "mwmbl");
     assert!(json["number_of_results"].as_u64().unwrap() >= 2);
+}
+
+#[tokio::test]
+async fn raw_content_honors_a_configured_limit_above_eight_thousand_characters() {
+    let text = "日本語の本文。".repeat(3000);
+    let page = format!("<article>{text}</article>");
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let url = format!("http://example.com:{}/article", address.port());
+    let upstream = Router::new()
+        .route(
+            "/api/v1/search/",
+            get(move || async move {
+                axum::Json(serde_json::json!([{
+                    "url": url,
+                    "title": [{"value": "Japanese article"}],
+                    "extract": [{"value": "Article text."}]
+                }]))
+            }),
+        )
+        .route(
+            "/article",
+            get(move || async move { ([(header::CONTENT_TYPE, "text/html")], page) }),
+        );
+    tokio::spawn(async move { axum::serve(listener, upstream).await.unwrap() });
+
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("settings.toml");
+    std::fs::write(
+        &path,
+        format!(
+            r#"use_default_settings = false
+[search]
+raw_content_chars = 20000
+[[engines]]
+name = "mwmbl"
+engine = "mwmbl"
+base_url = "http://{address}/api/v1"
+"#
+        ),
+    )
+    .unwrap();
+    let settings = Settings::load(Some(&path)).unwrap();
+    let mut searcher = Searcher::new(settings).unwrap();
+    searcher.page_reader = PageReader::new(
+        &searcher.settings.outgoing,
+        &[("example.com".into(), address)],
+    )
+    .unwrap();
+    let app = router(AppState::new(searcher));
+
+    let (status, body, _) = get_uri(
+        &app,
+        "/search?q=article&format=json&full=1&include_raw_content=1",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let expected: String = text.chars().take(20000).chain(['…']).collect();
+    assert_eq!(json["results"][0]["raw_content"], expected);
+    assert_eq!(json["results"][0]["raw_content_truncated"], true);
 }
 
 #[tokio::test]

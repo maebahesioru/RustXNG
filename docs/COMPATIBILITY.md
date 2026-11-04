@@ -36,7 +36,7 @@ SearXNG のパラメータと衝突しない名前で、LLM のツール呼び�
 | `max_results=N` | 並べ替え後の上位 N 件だけを返す（1〜200 に丸める） | `results` を切り詰め |
 | `include_domains=a.com,b.com` | URL のホストが指定ドメイン（サブドメイン含む）の結果だけを残す | 絞り込み |
 | `exclude_domains=a.com` | 指定ドメインの結果を落とす | 絞り込み |
-| `include_raw_content=1` | 上位 `search.raw_content_limit` 件（既定 5）のページ本文を取得して `raw_content` フィールドに入れる | 約 4,000 文字/件を追加。ページはキャッシュされ 2 回目以降は即返し |
+| `include_raw_content=1` | 上位 `search.raw_content_limit` 件（既定 5）のページ本文を取得して `raw_content` フィールドに入れる | `search.raw_content_chars` 文字/件まで（既定 8,000、変更可能）。打切り時は `…` と `raw_content_truncated` を追加 |
 | `strategy=staged` | エンジンを少数の段に分けて開始し、`search.staged_min_results` 件で打ち切る（既定は並列） | 応答時間は短縮、返る件数は減る |
 
 **ランキングの差分（`search.relevance_weight`）**: 一般（マルチエンジン）検索では、URL + タイトルのクエリ語一致度でスコアを補正します（既定 4.0。Exa の意味検索に肉薄させるため）。**単一エンジン指定では補正せず上流順を維持**するので、`engines=` での overlap@10 は上流と一致します。`relevance_weight = 0` にすれば一般検索も上流と完全に同一の順序になります。

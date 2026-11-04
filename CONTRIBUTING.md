@@ -18,6 +18,7 @@ Small documentation fixes can go straight to a PR. Follow [CODE_OF_CONDUCT.md](C
 ## Development setup
 
 Use stable Rust (minimum 1.88 for the current lockfile) and a C build toolchain.
+PDF tests also require [Poppler and its Japanese CMap data](README.md#pdf-page-text).
 
 ```bash
 git clone https://github.com/sahenjp/RustXNG.git
@@ -52,6 +53,14 @@ It uses local fake responses, not live upstream search. CI additionally checks L
 `--no-default-features`, Rust 1.88, and the container.
 Do not claim a check passed if it was not run. State the command, toolchain and limitation clearly.
 An empty GitHub check list is not a green CI result; first-time fork workflows may need owner approval.
+
+JavaScript rendering has optional [Firefox setup requirements](tools/page-renderer/README.md).
+After installing them, run its real-browser checks explicitly:
+
+```bash
+npm test --prefix tools/page-renderer
+cargo test --locked --test rendered_pages -- --include-ignored
+```
 
 ## Adding an engine
 

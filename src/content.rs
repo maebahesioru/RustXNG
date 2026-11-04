@@ -79,11 +79,11 @@ fn collect_text(element: ElementRef<'_>, out: &mut String) {
 }
 
 /// Collapse whitespace and drop empty lines.
-fn normalise(text: &str) -> String {
+pub(crate) fn normalise(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn truncate(text: &str, max: usize) -> String {
+pub(crate) fn truncate(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         return text.to_string();
     }

@@ -206,6 +206,15 @@ pub(crate) fn test_public_client(
 /// Extracted pages as (URL, text), oldest first.
 type Pages = VecDeque<(String, usize, std::time::Instant, PageContent)>;
 
+enum PageBody {
+    Text {
+        url: reqwest::Url,
+        content: String,
+        html_media_type: Option<&'static str>,
+    },
+    Pdf(Vec<u8>),
+}
+
 /// Extracted page text and whether the readable source exceeded the limit.
 #[derive(Clone, Debug)]
 pub struct PageContent {
@@ -221,6 +230,7 @@ pub struct PageReader {
     pages: Arc<Mutex<Pages>>,
     proxy_blocked: bool,
     cache_ttl: Option<Duration>,
+    renderer_command: Arc<[String]>,
 }
 
 impl PageReader {
@@ -242,6 +252,7 @@ impl PageReader {
             client,
             proxy_blocked,
             cache_ttl: None,
+            renderer_command: Arc::from([]),
             permits: Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT)),
             pages: Arc::new(Mutex::new(VecDeque::new())),
         })
@@ -251,6 +262,13 @@ impl PageReader {
     /// the same text while paging within their session.
     pub fn with_cache_ttl(mut self, ttl: Duration) -> Self {
         self.cache_ttl = Some(ttl);
+        self
+    }
+
+    /// Empty commands keep static HTML extraction.
+    pub fn with_renderer(mut self, command: Vec<String>) -> Self {
+        self.renderer_command = command.into();
+        self.pages = Arc::new(Mutex::new(VecDeque::new()));
         self
     }
 
@@ -278,15 +296,36 @@ impl PageReader {
             .acquire()
             .await
             .map_err(|error| error.to_string())?;
-        let html = tokio::time::timeout(FETCH_TIMEOUT, self.fetch(parsed))
+        let body = tokio::time::timeout(FETCH_TIMEOUT, self.fetch(parsed))
             .await
             .map_err(|_| "the page took too long to load".to_string())??;
-        let text = tokio::task::spawn_blocking(move || {
-            let document = scraper::Html::parse_document(&html);
-            crate::content::main_text_limited(&document, max_chars)
-        })
-        .await
-        .map_err(|error| error.to_string())?;
+        let text = match body {
+            PageBody::Text {
+                url,
+                mut content,
+                html_media_type,
+            } => {
+                if let Some(media_type) = html_media_type
+                    && !self.renderer_command.is_empty()
+                {
+                    content = super::render::render(
+                        &self.client,
+                        &self.renderer_command,
+                        url,
+                        media_type,
+                        content,
+                    )
+                    .await?;
+                }
+                tokio::task::spawn_blocking(move || {
+                    let document = scraper::Html::parse_document(&content);
+                    crate::content::main_text_limited(&document, max_chars)
+                })
+                .await
+                .map_err(|error| error.to_string())?
+            }
+            PageBody::Pdf(bytes) => super::pdf::extract(bytes, max_chars).await?,
+        };
         if text.is_empty() {
             return Err("the page has no readable text".into());
         }
@@ -299,13 +338,13 @@ impl PageReader {
         Ok(content)
     }
 
-    async fn fetch(&self, url: reqwest::Url) -> Result<String, String> {
+    async fn fetch(&self, url: reqwest::Url) -> Result<PageBody, String> {
         let mut response = self
             .client
             .get(url)
             .header(
                 "Accept",
-                "text/html,application/xhtml+xml;q=0.9,text/plain;q=0.8",
+                "text/html,application/xhtml+xml;q=0.9,application/pdf;q=0.9,text/plain;q=0.8",
             )
             .send()
             .await
@@ -319,9 +358,17 @@ impl PageReader {
             .and_then(|value| value.to_str().ok())
             .unwrap_or("text/html")
             .to_ascii_lowercase();
-        if !(content_type.starts_with("text/") || content_type.contains("xhtml")) {
+        let media_type = content_type.split(';').next().unwrap_or_default().trim();
+        let is_text = media_type.starts_with("text/") || media_type.contains("xhtml");
+        let is_pdf = media_type == "application/pdf";
+        if !(is_text || is_pdf || media_type == "application/octet-stream") {
             return Err(format!("not a text page ({content_type})"));
         }
+        let html_media_type = match media_type {
+            "text/html" => Some("text/html"),
+            "application/xhtml+xml" => Some("application/xhtml+xml"),
+            _ => None,
+        };
         // Read at most MAX_BODY_BYTES decoded bytes, whatever Content-Length says.
         let mut body = Vec::new();
         while let Some(chunk) = response
@@ -335,7 +382,19 @@ impl PageReader {
             }
             body.extend_from_slice(&chunk);
         }
-        Ok(String::from_utf8_lossy(&body).into_owned())
+        if body.starts_with(b"%PDF-") {
+            Ok(PageBody::Pdf(body))
+        } else if is_pdf {
+            Err("the response is not a PDF document".into())
+        } else if is_text {
+            Ok(PageBody::Text {
+                url: response.url().clone(),
+                content: String::from_utf8_lossy(&body).into_owned(),
+                html_media_type,
+            })
+        } else {
+            Err(format!("not a text page ({content_type})"))
+        }
     }
 
     fn remembered(&self, url: &str, max_chars: usize) -> Option<PageContent> {

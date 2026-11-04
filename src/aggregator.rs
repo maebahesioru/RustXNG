@@ -201,6 +201,7 @@ impl Searcher {
             ),
         };
         let page_reader = crate::mcp::page::PageReader::new(&settings.outgoing, &[])?
+            .with_renderer(settings.search.page_renderer_command.clone())
             .with_cache_ttl(Duration::from_secs(settings.cache.ttl.max(1)));
         Ok(Self {
             page_reader,

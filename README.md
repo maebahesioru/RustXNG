@@ -65,6 +65,17 @@ Use these existing parameters to narrow the response:
 
 Page text is optional. With default settings it is fetched for up to five results,
 with a limit of 8,000 characters per page; individual fetches can fail.
+To request longer text, change the existing `[search]` section in `settings.toml`
+and start the server with `rustxng --config settings.toml`:
+
+```toml
+[search]
+raw_content_chars = 20000
+```
+
+This sets the per-page extraction limit for HTTP `include_raw_content=1`;
+`search.raw_content_limit` controls the number of pages. Truncated text includes
+an ellipsis and `raw_content_truncated: true`. The decoded download limit remains 4 MiB.
 Character limits are not token limits. The MCP tools below add serialized character/byte budgets. Token-specific budgets and
 field selection on the HTTP API are planned.
 
@@ -87,12 +98,56 @@ uses Unicode character offsets and reports the same truncation state. Supplying
 a `query` to `read_page` also returns up to three matching passages from the requested slice.
 Sentence boundaries include `。！？`, and single Han, kana or Hangul query characters are supported.
 
+`read_page` defaults to 4,000 characters per call and accepts `max_chars` up to 20,000,
+independently of HTTP `search.raw_content_chars`. Its serialized payload budgets can
+shorten the returned text further. For longer Japanese text, for example, call
+`read_page` with these arguments, replacing `url` with a URL from `search`:
+
+```json
+{
+  "url": "https://example.com/article",
+  "max_chars": 20000,
+  "max_payload_chars": 64000,
+  "max_payload_bytes": 128000
+}
+```
+
+Pass the returned `next_offset` as `offset` to continue; an absent `next_offset`
+means the available text is exhausted. `source_truncated: true` means extraction
+hit the 200,000-character page limit; continuation cannot recover the discarded tail.
+
 Page reads require direct connections so DNS answers and redirects can be
 checked against public addresses. They fail closed when configured or
 environment outgoing proxies are present. Search continues to use the normal
 outgoing proxy settings. Character and byte limits count the serialized structured JSON payload only,
 excluding the JSON-RPC envelope, SDK text rendering, and caller prompts;
 they do not promise a tokenizer-specific token count.
+
+### PDF page text
+
+`read_page` and HTTP `include_raw_content=1` can extract text from PDFs using
+Poppler's `pdftotext`. The Docker image includes it and the CMap data needed
+for Japanese and other CJK fonts. For a release binary or source build, install
+`poppler-utils poppler-data` on Debian/Ubuntu, or `poppler` with Homebrew on macOS.
+On Windows, install Poppler and add the directory containing the actual
+`pdftotext.exe` to `PATH`, ahead of any package-manager launcher.
+
+PDFs use the same public-address checks, 4 MiB download limit, character limits,
+and page cache as HTML. Extraction runs in a child process with an 8-second
+deadline and a 4 MiB text-output limit; these are not a process-memory limit.
+MCP reports missing Poppler, invalid or protected PDFs, and PDFs without
+extractable text as errors; HTTP skips unavailable `raw_content`.
+Scanned pages require OCR, which is not included.
+
+### JavaScript page text
+
+For pages that build their text with JavaScript, configure the optional
+[local Firefox renderer](tools/page-renderer/README.md) through
+`search.page_renderer_command`. It requires Node.js 20+ and a separate browser
+installation; static extraction remains the default. HTTP and MCP use the same
+renderer, and subresources pass through RustXNG's public-address checks.
+The setup guide lists the supported requests, resource limits, and exclusions
+such as login sessions, POST requests, and redirected subresources.
 
 ## Install
 

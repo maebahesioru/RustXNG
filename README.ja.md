@@ -64,7 +64,14 @@ curl --fail --get 'http://127.0.0.1:29483/search' \
 | `time_range=day` | 対応するエンジンへ期間指定を渡す |
 
 ページ本文の取得は任意です。既定設定では上位5件まで、1ページあたり8,000文字を上限として取得します。
-取得に失敗したページには本文が付きません。文字数とトークン数は異なります。
+取得に失敗したページには本文が付きません。より長い本文が必要な場合は、`settings.toml` の既存の `[search]` セクションを変更し、`rustxng --config settings.toml` で起動します。
+
+```toml
+[search]
+raw_content_chars = 20000
+```
+
+これは HTTP の `include_raw_content=1` で取得する1ページあたりの文字数上限です。対象のページ数は `search.raw_content_limit` で指定します。本文を打ち切ると末尾に `…` が付き、`raw_content_truncated: true` を返します。展開後のダウンロード上限4 MiBは変わりません。文字数とトークン数は異なります。
 厳密なトークン予算とサーバー側の返却項目指定は、今後の実装予定です。
 
 ブラウザ画面は<http://127.0.0.1:29483/>です。JSON・CSV・RSS・HTMLで結果を取得できます。
@@ -79,7 +86,42 @@ curl --fail --get 'http://127.0.0.1:29483/search' \
 
 関連する段落は要求した本文範囲内から選びます。文の区切りには `。！？` も使い、漢字・仮名・ハングル1文字の検索語にも対応します。
 
+`read_page` の1回あたりの既定値は4,000文字で、`max_chars` は20,000まで指定できます。HTTP の `search.raw_content_chars` とは独立した指定です。構造化 JSON の文字数・バイト数の予算によって、返る本文がさらに短くなる場合があります。例えば長い日本語本文を読む場合は、`url` を `search` が返した URL に置き換え、次の引数で `read_page` を呼び出します。
+
+```json
+{
+  "url": "https://example.com/article",
+  "max_chars": 20000,
+  "max_payload_chars": 64000,
+  "max_payload_bytes": 128000
+}
+```
+
+続きは返された `next_offset` を `offset` に指定して取得します。`next_offset` がなければ取得済み本文の末尾です。`source_truncated: true` は1ページ200,000文字の抽出上限で打ち切ったことを示し、その先は続きの呼び出しでも取得できません。
+
 本文取得では DNS 解決先とリダイレクト先を検査し、展開後の本文を4 MiB、同時取得を4件までに制限します。設定や環境変数で外向きプロキシを指定している場合は、接続先を検証できないため本文取得を拒否します。検索は通常のプロキシ設定で続けられます。HTTP の `include_raw_content=1` にも同じ取得制限が適用され、本文を文字数上限で打ち切った場合は `raw_content_truncated` を返します。
+
+### PDFの本文取得
+
+`read_page` とHTTPの `include_raw_content=1` は、Popplerの `pdftotext` でPDFの本文を抽出します。
+Dockerイメージには、日本語などのCJKフォントを読むためのCMapデータも含めています。
+リリースバイナリやソースから利用する場合は、Debian/Ubuntuでは `poppler-utils poppler-data`、
+macOSではHomebrewの `poppler` を導入してください。
+WindowsではPopplerを導入し、`pdftotext.exe` 本体のあるディレクトリを、
+パッケージ管理ツールのランチャーより前に `PATH` へ追加してください。
+
+PDFにもHTMLと同じ公開アドレス検査、4 MiBの取得上限、文字数上限、ページキャッシュを適用します。
+抽出用の子プロセスは8秒、テキスト出力は4 MiBまでに制限しますが、プロセスのメモリ上限ではありません。
+Popplerがない場合、不正または保護されたPDF、抽出可能な文字がないPDFはMCPのエラーになります。
+HTTPでは、取得できない `raw_content` を省略します。
+スキャン画像にはOCRが必要で、この機能には含まれていません。
+
+### JavaScriptで描画するページの本文
+
+`search.page_renderer_command` で[任意導入のローカルFirefoxレンダラー](tools/page-renderer/README.md)を設定できます。
+Node.js 20以上とブラウザーの別途導入が必要で、既定は従来の静的な本文抽出です。
+HTTPとMCPの両方で利用でき、追加リソースもRust側の公開アドレス検査を通して取得します。
+ログイン、POST、サブリソースのリダイレクトなどは未対応です。導入方法と制限はリンク先を参照してください。
 
 ## 導入
 

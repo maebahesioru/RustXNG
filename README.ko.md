@@ -65,6 +65,10 @@ curl --fail --get 'http://127.0.0.1:29483/search' \
 
 페이지 본문은 선택 사항입니다. 기본 설정에서는 결과 최대 5개에 대해,
 페이지당 8,000자 한도로 본문을 가져옵니다. 개별 본문 가져오기는 실패할 수 있습니다.
+더 긴 본문은 `settings.toml`의 기존 `[search]` 섹션에서 `raw_content_chars = 20000`처럼
+설정한 뒤 `rustxng --config settings.toml`로 시작합니다. `search.raw_content_limit`은 페이지 수를
+정합니다. 잘린 본문에는 `…`가 붙고 `raw_content_truncated: true`를 반환합니다.
+디코딩된 다운로드의 4 MiB 한도는 그대로 적용됩니다.
 문자 수 한도는 토큰 한도가 아닙니다. 아래 MCP 도구는 직렬화 기준 문자·바이트 예산을 추가로 제공합니다.
 토큰 기준 예산과 HTTP API의 필드 선택은 계획 중입니다.
 
@@ -82,6 +86,14 @@ search는 기본적으로 결과 5개를 반환하고 발췌문마다 500자로 
 `source_truncated`, `next_offset`은 이어서 요청할지 알려 줍니다. `read_page`는
 유니코드 문자 오프셋을 쓰고 같은 잘림 상태를 보고합니다. `read_page`에
 `query`를 함께 주면 일치하는 단락도 최대 3개 반환합니다.
+
+`read_page`는 호출당 기본 4,000자이며 `max_chars`를 최대 20,000까지 지정할 수 있습니다.
+HTTP의 `search.raw_content_chars`와는 독립적입니다. 직렬화된 응답 예산 때문에 본문이 더 짧아질
+수 있으므로, 긴 본문에는 `max_payload_chars: 64000`, `max_payload_bytes: 128000`도 함께
+지정합니다. [호출 예시](README.md#mcp-server)를 참고하세요.
+반환된 `next_offset`을 `offset`으로 전달하면 이어서 읽고, 없으면 읽을 수 있는 본문의 끝입니다.
+`source_truncated: true`는 페이지의 200,000자 추출 한도에 도달했음을 뜻하며, 잘린 나머지는
+이어 읽기로 복구할 수 없습니다.
 
 페이지 읽기는 DNS 응답과 리다이렉트가 공개 주소인지 검사할 수 있도록 직접 연결을 요구합니다.
 설정이나 환경 변수에 나가는 프록시가 있으면 안전하게 실패(fail closed)합니다.

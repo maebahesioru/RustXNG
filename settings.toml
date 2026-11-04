@@ -58,6 +58,10 @@ staged_tier = 8
 staged_min_results = 10
 # include_raw_content=1 のとき上位何件まで本文を取得するか（多いほど豊か・遅い）。
 raw_content_limit = 5
+# 本文の文字数上限。8,000文字を超える指定も可能。
+raw_content_chars = 8000
+# Optional JavaScript renderer; see tools/page-renderer/README.md.
+page_renderer_command = []
 # URL/タイトルにクエリ語が含まれる結果をどれだけ押し上げるか（0=上流の位置融合のみ）。
 # Exa のニューラル検索は「公式ドキュメントの意図」を掴むため、これを上げて対抗する。
 # 20 問ベンチで 4.0 が最良（MRR 0.838・hit@5 19/20 で Exa と同率）。
