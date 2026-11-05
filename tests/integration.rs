@@ -108,6 +108,44 @@ async fn homepage_categories_select_form_values_without_empty_search_links() {
 }
 
 #[tokio::test]
+async fn html_templates_escape_text_and_quoted_form_values() {
+    let base_url = start_fake_engine().await;
+    let mut settings = settings_for(&base_url);
+    let instance = r#"<img data-template-probe="instance"> & 日本語"#;
+    settings.general.instance_name = instance.into();
+    let app = app(settings);
+    let query = r#"" data-template-probe="query"><img data-template-probe="query">"#;
+    let mut parameters = url::form_urlencoded::Serializer::new(String::new());
+    parameters.append_pair("q", query);
+    parameters.append_pair("engines", "mwmbl");
+    let search = format!("/search?{}", parameters.finish());
+
+    for uri in ["/", search.as_str()] {
+        let (status, body, _) = get_uri(&app, uri).await;
+        assert_eq!(status, StatusCode::OK);
+        let html = scraper::Html::parse_document(&body);
+        let injected = scraper::Selector::parse("[data-template-probe]").unwrap();
+        assert_eq!(html.select(&injected).count(), 0, "{uri}");
+        let title = scraper::Selector::parse("title").unwrap();
+        assert!(
+            html.select(&title)
+                .next()
+                .unwrap()
+                .text()
+                .collect::<String>()
+                .contains(instance)
+        );
+        if uri != "/" {
+            let input = scraper::Selector::parse("input[name=q]").unwrap();
+            assert_eq!(
+                html.select(&input).next().unwrap().value().attr("value"),
+                Some(query)
+            );
+        }
+    }
+}
+
+#[tokio::test]
 async fn json_search_returns_merged_results() {
     let base_url = start_fake_engine().await;
     let app = app(settings_for(&base_url));

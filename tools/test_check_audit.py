@@ -17,6 +17,19 @@ class AuditPolicyTests(unittest.TestCase):
         self.assertFalse(check(report, baseline, date(2026,11,3)))
         self.assertTrue(check(report, baseline, date(2030,1,1)))
 
+    def test_an_empty_baseline_does_not_expire_or_allow_warnings(self):
+        baseline = {'expires': '2026-12-03', 'findings': []}
+        report = {'vulnerabilities': {'list': []}, 'warnings': {}}
+        self.assertEqual(check(report, baseline, date(2027, 1, 1)), [])
+        report['warnings']['unmaintained'] = [{
+            'advisory': {'id': 'RUSTSEC-2024-0449'},
+            'package': {'name': 'unsafe-libyaml', 'version': '0.2.11'},
+        }]
+        self.assertEqual(
+            check(report, baseline, date(2027, 1, 1)),
+            ['new warning: RUSTSEC-2024-0449 / unmaintained / unsafe-libyaml / 0.2.11'],
+        )
+
 
 if __name__ == '__main__':
     unittest.main()

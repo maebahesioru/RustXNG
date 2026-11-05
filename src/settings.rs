@@ -741,22 +741,22 @@ impl EngineConfig {
 }
 
 /// Convert a YAML value into a TOML value (mappings become tables).
-fn yaml_to_toml(value: &serde_yaml::Value) -> Option<toml::Value> {
+fn yaml_to_toml(value: &yaml_serde::Value) -> Option<toml::Value> {
     Some(match value {
-        serde_yaml::Value::Null => return None,
-        serde_yaml::Value::Bool(flag) => toml::Value::Boolean(*flag),
-        serde_yaml::Value::Number(number) => {
+        yaml_serde::Value::Null => return None,
+        yaml_serde::Value::Bool(flag) => toml::Value::Boolean(*flag),
+        yaml_serde::Value::Number(number) => {
             if let Some(integer) = number.as_i64() {
                 toml::Value::Integer(integer)
             } else {
                 toml::Value::Float(number.as_f64()?)
             }
         }
-        serde_yaml::Value::String(text) => toml::Value::String(text.clone()),
-        serde_yaml::Value::Sequence(items) => {
+        yaml_serde::Value::String(text) => toml::Value::String(text.clone()),
+        yaml_serde::Value::Sequence(items) => {
             toml::Value::Array(items.iter().filter_map(yaml_to_toml).collect())
         }
-        serde_yaml::Value::Mapping(mapping) => {
+        yaml_serde::Value::Mapping(mapping) => {
             let mut table = toml::Table::new();
             for (key, value) in mapping {
                 if let Some(key) = yaml_key(key) {
@@ -767,15 +767,15 @@ fn yaml_to_toml(value: &serde_yaml::Value) -> Option<toml::Value> {
             }
             toml::Value::Table(table)
         }
-        serde_yaml::Value::Tagged(tagged) => return yaml_to_toml(&tagged.value),
+        yaml_serde::Value::Tagged(tagged) => return yaml_to_toml(&tagged.value),
     })
 }
 
-fn yaml_key(value: &serde_yaml::Value) -> Option<String> {
+fn yaml_key(value: &yaml_serde::Value) -> Option<String> {
     match value {
-        serde_yaml::Value::String(text) => Some(text.clone()),
-        serde_yaml::Value::Bool(flag) => Some(flag.to_string()),
-        serde_yaml::Value::Number(number) => Some(number.to_string()),
+        yaml_serde::Value::String(text) => Some(text.clone()),
+        yaml_serde::Value::Bool(flag) => Some(flag.to_string()),
+        yaml_serde::Value::Number(number) => Some(number.to_string()),
         _ => None,
     }
 }
@@ -837,7 +837,7 @@ impl Settings {
     /// both formats share one merge path.
     fn user_value(text: &str, is_yaml: bool) -> Result<toml::Value, SettingsError> {
         if is_yaml {
-            let yaml: serde_yaml::Value = serde_yaml::from_str(text)
+            let yaml: yaml_serde::Value = yaml_serde::from_str(text)
                 .map_err(|error| SettingsError::Validation(error.to_string()))?;
             yaml_to_toml(&yaml)
                 .ok_or_else(|| SettingsError::Validation("empty YAML document".into()))
@@ -1722,6 +1722,96 @@ engines:
         assert_eq!(settings.search.default_lang, "ja");
         assert!(settings.engine("wikipedia (ja)").is_some());
         assert_eq!(settings.ui.default_locale, "en");
+    }
+
+    #[test]
+    fn yaml_settings_preserve_scalar_types_tags_and_aliases() {
+        let settings = merged_yaml(
+            r#"
+general:
+  instance_name: !label "RustXNG 日本語"
+server:
+  port: !!int "29484"
+  secret_key: 000123
+outgoing:
+  request_timeout: !!float "1.25"
+engines:
+  - name: yaml fixture one
+    engine: wikipedia
+    base_url: &endpoint https://example.test/wiki
+    categories: &categories [general, null, images]
+    disabled: TRUE
+    weight: &weight 0.75
+    timeout: null
+    negative_hex: -0x2a
+    binary: 0b101
+    description: |
+      first line
+      日本語の本文
+  - name: yaml fixture two
+    engine: wikipedia
+    base_url: *endpoint
+    categories: *categories
+    weight: *weight
+"#,
+        );
+
+        assert_eq!(settings.general.instance_name, "RustXNG 日本語");
+        assert_eq!(settings.server.port, 29484);
+        assert_eq!(settings.server.secret_key, "000123");
+        assert_eq!(settings.outgoing.request_timeout, 1.25);
+        let first = settings.engine("yaml fixture one").unwrap();
+        let second = settings.engine("yaml fixture two").unwrap();
+        assert_eq!(first.base_url.as_deref(), Some("https://example.test/wiki"));
+        assert_eq!(second.base_url, first.base_url);
+        assert_eq!(first.categories, ["general", "images"]);
+        assert_eq!(second.categories, first.categories);
+        assert_eq!(first.disabled, Some(true));
+        assert_eq!(first.weight, Some(0.75));
+        assert_eq!(second.weight, first.weight);
+        assert_eq!(first.timeout, None);
+        assert_eq!(first.opt_i64("negative_hex"), Some(-42));
+        assert_eq!(first.opt_i64("binary"), Some(5));
+        assert_eq!(
+            first.opt_str("description"),
+            Some("first line\n日本語の本文\n")
+        );
+    }
+
+    #[test]
+    fn yaml_mapping_keys_and_nulls_keep_their_conversion_rules() {
+        let value = Settings::user_value(
+            "options:\n  true: enabled\n  0x10: sixteen\n  1.5: decimal\n  omitted: null\n",
+            true,
+        )
+        .unwrap();
+        let options = value["options"].as_table().unwrap();
+        assert_eq!(options["true"].as_str(), Some("enabled"));
+        assert_eq!(options["16"].as_str(), Some("sixteen"));
+        assert_eq!(options["1.5"].as_str(), Some("decimal"));
+        assert!(!options.contains_key("omitted"));
+    }
+
+    #[test]
+    fn malformed_yaml_and_unsafe_expansion_are_rejected() {
+        for text in [
+            "server: {port: 29483, port: 29484}",
+            "server: {port: !!int invalid}",
+            "server: *missing",
+            "value: &recursive [*recursive]",
+            "server: {port: 29483}\n---\nserver: {port: 29484}",
+        ] {
+            assert!(Settings::user_value(text, true).is_err(), "{text}");
+        }
+        let nested = format!("{}0{}", "[".repeat(129), "]".repeat(129));
+        assert!(Settings::user_value(&nested, true).is_err());
+
+        let mut aliases = String::from("a0: &a0 [payload]\n");
+        for level in 1..8 {
+            let repeated = vec![format!("*a{}", level - 1); 10].join(", ");
+            aliases.push_str(&format!("a{level}: &a{level} [{repeated}]\n"));
+        }
+        assert!(Settings::user_value(&aliases, true).is_err());
     }
 
     #[test]

@@ -14,7 +14,7 @@ Cargoから導入する場合は次のコマンドを使います。
 
 <!-- x-release-please-start-version -->
 ```bash
-cargo install --git https://github.com/sahenjp/RustXNG.git --tag v0.28.0 --locked
+cargo install --git https://github.com/sahenjp/RustXNG.git --tag v0.29.0 --locked
 ```
 <!-- x-release-please-end -->
 

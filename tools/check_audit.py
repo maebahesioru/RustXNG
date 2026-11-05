@@ -10,7 +10,7 @@ def check(report: dict, baseline: dict, today: date) -> list[str]:
     errors = []
     if report.get('error') or 'vulnerabilities' not in report or 'warnings' not in report:
         return ['audit did not produce a complete report']
-    if today >= date.fromisoformat(baseline['expires']):
+    if baseline['findings'] and today >= date.fromisoformat(baseline['expires']):
         errors.append('known-finding baseline expired; review tracked findings')
     for entry in report['vulnerabilities']['list']:
         errors.append('vulnerability: ' + entry['advisory']['id'])
@@ -34,7 +34,10 @@ def main() -> None:
     errors = check(report, baseline, date.today())
     if errors:
         raise SystemExit('\n'.join(errors))
-    print('No vulnerabilities or new warnings; known findings remain tracked until', baseline['expires'])
+    if baseline['findings']:
+        print('No vulnerabilities or new warnings; known findings remain tracked until', baseline['expires'])
+    else:
+        print('No vulnerabilities or warnings.')
 
 
 if __name__ == '__main__':
