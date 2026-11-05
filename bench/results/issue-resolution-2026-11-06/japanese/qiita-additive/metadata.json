@@ -1,0 +1,161 @@
+{
+  "started_at": "2026-11-05T23:27:29.495836+00:00",
+  "base": "http://127.0.0.1:18994",
+  "commit": "45788f648bed15771d0cdf5f84eae1adb39fafbb",
+  "settings_sha256": "6ddd5f65fa39b7ce5144a7336e937a25e0d657150a668961766e3c4277cf95e2",
+  "settings_scope": "Repository settings.toml; actual server configuration must be supplied in --run-context",
+  "corpus_sha256": "9a1f7ad44707297ea3f2e0ed6a58ca09e2394275841c4f41b128019a800ac450",
+  "corpora": {
+    "pinpoint": {
+      "path": "bench/japanese-search/compiler-held-out-2026-11-05.json",
+      "sha256": "9a1f7ad44707297ea3f2e0ed6a58ca09e2394275841c4f41b128019a800ac450"
+    }
+  },
+  "request_plan": {
+    "search_requests": 120,
+    "requests_by_group": {
+      "pinpoint": 120
+    },
+    "qiita_selected_search_requests": 60,
+    "engine_conditions": [
+      {
+        "qiita": false,
+        "requested_engines": [
+          "exaapi",
+          "wikipedia",
+          "stack overflow"
+        ],
+        "search_requests": 60
+      },
+      {
+        "qiita": true,
+        "requested_engines": [
+          "exaapi",
+          "wikipedia",
+          "stack overflow",
+          "qiita"
+        ],
+        "search_requests": 60
+      }
+    ],
+    "variants": [
+      "raw"
+    ],
+    "languages": [
+      "ja"
+    ],
+    "locale": null,
+    "repeats": 2,
+    "delay_seconds": 0.25,
+    "timeout_seconds": 20,
+    "raw_content_requested": false,
+    "corpora": {
+      "pinpoint": {
+        "path": "bench/japanese-search/compiler-held-out-2026-11-05.json",
+        "sha256": "9a1f7ad44707297ea3f2e0ed6a58ca09e2394275841c4f41b128019a800ac450"
+      }
+    },
+    "upstream_request_count": null,
+    "scope": "Counts RustXNG search calls, not provider requests or quota consumption. Server routing, retries, cache and other clients affect upstream traffic; review provider terms and quota before running."
+  },
+  "diagnostic_case_origins": [
+    "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+  ],
+  "server_context": {
+    "operator_supplied_context": {
+      "profile": "api + explicit Qiita opt-in for bounded additive experiment only",
+      "baseline_engines": [
+        "exaapi",
+        "wikipedia",
+        "stack overflow"
+      ],
+      "api_options": {
+        "search_type": "lite",
+        "results_per_page": 10,
+        "content_max_characters": 500
+      },
+      "cache": "fresh process at start; 600-second response cache; adjacent second repeat warm; language is part of each source request when supported; no cache bypass",
+      "index": "Existing index-docs and index-wikipedia loaded; excluded from this comparison by the explicit three-source baseline. The held-out references were not added to either index.",
+      "language": "default(auto) vs explicit ja; locale omitted; server ui.default_locale=en; deployment Japan",
+      "period": "pinpoint none, broad/fresh month; native publication-date filter for Exa",
+      "raw_page_fetch": false,
+      "billing": "existing EXA_API_KEY kept only in process environment; explicitly selected paid API; no DeepSeek requests",
+      "cold_warm_limitation": "Adjacent repeats measure warm-cache behavior, not independent upstream resamples. Separate coverage runs restart the process.",
+      "binary_sha256": "165e53742905fe14945de65119712bb548b77dc5d08fcd660b77500bd524c3d4"
+    },
+    "missing_context": [
+      "cache_state",
+      "engines",
+      "local_index",
+      "region",
+      "server_settings"
+    ]
+  },
+  "server_snapshots": {
+    "before_stats": {
+      "status": 200,
+      "sha256": "b975b24595c174dde2836325177ab7b9cff224462ce424f469a71ada6aeb0106",
+      "body_utf8": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Stats — RustXNG (API)</title>\n<link rel=\"stylesheet\" href=\"/static/style.css\">\n</head>\n<body>\n<header>\n  <h1><a href=\"/\">RustXNG (API)</a></h1>\n  <nav><a href=\"/\">Search</a><a href=\"/preferences\">Preferences</a><a href=\"/about\">About</a></nav>\n</header>\n<h2>Statistics</h2>\n<table>\n  <tr><th>Uptime</th><td>99.162711081</td></tr>\n  <tr><th>Searches</th><td>384</td></tr>\n  <tr><th>Engine requests</th><td>25</td></tr>\n  <tr><th>Engine errors</th><td>1</td></tr>\n  <tr><th>Engine timeouts</th><td>0</td></tr>\n  <tr><th>Results served</th><td>40</td></tr>\n  <tr><th>Cache hits</th><td>0</td></tr>\n  <tr><th>Cache entries</th><td>6 (8728 bytes, 18 hits / 14 misses)</td></tr>\n</table>\n\n<h3>Engines</h3>\n\n<table>\n  <tr><th>Engine</th><th>Requests</th><th>Results</th><th>Errors</th><th>Average</th><th>Suspended</th><th>Resting</th></tr>\n\n  <tr>\n    <td>exaapi</td>\n    <td>0</td>\n    <td>0</td>\n    <td>1</td>\n    <td>0</td>\n    <td>yes</td>\n    <td>no</td>\n  </tr>\n\n  <tr>\n    <td>stack overflow</td>\n    <td>16</td>\n    <td>40</td>\n    <td>0</td>\n    <td>1.002149373</td>\n    <td>no</td>\n    <td>empty results (206.480306526s)</td>\n  </tr>\n\n  <tr>\n    <td>wikipedia</td>\n    <td>8</td>\n    <td>0</td>\n    <td>0</td>\n    <td>0.8827283659999999</td>\n    <td>no</td>\n    <td>empty results (204.077693427s)</td>\n  </tr>\n\n</table>\n\n<footer><p>RustXNG (API) 0.29.0 — metrics are only kept in memory.</p></footer>\n</body>\n</html>"
+    },
+    "before_engine_errors": {
+      "status": 200,
+      "sha256": "3830de92541b1e8b46e398e382fc4d9568fe4694365d3e97115a1f0146ff9092",
+      "body_utf8": "[{\"engine\":\"exaapi\",\"stats\":{\"requests\":0,\"results\":0,\"errors\":1,\"timeouts\":0,\"http_errors\":0,\"total_time\":0.0},\"consecutive_failures\":1,\"suspended\":true,\"suspended_for\":86301.55678439,\"suspension_reason\":\"access denied\",\"resting\":false,\"resting_for\":0.0},{\"engine\":\"stack overflow\",\"stats\":{\"requests\":16,\"results\":40,\"errors\":0,\"timeouts\":0,\"http_errors\":0,\"total_time\":1.002149373},\"consecutive_failures\":0,\"suspended\":false,\"suspended_for\":0.0,\"suspension_reason\":null,\"resting\":true,\"resting_for\":206.479944094},{\"engine\":\"wikipedia\",\"stats\":{\"requests\":8,\"results\":0,\"errors\":0,\"timeouts\":0,\"http_errors\":0,\"total_time\":0.8827283659999999},\"consecutive_failures\":0,\"suspended\":false,\"suspended_for\":0.0,\"suspension_reason\":null,\"resting\":true,\"resting_for\":204.077330995}]"
+    },
+    "after_stats": {
+      "status": 200,
+      "sha256": "78ba73f0302545f87a8bcd73584568e26cb97da76c137da49b61000cf67cf929",
+      "body_utf8": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Stats — RustXNG (API)</title>\n<link rel=\"stylesheet\" href=\"/static/style.css\">\n</head>\n<body>\n<header>\n  <h1><a href=\"/\">RustXNG (API)</a></h1>\n  <nav><a href=\"/\">Search</a><a href=\"/preferences\">Preferences</a><a href=\"/about\">About</a></nav>\n</header>\n<h2>Statistics</h2>\n<table>\n  <tr><th>Uptime</th><td>137.475154784</td></tr>\n  <tr><th>Searches</th><td>504</td></tr>\n  <tr><th>Engine requests</th><td>63</td></tr>\n  <tr><th>Engine errors</th><td>1</td></tr>\n  <tr><th>Engine timeouts</th><td>0</td></tr>\n  <tr><th>Results served</th><td>94</td></tr>\n  <tr><th>Cache hits</th><td>0</td></tr>\n  <tr><th>Cache entries</th><td>25 (25853071 bytes, 37 hits / 52 misses)</td></tr>\n</table>\n\n<h3>Engines</h3>\n\n<table>\n  <tr><th>Engine</th><th>Requests</th><th>Results</th><th>Errors</th><th>Average</th><th>Suspended</th><th>Resting</th></tr>\n\n  <tr>\n    <td>exaapi</td>\n    <td>0</td>\n    <td>0</td>\n    <td>1</td>\n    <td>0</td>\n    <td>yes</td>\n    <td>no</td>\n  </tr>\n\n  <tr>\n    <td>qiita</td>\n    <td>38</td>\n    <td>72</td>\n    <td>0</td>\n    <td>8.185614393</td>\n    <td>no</td>\n    <td>empty results (288.709019683s)</td>\n  </tr>\n\n  <tr>\n    <td>stack overflow</td>\n    <td>16</td>\n    <td>40</td>\n    <td>0</td>\n    <td>1.002149373</td>\n    <td>no</td>\n    <td>empty results (168.167863576s)</td>\n  </tr>\n\n  <tr>\n    <td>wikipedia</td>\n    <td>8</td>\n    <td>0</td>\n    <td>0</td>\n    <td>0.8827283659999999</td>\n    <td>no</td>\n    <td>empty results (165.765250477s)</td>\n  </tr>\n\n</table>\n\n<footer><p>RustXNG (API) 0.29.0 — metrics are only kept in memory.</p></footer>\n</body>\n</html>"
+    },
+    "after_engine_errors": {
+      "status": 200,
+      "sha256": "6afbe4f5dd4c5dbc5bd6c506687795af4ca447d4d7ce3706b6805c6c8753cc7f",
+      "body_utf8": "[{\"engine\":\"exaapi\",\"stats\":{\"requests\":0,\"results\":0,\"errors\":1,\"timeouts\":0,\"http_errors\":0,\"total_time\":0.0},\"consecutive_failures\":1,\"suspended\":true,\"suspended_for\":86263.244388448,\"suspension_reason\":\"access denied\",\"resting\":false,\"resting_for\":0.0},{\"engine\":\"qiita\",\"stats\":{\"requests\":38,\"results\":72,\"errors\":0,\"timeouts\":0,\"http_errors\":0,\"total_time\":8.185614393},\"consecutive_failures\":0,\"suspended\":false,\"suspended_for\":0.0,\"suspension_reason\":null,\"resting\":true,\"resting_for\":288.708704259},{\"engine\":\"stack overflow\",\"stats\":{\"requests\":16,\"results\":40,\"errors\":0,\"timeouts\":0,\"http_errors\":0,\"total_time\":1.002149373},\"consecutive_failures\":0,\"suspended\":false,\"suspended_for\":0.0,\"suspension_reason\":null,\"resting\":true,\"resting_for\":168.167548152},{\"engine\":\"wikipedia\",\"stats\":{\"requests\":8,\"results\":0,\"errors\":0,\"timeouts\":0,\"http_errors\":0,\"total_time\":0.8827283659999999},\"consecutive_failures\":0,\"suspended\":false,\"suspended_for\":0.0,\"suspension_reason\":null,\"resting\":true,\"resting_for\":165.764935053}]"
+    }
+  },
+  "request_defaults": {
+    "format": "json",
+    "max_results": 10,
+    "full": 1,
+    "category": "server default",
+    "engine": [
+      "exaapi",
+      "wikipedia",
+      "stack overflow"
+    ],
+    "region": null,
+    "locale": null,
+    "cache_bypass": false,
+    "raw_content_requested": false
+  },
+  "conditions": {
+    "variants": [
+      "raw"
+    ],
+    "languages": [
+      "ja"
+    ],
+    "qiita_engine": [
+      false,
+      true
+    ],
+    "baseline_engines": [
+      "exaapi",
+      "wikipedia",
+      "stack overflow"
+    ]
+  },
+  "time_range": {
+    "pinpoint": null,
+    "broad_fresh": "month"
+  },
+  "repeats": 2,
+  "source_license": "CC0-1.0 for original snippets; compiler diagnostic text Apache-2.0",
+  "tokenizer": null,
+  "token_count_status": "unmeasured; no tokenizer implementation/version is specified",
+  "limitations": [
+    "No live benchmark is run by this script's tests.",
+    "Case origins and licenses are supplied by the fixture; this tool does not establish held-out independence.",
+    "Cache, engine and local-index state require an operator-supplied --run-context to be fully attributable."
+  ]
+}

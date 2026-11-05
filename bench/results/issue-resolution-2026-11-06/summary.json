@@ -1,0 +1,87 @@
+{
+  "coverage": {
+    "api-1": {
+      "questions": 100,
+      "hit@1": 69,
+      "hit@5": 84,
+      "mrr@10": 0.757,
+      "median_ms": 841.6,
+      "errors": 0,
+      "hit@10": 86,
+      "p95_ms": 1327.469,
+      "zero_results": 0,
+      "exa_state_after": [
+        {
+          "engine": "exaapi",
+          "stats": {
+            "requests": 85,
+            "results": 850,
+            "errors": 4,
+            "timeouts": 0,
+            "http_errors": 0,
+            "total_time": 40.103191694
+          },
+          "consecutive_failures": 1,
+          "suspended": true,
+          "suspended_for": 86376.628479115,
+          "suspension_reason": "access denied",
+          "resting": false,
+          "resting_for": 0.0
+        }
+      ]
+    },
+    "api-2": {
+      "questions": 100,
+      "hit@1": 50,
+      "hit@5": 64,
+      "mrr@10": 0.566,
+      "median_ms": 788.0,
+      "errors": 0,
+      "hit@10": 67,
+      "p95_ms": 1034.778,
+      "zero_results": 0,
+      "exa_state_after": [
+        {
+          "engine": "exaapi",
+          "stats": {
+            "requests": 0,
+            "results": 0,
+            "errors": 1,
+            "timeouts": 0,
+            "http_errors": 0,
+            "total_time": 0.0
+          },
+          "consecutive_failures": 1,
+          "suspended": true,
+          "suspended_for": 86208.016135302,
+          "suspension_reason": "access denied",
+          "resting": false,
+          "resting_for": 0.0
+        }
+      ]
+    },
+    "standard-1": {
+      "questions": 100,
+      "hit@1": 54,
+      "hit@5": 68,
+      "mrr@10": 0.606,
+      "median_ms": 581.5,
+      "errors": 0,
+      "hit@10": 71,
+      "p95_ms": 1157.71,
+      "zero_results": 0,
+      "exa_state_after": []
+    }
+  },
+  "availability": {
+    "observed_at_utc": "2026-11-05T23:36:52.517013+00:00",
+    "source": "exaapi",
+    "status": 402,
+    "provider_tag": "NO_MORE_CREDITS",
+    "required_operator_action": "Top up or raise the existing Exa credit limit, or supply another reviewed source configuration.",
+    "impact": "api-1 lost Exa late in the run; api-2 and Japanese evaluation encountered the exhausted account. These runs describe mixed availability or fallback conditions.",
+    "automatic_top_up": false
+  },
+  "measured_source_commit": "45788f648bed15771d0cdf5f84eae1adb39fafbb",
+  "binary_sha256": "165e53742905fe14945de65119712bb548b77dc5d08fcd660b77500bd524c3d4"
+}

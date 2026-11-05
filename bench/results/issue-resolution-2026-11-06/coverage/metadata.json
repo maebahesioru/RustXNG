@@ -1,0 +1,16 @@
+{
+  "started_at": "2026-11-05T23:21:19.215740+00:00",
+  "binary_sha256": "165e53742905fe14945de65119712bb548b77dc5d08fcd660b77500bd524c3d4",
+  "settings_sha256": "6ddd5f65fa39b7ce5144a7336e937a25e0d657150a668961766e3c4277cf95e2",
+  "questions_sha256": "b3cda086dd3497764243068f615f0ffb0ee9130e7421df9d417a47033ced214c",
+  "protocol": "Fresh process/cache for every run; shared OS file cache; same two existing local indexes; alternating profile order; no tuning between runs; 1.1 second inter-query delay; max_results=10; no raw page fetch; source API highlights; all HTTP responses retained. Paid API explicitly selected. No DeepSeek calls.",
+  "order": [
+    "api-1",
+    "standard-1",
+    "api-2"
+  ],
+  "completed_at": "2026-11-05T23:30:52.082287+00:00",
+  "source_commit": "45788f648bed15771d0cdf5f84eae1adb39fafbb",
+  "configured_index_paths": "Existing index-docs and index-wikipedia in the original checkout, selected with a config override; no new reference-page crawl.",
+  "availability_record": "../provider-availability.json"
+}

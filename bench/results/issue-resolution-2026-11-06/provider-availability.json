@@ -1,0 +1,9 @@
+{
+  "observed_at_utc": "2026-11-05T23:36:52.517013+00:00",
+  "source": "exaapi",
+  "status": 402,
+  "provider_tag": "NO_MORE_CREDITS",
+  "required_operator_action": "Top up or raise the existing Exa credit limit, or supply another reviewed source configuration.",
+  "impact": "api-1 lost Exa late in the run; api-2 and Japanese evaluation encountered the exhausted account. These runs describe mixed availability or fallback conditions.",
+  "automatic_top_up": false
+}
