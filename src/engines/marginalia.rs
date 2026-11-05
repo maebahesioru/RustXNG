@@ -27,8 +27,6 @@ const DEFAULTS: EngineDefaults = EngineDefaults {
 
 const BASE_URL: &str = "https://api2.marginalia-search.com";
 const RESULTS_PER_PAGE: i64 = 20;
-const USER_AGENT: &str =
-    "Mozilla/5.0 (compatible; rustxng/0.2; +https://github.com/sahenjp/rustxng)";
 
 /// Marginalia, an independent search engine for the small web.
 pub struct Marginalia {
@@ -73,7 +71,6 @@ impl Engine for Marginalia {
         }
         let mut request = EngineRequest::get(format!("{base}/search?{}", query_string(&pairs)));
         request.set_header("API-Key", key);
-        request.set_header("User-Agent", USER_AGENT);
         Ok(request)
     }
 
@@ -86,6 +83,10 @@ impl Engine for Marginalia {
         let Some(items) = json_path(&json, "results").and_then(|value| value.as_array()) else {
             return Ok(Vec::new());
         };
+        let license = json_str(&json, "license");
+        let public_api = url::Url::parse(&response.final_url)
+            .ok()
+            .is_some_and(|url| url.host_str() == Some("api2.marginalia-search.com"));
         let mut results = Vec::new();
         for item in items {
             let url = json_str(item, "url");
@@ -93,11 +94,18 @@ impl Engine for Marginalia {
             if title.is_empty() || !url.starts_with("http") {
                 continue;
             }
-            results.push(
-                ResultBuilder::new(url, title)
-                    .content(json_str(item, "description"))
-                    .build(),
-            );
+            let mut result = ResultBuilder::new(url, title)
+                .content(json_str(item, "description"))
+                .metadata("source_license", &license);
+            if public_api {
+                result = result
+                    .metadata("source_attribution", "Marginalia Search")
+                    .metadata(
+                        "source_terms_url",
+                        "https://about.marginalia-search.com/article/api/",
+                    );
+            }
+            results.push(result.build());
         }
         Ok(results)
     }
@@ -133,6 +141,8 @@ mod tests {
                 assert_eq!(result.url, "https://www.rust-lang.org/");
                 assert_eq!(result.title, "Rust");
                 assert_eq!(result.content, "A language.");
+                assert_eq!(result.metadata["source_license"], "CC-BY-NC-SA");
+                assert_eq!(result.metadata["source_attribution"], "Marginalia Search");
             }
             _ => panic!("expected a result"),
         }
@@ -163,6 +173,7 @@ mod tests {
                 .and_then(|value| value.to_str().ok()),
             Some("KEY")
         );
+        assert!(!request.headers.contains_key("User-Agent"));
     }
 
     #[test]
@@ -185,5 +196,21 @@ mod tests {
             engine().parse(&broken, &query("rust")),
             Err(EngineError::Parse(_))
         ));
+    }
+
+    #[test]
+    fn custom_endpoint_license_is_preserved_without_public_service_terms() {
+        let response = EngineResponse::new(
+            200,
+            "https://search.example/api",
+            br#"{"license":"custom contract","results":[{"url":"https://example.com/","title":"Result"}]}"#.to_vec(),
+        );
+        let items = engine().parse(&response, &query("result")).unwrap();
+        let EngineItem::Result(result) = &items[0] else {
+            panic!("expected result");
+        };
+        assert_eq!(result.metadata["source_license"], "custom contract");
+        assert!(!result.metadata.contains_key("source_attribution"));
+        assert!(!result.metadata.contains_key("source_terms_url"));
     }
 }

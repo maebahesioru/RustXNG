@@ -98,13 +98,13 @@ impl Engine for StackExchange {
         let mut results = Vec::new();
         for item in items {
             let title = strip_tags(&json_str(item, "title"));
-            // upstream builds the short canonical URL from the question id
-            let question_id = json_str(item, "question_id");
-            let mut url = json_str(item, "link");
-            if !question_id.is_empty() {
-                url = format!("https://{}.com/q/{question_id}", self.site());
-            }
-            if title.is_empty() || url.is_empty() {
+            let url = json_str(item, "link");
+            let parsed = url::Url::parse(&url).ok();
+            if title.is_empty()
+                || parsed.is_none_or(|url| {
+                    !matches!(url.scheme(), "http" | "https") || url.host_str().is_none()
+                })
+            {
                 continue;
             }
             let score = json_str(item, "score");
@@ -125,11 +125,65 @@ impl Engine for StackExchange {
                 ResultBuilder::new(url, title)
                     .content(content.join(", "))
                     .author(owner)
+                    .metadata("author_url", json_str(item, "owner.link"))
+                    .metadata("source_license", json_str(item, "content_license"))
+                    .metadata(
+                        "source_terms_url",
+                        "https://stackoverflow.com/legal/api-terms-of-use",
+                    )
                     .metadata("score", score)
                     .metadata("answers", answers)
                     .build(),
             );
         }
         Ok(results)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::EngineRegistry;
+
+    #[test]
+    fn preserves_api_links_and_item_license_across_network_sites() {
+        let mut config = EngineConfig::new("math", "stackexchange", "math", &["general"]);
+        config.extra.insert("api_site".into(), "math".into());
+        let engine = StackExchange::from_config(&config).unwrap();
+        let response = EngineResponse::new(
+            200,
+            SEARCH_API,
+            br#"{"items":[
+              {"question_id":123,"title":"A question","link":"https://math.stackexchange.com/questions/123/title",
+               "content_license":"CC BY-SA 3.0","owner":{"display_name":"Author","link":"https://math.stackexchange.com/users/9/author"}},
+              {"question_id":456,"title":"Another","link":"https://ja.stackoverflow.com/questions/456/title"},
+              {"question_id":789,"title":"Missing link"},
+              {"title":"Invalid link","link":"javascript:alert(1)"}
+            ]}"#.to_vec(),
+        );
+        let query = Query::parse("question", &EngineRegistry::default(), &[]);
+        let items = engine.parse(&response, &query).unwrap();
+        assert_eq!(items.len(), 2);
+        let EngineItem::Result(first) = &items[0] else {
+            panic!("expected result");
+        };
+        assert_eq!(
+            first.url,
+            "https://math.stackexchange.com/questions/123/title"
+        );
+        assert_eq!(first.author.as_deref(), Some("Author"));
+        assert_eq!(first.metadata["source_license"], "CC BY-SA 3.0");
+        assert_eq!(
+            first.metadata["author_url"],
+            "https://math.stackexchange.com/users/9/author"
+        );
+        let EngineItem::Result(second) = &items[1] else {
+            panic!("expected result");
+        };
+        assert_eq!(
+            second.url,
+            "https://ja.stackoverflow.com/questions/456/title"
+        );
+        assert!(!second.metadata.contains_key("source_license"));
     }
 }

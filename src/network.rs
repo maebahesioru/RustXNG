@@ -607,8 +607,7 @@ fn is_retryable(error: &NetworkError) -> bool {
     }
 }
 
-/// Hosts whose operators publish an API policy that asks for an identifiable
-/// client (Wikimedia, GitHub, crates.io, PyPI, Crossref, OpenAlex, ...).
+/// Documented API hosts where RustXNG uses its identified User-Agent.
 const DOCUMENTED_API_SUFFIXES: &[&str] = &[
     "wikipedia.org",
     "wikidata.org",
@@ -637,6 +636,8 @@ const DOCUMENTED_API_SUFFIXES: &[&str] = &[
     "api.open-meteo.com",
     "geocoding-api.open-meteo.com",
     "api.mwmbl.org",
+    "api2.marginalia-search.com",
+    "qiita.com",
     "hn.algolia.com",
     "www.ebi.ac.uk",
 ];
@@ -1102,6 +1103,10 @@ mod tests {
         assert!(is_documented_api_host(
             "https://api.github.com/search/repositories"
         ));
+        assert!(is_documented_api_host(
+            "https://api2.marginalia-search.com/search"
+        ));
+        assert!(is_documented_api_host("https://qiita.com/api/v2/items"));
         assert!(!is_documented_api_host("https://github.com/search"));
         assert!(!is_documented_api_host("https://evilcrates.io/"));
         assert!(!is_documented_api_host("https://www.bing.com/search"));

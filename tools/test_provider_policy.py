@@ -49,6 +49,11 @@ class ProviderPolicyTests(unittest.TestCase):
         self.policy["providers"]["mwmbl"]["source_sha256"] = "0" * 64
         self.assertIn("adapter changed", " ".join(validate(self.settings, self.policy, self.pending)))
 
+    def test_named_review_cannot_override_blocked_module(self) -> None:
+        self.policy["engines"]["new bing alias"] = {"standard_allowed": True, "module": "bing"}
+        self.settings["engines"].append({"name": "new bing alias", "engine": "bing"})
+        self.assertIn("must be disabled", " ".join(validate(self.settings, self.policy, self.pending)))
+
     def test_pending_endpoint_cannot_change_without_review(self) -> None:
         name = next(iter(self.pending))
         engine = next(e for e in self.settings["engines"] if e["name"] == name)

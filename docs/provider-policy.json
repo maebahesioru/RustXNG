@@ -222,7 +222,16 @@
       ],
       "access_scope": "documented_api_with_conditions",
       "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
-      "source_sha256": "4e09e115e53da2211a524d0286da9ea4e6e2e84ebd1983545b052201309248d7"
+      "source_sha256": "4e09e115e53da2211a524d0286da9ea4e6e2e84ebd1983545b052201309248d7",
+      "authentication": "No credentials sent by this search adapter",
+      "quota": "Endpoint limits can change; obey delay and rate-reduction responses",
+      "retention_and_redistribution": "Content-license conditions apply to cached and republished text; generally CC BY-SA 4.0 with project and imported-content exceptions",
+      "attribution": "Source article URL, applicable license notice/link and modification notices; preserve additional imported-content credits",
+      "evidence_urls": [
+        "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+        "https://attribution.wikimedia.org/technical-implementation.html"
+      ],
+      "evidence_note": "Additional scoped review from PR #109, 2026-11-05. Deployment and content-reuse conditions apply."
     },
     "wikipedia_entities": {
       "request_url": "https://{language}.wikipedia.org/w/api.php (entity search variant)",
@@ -279,7 +288,15 @@
       ],
       "access_scope": "documented_api_with_conditions",
       "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
-      "source_sha256": "07c9b2a176634b360fff98da89b87ac479d7725b68822878784c556c33305a51"
+      "source_sha256": "07c9b2a176634b360fff98da89b87ac479d7725b68822878784c556c33305a51",
+      "authentication": "No credentials sent by this entity-search adapter",
+      "quota": "Wikimedia API usage limits; no unlimited request allowance",
+      "retention_and_redistribution": "Structured data in main, Property, Lexeme and EntitySchema namespaces is CC0; other namespace text is CC BY-SA 4.0",
+      "attribution": "Keep source entity URLs for provenance; do not extend CC0 to unrelated content",
+      "evidence_urls": [
+        "https://www.wikidata.org/wiki/Wikidata:Licensing"
+      ],
+      "evidence_note": "Additional scoped review from PR #109, 2026-11-05. Deployment and content-reuse conditions apply."
     },
     "wikicommons": {
       "request_url": "https://commons.wikimedia.org/w/api.php",
@@ -336,7 +353,17 @@
       ],
       "access_scope": "documented_api_with_attribution",
       "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
-      "source_sha256": "fcb5bc7d0a862667437be7c824f4479bbe7c4597718ee1d2156f9bdee950d51b"
+      "source_sha256": "5e73c4ae37185c9c4dcdfb4b8fa5124614afa3ff3f415a522f9e43bf1ddd7010",
+      "authentication": "Current adapter sends neither API key nor access_token",
+      "quota": "IP/key-dependent daily quota; all callers of a method must respect its backoff field; avoid identical requests within one minute",
+      "retention_and_redistribution": "Per-item content_license and revision history determine CC BY-SA version; API terms incorporate public-network terms",
+      "attribution": "Identify Stack Exchange, preserve question and author links, and comply with the applicable content license",
+      "evidence_urls": [
+        "https://stackoverflow.com/legal/acceptable-use-policy",
+        "https://api.stackexchange.com/docs/throttle",
+        "https://stackoverflow.com/help/licensing"
+      ],
+      "evidence_note": "Additional scoped review from PR #109, 2026-11-05. Deployment and content-reuse conditions apply."
     },
     "crates": {
       "request_url": "https://crates.io/api/v1/crates",
@@ -1470,19 +1497,68 @@
       "source_sha256": "78bf204a4127be14c857c3fd0d400d4f7f7e73f6f28c005017e12c0d6477fab3"
     },
     "qiita": {
-      "request_url": "https://qiita.com/api/v2/items?query={query}",
-      "access_method": "Documented read-only JSON API, explicitly configured only",
-      "terms_url": "https://qiita.com/terms",
+      "request_url": "https://qiita.com/api/v2/items",
+      "access_method": "GET documented JSON API over TLS; optional Bearer token",
+      "terms_url": "https://help.qiita.com/ja/articles/qiita-api",
       "documentation_url": "https://qiita.com/api/v2/docs",
       "review_date": "2026-11-05",
-      "status": "reviewed_opt_in_quota",
+      "status": "conditional_api_opt_in",
       "standard_allowed": false,
-      "decision": "operator_must_budget_shared_IP_quota_before_opt_in",
+      "decision": "disabled_by_default_pending_quota_and_reuse_review",
       "conditions": [
-        "Anonymous limit: 60 requests/hour per IP; authenticated limit: 1000/hour; inspect Rate-Remaining/Rate-Reset and stop at quota",
-        "Only the documented items API, not HTML/internal endpoints; retain article URL and author attribution",
-        "Article copyright remains with authors; API access does not authorize bulk republishing or model training",
-        "The bounded additive benchmark checks remaining quota and sends at most 30 distinct item-search queries plus one quota probe"
+        "Official help permits applications within the API's provided functions, prohibits advertising monetization of those apps and prohibits scraping",
+        "Plan total upstream requests across retries, caches and shared-IP users before enabling; no automatic quota accounting is implemented"
+      ],
+      "authentication": "Optional personal access token in api_key",
+      "quota": "60 requests/hour/IP without authentication; 1000/hour authenticated; response headers expose remaining quota",
+      "retention_and_redistribution": "API availability does not establish a blanket license for publishing stored article bodies or snippets",
+      "attribution": "Preserve source item and author; confirm the intended redistribution basis separately",
+      "evidence_urls": [
+        "https://qiita.com/api/v2/docs",
+        "https://qiita.com/terms"
+      ],
+      "evidence_note": "Additional scoped review from PR #109, 2026-11-05. Deployment and content-reuse conditions apply.",
+      "family": "Qiita"
+    },
+    "marginalia": {
+      "authentication": "Explicit api_key required; public key is documented for integration development",
+      "quota": "The current API page does not publish a numeric quota for the public key and warns that it often reaches a rate limit",
+      "retention_and_redistribution": "Free and paid noncommercial keys use CC BY-NC-SA 4.0; commercial key terms differ",
+      "attribution": "Preserve response license and Marginalia source identity; commercial keys are documented without an attribution requirement",
+      "evidence_note": "Additional scoped review from PR #109, 2026-11-05. Deployment and content-reuse conditions apply.",
+      "family": "Marginalia Search",
+      "request_url": "https://api2.marginalia-search.com/search",
+      "access_method": "GET documented JSON API with API-Key header",
+      "terms_url": "https://about.marginalia-search.com/article/api/",
+      "review_date": "2026-11-05",
+      "status": "contract_or_noncommercial_key_required",
+      "standard_allowed": false,
+      "decision": "disabled_by_default_choose_key_license_and_quota",
+      "conditions": [
+        "API page updated 2025-12-08; do not silently select the public development key for production or benchmarks",
+        "Record the actual key plan and reuse rights; a custom endpoint does not inherit public-service terms"
+      ]
+    },
+    "braveapi": {
+      "authentication": "Operator API key and plan/order form required",
+      "quota": "Plan-dependent; no plan or quota was verified for this repository",
+      "retention_and_redistribution": "General terms permit transient operational storage only and restrict redistribution and AI evaluation/benchmarking; order forms are part of the agreement",
+      "attribution": "Preserve notices and source links; API access does not license underlying third-party pages",
+      "evidence_urls": [
+        "https://brave.com/search/api/"
+      ],
+      "evidence_note": "Additional scoped review from PR #109, 2026-11-05. Deployment and content-reuse conditions apply.",
+      "family": "Brave Search API",
+      "request_url": "https://api.search.brave.com/res/v1/web/search",
+      "access_method": "GET documented JSON API with X-Subscription-Token header",
+      "terms_url": "https://api-dashboard.search.brave.com/documentation/resources/terms-of-service",
+      "review_date": "2026-11-05",
+      "status": "contract_scope_review_required",
+      "standard_allowed": false,
+      "decision": "disabled_by_default_requires_key_and_applicable_plan_rights",
+      "conditions": [
+        "General terms updated 2026-09-01; verify the operator's specific storage/AI rights before persisting benchmark responses",
+        "Official FAQ describes plans with storage rights; product availability alone does not establish this operator's entitlement"
       ]
     }
   },

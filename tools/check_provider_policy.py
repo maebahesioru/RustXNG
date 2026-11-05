@@ -55,7 +55,7 @@ def validate(settings: dict, policy: dict, pending: dict) -> list[str]:
                 errors.append(f"{name}: adapter changed; verify endpoint/use conditions and update its review")
             if module in GENERIC_MODULES and name not in policy.get("engines", {}):
                 errors.append(f"{name}: generic module {module} needs an exact named endpoint review")
-            if review.get("module", module) != module:
+            if (name in policy.get("engines", {}) and review.get("module") != module) or review.get("module", module) != module:
                 errors.append(f"{name}: reviewed module does not match the configured module")
             for field in ("base_url", "search_url"):
                 if engine.get(field, "") != review.get(field, ""):

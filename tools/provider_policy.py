@@ -4,10 +4,13 @@ GENERIC_MODULES = {"mediawiki", "json_engine", "xpath"}
 
 
 def review_for(engine: dict, policy: dict) -> dict:
+    module = policy.get("providers", {}).get(engine.get("engine", engine["name"]), {})
+    if module.get("standard_allowed") is False:
+        return module
     named = policy.get("engines", {}).get(engine["name"])
     if named is not None:
         return named
-    return policy.get("providers", {}).get(engine.get("engine", engine["name"]), {})
+    return module
 
 
 def adapter_source(root, module):
