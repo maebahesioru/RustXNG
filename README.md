@@ -95,7 +95,7 @@ within the advertised bounds. The server shortens snippets first, then omits
 trailing results while preserving complete URLs and metadata for the returned results. `truncated`,
 `source_truncated`, and `next_offset` report whether to continue. `read_page`
 uses Unicode character offsets and reports the same truncation state. Supplying
-a `query` to `read_page` also returns up to three matching passages from the requested slice.
+a `query` to `read_page` also returns up to three matching passages from the extracted page, even if they are outside the returned text slice.
 Sentence boundaries include `。！？`, and single Han, kana or Hangul query characters are supported.
 
 `read_page` defaults to 4,000 characters per call and accepts `max_chars` up to 20,000,

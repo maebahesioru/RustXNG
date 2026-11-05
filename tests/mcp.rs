@@ -269,7 +269,7 @@ async fn read_page_pages_through_a_returned_url_by_character() {
 }
 
 #[tokio::test]
-async fn read_page_selects_cjk_passages_within_the_requested_slice() {
+async fn read_page_selects_cjk_passages_from_the_entire_page() {
     let Fixture { client, origin, .. } = connect_with_page(
         "<html><body><article>前置きです。猫は眠っています！内存安全吗？\
          Rust ownership keeps memory safe.猫は起きました。</article></body></html>"
@@ -301,7 +301,10 @@ async fn read_page_selects_cjk_passages_within_the_requested_slice() {
     )
     .await;
     assert_eq!(structured(&prefix)["text"], "前置きです。");
-    assert_eq!(structured(&prefix)["passages"], json!([]));
+    assert_eq!(
+        structured(&prefix)["passages"],
+        json!(["猫は眠っています", "猫は起きました"])
+    );
     assert_eq!(structured(&prefix)["next_offset"], 6);
 
     let continued = call(

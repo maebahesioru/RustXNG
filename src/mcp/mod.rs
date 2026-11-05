@@ -287,8 +287,11 @@ impl McpServer {
         let page = self.pages.read(&args.url, MAX_PAGE_CHARS).await?;
         let source_truncated = page.source_truncated;
         let text = page.text;
+        // Find relevant evidence across the extracted page, not only within
+        // the text slice returned for this offset. The page is already cached.
+        let passages =
+            (!args.query.trim().is_empty()).then(|| relevant_passages(&text, &args.query));
         let (text, next_offset) = slice_page_text(&text, offset, end)?;
-        let passages = (!args.query.is_empty()).then(|| relevant_passages(&text, &args.query));
         let mut output = ReadPageOutput {
             url: args.url,
             offset,
@@ -580,11 +583,21 @@ fn is_cjk_letter(character: char) -> bool {
 }
 
 fn relevant_passages(text: &str, query: &str) -> Vec<String> {
-    let terms: Vec<String> = query
+    let mut terms: Vec<String> = query
         .split_whitespace()
         .map(str::to_lowercase)
         .filter(|term| term.chars().nth(1).is_some() || term.chars().any(is_cjk_letter))
         .collect();
+    // Japanese and Chinese queries often have no spaces. Keep the complete
+    // term for exact matches while allowing partial matches via CJK bigrams.
+    for segment in query.split(|character: char| !character.is_alphanumeric()) {
+        let cjk: Vec<char> = segment.chars().filter(|c| is_cjk_letter(*c)).collect();
+        for pair in cjk.windows(2) {
+            terms.push(pair.iter().copied().collect::<String>().to_lowercase());
+        }
+    }
+    terms.sort_unstable();
+    terms.dedup();
     if terms.is_empty() {
         return Vec::new();
     }
@@ -902,6 +915,30 @@ mod tests {
             relevant_passages(&text, "非同期"),
             ["非同期ランタイムはタスクを実行します"]
         );
+    }
+
+    #[test]
+    fn relevant_passages_find_evidence_past_the_first_read_slice() {
+        let text = format!(
+            "{}所有権の根拠は後半にあります。",
+            "関係ない説明です。".repeat(600)
+        );
+        let (first_slice, next_offset) = slice_page_text(&text, 0, DEFAULT_READ_CHARS).unwrap();
+        assert!(next_offset.is_some());
+        assert!(relevant_passages(&first_slice, "所有権").is_empty());
+        assert_eq!(
+            relevant_passages(&text, "所有権"),
+            ["所有権の根拠は後半にあります"]
+        );
+    }
+
+    #[test]
+    fn relevant_passages_match_partial_cjk_query_terms() {
+        let passages = relevant_passages(
+            "無関係な話です。大学は1877年に創立しました。別の説明です。",
+            "東京大学の創立年",
+        );
+        assert_eq!(passages, ["大学は1877年に創立しました"]);
     }
 
     #[test]
