@@ -3,6 +3,20 @@
 
 このファイルの形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に従います。バージョニング方針は本文末尾の「セマンティックバージョニング」を参照してください。
 
+## [0.29.0](https://github.com/sahenjp/RustXNG/compare/v0.28.0...v0.29.0) (2026-11-05)
+
+
+### Features
+
+* provider audit rollout, official-site language variants, index diversity and tavily engine ([#111](https://github.com/sahenjp/RustXNG/issues/111)) ([305943d](https://github.com/sahenjp/RustXNG/commit/305943d069c75bb6ed0813ccc3c40d658ef92fa1))
+* three-profile design — offline clean, compliant standard, everything full ([#112](https://github.com/sahenjp/RustXNG/issues/112)) ([ccb3b01](https://github.com/sahenjp/RustXNG/commit/ccb3b01b71d9de3001aa2cab2dcfab9491586d2f))
+
+
+### Bug Fixes
+
+* harden Standard providers and coalesce cached requests ([#105](https://github.com/sahenjp/RustXNG/issues/105)) ([7b284c0](https://github.com/sahenjp/RustXNG/commit/7b284c0b7819d8fffe6a2a985d707c835032ce04))
+* **mcp:** search full-page evidence and improve CJK passage matching ([#100](https://github.com/sahenjp/RustXNG/issues/100)) ([650327f](https://github.com/sahenjp/RustXNG/commit/650327f156eea0ebf4bd472951cbe95a35916fd3))
+
 ## [0.28.0](https://github.com/sahenjp/RustXNG/compare/v0.27.1...v0.28.0) (2026-11-04)
 
 
