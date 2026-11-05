@@ -49,7 +49,7 @@ MCP exposes two read-only tools:
 - `search` returns up to 10 ranked results. The default is 5, with snippets limited to 500 characters.
 - `read_page` retrieves text from a URL returned by `search` in the same session. It can return up to three passages relevant to an optional `query`, selected from the extracted page.
 
-`read_page` returns 4,000 characters by default and allows `max_chars` up to 20,000. Use `offset` and `next_offset` to continue. `truncated` and `source_truncated` indicate limits. MCP enforces serialized character and byte budgets, **not a tokenizer-specific token budget**.
+`read_page` returns 4,000 characters by default and allows `max_chars` up to 20,000. Use `offset` and `next_offset` to continue. `truncated` and `source_truncated` indicate limits. MCP enforces serialized character and byte budgets. Supply `tokenizer` and `max_payload_tokens` to apply an exact encoding-specific limit. [Output contract](docs/AGENT-OUTPUT.md)
 
 Page fetching checks destinations and redirects for non-public addresses and follows robots.txt (RFC 9309). It does not accept arbitrary URLs through MCP. Treat all returned web text as untrusted content.
 
