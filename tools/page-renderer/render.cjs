@@ -108,8 +108,9 @@ async function main() {
     const page = await context.newPage();
     page.on('worker', worker => {
       const finished = resources.start();
-      let closed = false;
-      worker.once('close', () => { closed = true; finished(); });
+      const closed = new Promise(resolve => {
+        worker.once('close', () => { finished(); resolve(); });
+      });
       // Let startup yield to a normal worker task before considering it idle.
       void worker.evaluate(() => new Promise(resolve => {
         const channel = new MessageChannel();
@@ -119,9 +120,10 @@ async function main() {
           resolve();
         };
         channel.port2.postMessage(null);
-      })).catch(error => {
-        if (!closed) fail(error);
-      }).finally(finished);
+      // Self-closing workers can destroy their context before Playwright
+      // delivers the close event. Keep their startup token until close; a
+      // still-live worker whose probe failed remains bounded by the deadline.
+      })).catch(() => closed).finally(finished);
     });
     const rendered = (async () => {
       await page.goto(url, { waitUntil: 'load', timeout: 10000 });
