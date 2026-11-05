@@ -372,8 +372,11 @@ async fn reachable(
     if timeout.is_zero() {
         return false;
     }
+    let Ok(language) = crate::fetch::AcceptLanguage::parse(language) else {
+        return false;
+    };
     matches!(
-        tokio::time::timeout(timeout, reader.read_with_language(url, 512, language)).await,
+        tokio::time::timeout(timeout, reader.read_with_language(url, 512, &language)).await,
         Ok(Ok(_))
     )
 }

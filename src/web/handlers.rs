@@ -51,6 +51,8 @@ pub struct SearchParams {
     pub exclude_domains: Option<String>,
     /// Agent-facing extension: fetch and return the page text of the top results.
     pub include_raw_content: Option<String>,
+    /// Explicit Accept-Language preference for raw page content.
+    pub accept_language: Option<String>,
     /// Engine start strategy: "parallel" (default) or "staged".
     pub strategy: Option<String>,
 }
@@ -149,6 +151,19 @@ async fn run_search(
     if raw_query.trim().is_empty() {
         return error_page(&state, StatusCode::BAD_REQUEST, "missing query");
     }
+    let accept_language = match crate::fetch::AcceptLanguage::parse(
+        params.accept_language.as_deref().unwrap_or_default(),
+    ) {
+        Ok(language) => language,
+        Err(message) if format == "json" => {
+            return (
+                StatusCode::BAD_REQUEST,
+                axum::Json(serde_json::json!({"error": message})),
+            )
+                .into_response();
+        }
+        Err(message) => return error_page(&state, StatusCode::BAD_REQUEST, &message),
+    };
 
     let mut query = SearchQuery::parse(
         &raw_query,
@@ -262,6 +277,7 @@ async fn run_search(
             .as_deref()
             .map(|value| matches!(value, "1" | "true" | "on" | "yes"))
             .unwrap_or(false),
+        accept_language,
         site_retry_done: false,
         strategy: match params.strategy.as_deref() {
             Some("staged") => crate::settings::SearchStrategy::Staged,

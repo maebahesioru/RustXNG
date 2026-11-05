@@ -37,11 +37,32 @@ SearXNG のパラメータと衝突しない名前で、LLM のツール呼び�
 | `include_domains=a.com,b.com` | URL のホストが指定ドメイン（サブドメイン含む）の結果だけを残す | 絞り込み |
 | `exclude_domains=a.com` | 指定ドメインの結果を落とす | 絞り込み |
 | `include_raw_content=1` | 上位 `search.raw_content_limit` 件（既定 5）のページ本文を取得して `raw_content` フィールドに入れる | `search.raw_content_chars` 文字/件まで（既定 8,000、変更可能）。打切り時は `…` と `raw_content_truncated` を追加 |
+| `accept_language=ko-KR,ko;q=0.9,en;q=0.8` | `include_raw_content` で取得するページの言語優先度を明示する | 指定を `Accept-Language` として送信し、言語ごとに本文キャッシュを分離。検索結果の言語指定とは独立 |
 | `strategy=staged` | エンジンを少数の段に分けて開始し、`search.staged_min_results` 件で打ち切る（既定は並列） | 応答時間は短縮、返る件数は減る |
 
 **ランキングの差分（`search.relevance_weight`）**: 一般（マルチエンジン）検索では、URL + タイトルのクエリ語一致度でスコアを補正します（既定 4.0。Exa の意味検索に肉薄させるため）。**単一エンジン指定では補正せず上流順を維持**するので、`engines=` での overlap@10 は上流と一致します。`relevance_weight = 0` にすれば一般検索も上流と完全に同一の順序になります。
 
 応答自体の検証も行います。パースは通るが内容が明らかに架空・プレースホルダ・クエリと無関係な応答（上流 issue #6358 の「静かなゴミ混入」）は、結果に混ぜずにエンジンをサスペンドし、`unresponsive_engines` に `Suspicious response` として出します。
+
+### ページ本文の言語
+
+MCP `read_page` の `accept_language` と HTTP `/search` の同名パラメータは、同じ検証と本文取得処理を使います。HTTP では次のように指定します。
+
+```bash
+curl --fail --get 'http://127.0.0.1:29483/search' \
+  --data-urlencode 'q=서울 날씨' --data 'format=json' \
+  --data 'include_raw_content=1' \
+  --data-urlencode 'accept_language=ko-KR,ko;q=0.9,en;q=0.8'
+```
+
+省略または空文字列ならヘッダを送りません。検索の `language`・`locale`、サーバーのロケール、HTTP クライアントから受けたヘッダからは推測しません。
+値は最大512 ASCIIバイト、16言語範囲です。[RFC 4647 §2.1](https://www.rfc-editor.org/rfc/rfc4647.html#section-2.1) の基本言語範囲（`ko-KR`、`zh-Hant`、`*` など）と、[RFC 9110 §12.4.2](https://www.rfc-editor.org/rfc/rfc9110.html#section-12.4.2) の重み（`q=0`〜`q=1`、小数点以下3桁まで）を受け付けます。改行や不正な値は MCP エラー、HTTP 400 になり、ページ取得を開始しません。
+
+大文字小文字・区切りの空白・重みの末尾のゼロは正規化し、指定順は保ちます。本文キャッシュは URL・抽出文字数上限・正規化した指定値で分離され、言語未指定の本文も別に扱います。MCP で `next_offset` を使う際は、同じ `accept_language` を続けて渡してください。キャッシュは引き続き最大8件で、HTTP の有効期限も変わりません。
+
+指定は直接取得するページとそのリダイレクト、JavaScript レンダラーが RustXNG 経由で取得する GET/HEAD リソースに適用します。リソースは別オリジンの場合も含みますが、宛先検証と取得制限はすべて維持します。`robots.txt` は言語指定なしで取得する従来のポリシーを保ちます。レンダラーへ Cookie や任意のヘッダを渡す機能ではなく、ブラウザー内の `navigator.language` も変更しません。
+
+`fetch.provider = "direct"` で利用できます。[DeepSeek Fetch の公開スキーマ](https://api-docs.deepseek.com/api/fetch/)には取得先の言語指定がないため、外部プロバイダーでの明示指定は取得エラーになります。MCP はエラーを返し、HTTP は他の取得失敗と同様に `raw_content` を付けません。指定を黙って無視したり、別の取得先へ切り替えたりはしません。言語指定は翻訳ではなく、サイトがその言語を返す保証もありません。403 後に別の言語で再試行する処理は追加していません。
 
 ### ディープリサーチ（`GET /research`、上流にない）
 

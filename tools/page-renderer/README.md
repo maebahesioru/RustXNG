@@ -59,9 +59,11 @@ not covered by those API hooks still encounters the rejecting proxy.
 
 POST requests and redirected subresources fail the render. The initial page's
 HTTP redirects remain supported. Login sessions, interactive authentication,
-WebSockets, and service-worker applications are unsupported. Request headers and
-cookies are not forwarded to resources. Unsupported methods or resources rejected
-by RustXNG cause a retrieval error.
+WebSockets, and service-worker applications are unsupported. An explicit
+`accept_language` page preference is applied by RustXNG to all guarded GET/HEAD
+resources, including other origins. Browser cookies and arbitrary request headers
+are not forwarded; `navigator.language` is unchanged. Unsupported methods or
+resources rejected by RustXNG cause a retrieval error.
 
 ## Verify
 

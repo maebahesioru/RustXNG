@@ -10,6 +10,7 @@ use serde::Deserialize;
 use serde_json::json;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
+use super::AcceptLanguage;
 use super::direct::{MAX_BODY_BYTES, is_fetchable};
 
 const RENDER_TIMEOUT: Duration = Duration::from_secs(15);
@@ -40,9 +41,11 @@ pub(super) async fn render(
     url: reqwest::Url,
     media_type: &'static str,
     html: String,
+    language: &AcceptLanguage,
 ) -> Result<String, String> {
     let client = client.clone();
     let command = command.to_vec();
+    let language = language.clone();
     let (cancel, mut cancelled) = tokio::sync::oneshot::channel::<()>();
     // Keep cleanup alive after caller cancellation.
     let result = tokio::spawn(async move {
@@ -50,7 +53,16 @@ pub(super) async fn render(
             permit = RENDERERS.acquire() => permit.map_err(|error| error.to_string())?,
             _ = &mut cancelled => return Err("page rendering cancelled".into()),
         };
-        run(&client, &command, url, media_type, html, &mut cancelled).await
+        run(
+            &client,
+            &command,
+            url,
+            media_type,
+            html,
+            &language,
+            &mut cancelled,
+        )
+        .await
     })
     .await
     .map_err(|error| format!("page renderer task failed: {error}"))?;
@@ -64,6 +76,7 @@ async fn run(
     url: reqwest::Url,
     media_type: &str,
     html: String,
+    language: &AcceptLanguage,
     cancelled: &mut tokio::sync::oneshot::Receiver<()>,
 ) -> Result<String, String> {
     let directory = tempfile::tempdir().map_err(|error| error.to_string())?;
@@ -105,7 +118,7 @@ async fn run(
                         return Err("page rendering exceeds 64 resource requests".into());
                     }
                     let (status, headers, body) =
-                        resource(client, &url, &method, remaining).await?;
+                        resource(client, &url, &method, remaining, language).await?;
                     remaining -= body.len();
                     write_message(
                         &mut input,
@@ -186,6 +199,7 @@ async fn resource(
     url: &str,
     method: &str,
     remaining: usize,
+    language: &AcceptLanguage,
 ) -> Result<(u16, BTreeMap<String, String>, Vec<u8>), String> {
     let url = reqwest::Url::parse(url).map_err(|_| "invalid rendered resource URL")?;
     if !is_fetchable(&url) {
@@ -196,8 +210,8 @@ async fn resource(
         "HEAD" => reqwest::Method::HEAD,
         _ => return Err("page rendering only supports GET and HEAD resources".into()),
     };
-    let mut response = client
-        .request(method, url.clone())
+    let mut response = language
+        .apply(client.request(method, url.clone()))
         .send()
         .await
         .map_err(|error| format!("rendering resource could not be fetched: {error}"))?;
@@ -233,4 +247,68 @@ async fn resource(
         body.extend_from_slice(&chunk);
     }
     Ok((status, headers, body))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    use axum::http::{HeaderMap, header};
+    use axum::{Router, routing::get};
+
+    #[tokio::test]
+    async fn broker_applies_the_explicit_language_without_weakening_destination_checks() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let observed = requests.clone();
+        let app = Router::new().route(
+            "/resource",
+            get(move |headers: HeaderMap| {
+                let language = headers
+                    .get(header::ACCEPT_LANGUAGE)
+                    .map(|value| value.to_str().unwrap().to_string());
+                observed.lock().unwrap().push(language);
+                async { "resource text" }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let (client, _) = super::super::direct::public_client(
+            &crate::settings::Outgoing::default(),
+            &[("example.test".into(), address)],
+        )
+        .unwrap();
+        let url = format!("http://example.test:{}/resource", address.port());
+        let korean = AcceptLanguage::parse("ko-KR,ko;q=0.9").unwrap();
+        for (method, language) in [
+            ("GET", AcceptLanguage::default()),
+            ("GET", korean.clone()),
+            ("HEAD", korean.clone()),
+        ] {
+            assert_eq!(
+                resource(&client, &url, method, 1024, &language)
+                    .await
+                    .unwrap()
+                    .0,
+                200
+            );
+        }
+        for (url, method) in [(format!("http://{address}/resource"), "GET"), (url, "POST")] {
+            assert!(
+                resource(&client, &url, method, 1024, &korean)
+                    .await
+                    .is_err()
+            );
+        }
+        assert_eq!(
+            *requests.lock().unwrap(),
+            [
+                None,
+                Some("ko-kr,ko;q=0.9".into()),
+                Some("ko-kr,ko;q=0.9".into())
+            ]
+        );
+        server.abort();
+    }
 }

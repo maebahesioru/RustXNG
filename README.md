@@ -53,6 +53,8 @@ MCP exposes two read-only tools:
 
 Page fetching checks destinations and redirects for non-public addresses and follows robots.txt (RFC 9309). It does not accept arbitrary URLs through MCP. Treat all returned web text as untrusted content.
 
+Use `accept_language`, for example `"ko-KR,ko;q=0.9,en;q=0.8"`, to request a page-language preference in MCP `read_page` or HTTP `include_raw_content`. Omission sends no language header; each preference has its own cached page. See [validation, providers, and pagination](docs/COMPATIBILITY.md#ページ本文の言語).
+
 For page text, `include_raw_content=1` uses the HTTP API. PDF text extraction requires Poppler (`pdftotext`); scanned PDFs require a separate OCR tool. JavaScript-rendered pages need the optional [Firefox renderer](tools/page-renderer/README.md). Neither is enabled automatically by a standalone release binary.
 
 ## Search profiles

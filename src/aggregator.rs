@@ -42,6 +42,8 @@ pub struct SearchRequest {
     pub exclude_domains: Vec<String>,
     /// Fetch the page text for the top results and return it as raw_content.
     pub include_raw_content: bool,
+    /// Explicit Accept-Language preference for fetched page content.
+    pub accept_language: crate::fetch::AcceptLanguage,
     /// How the selected engines are started.
     pub strategy: crate::settings::SearchStrategy,
     /// Set once the site-scoped second pass already ran, so it cannot recurse.
@@ -68,6 +70,7 @@ impl SearchRequest {
             include_domains: Vec::new(),
             exclude_domains: Vec::new(),
             include_raw_content: false,
+            accept_language: crate::fetch::AcceptLanguage::default(),
             strategy: crate::settings::SearchStrategy::Parallel,
             site_retry_done: false,
             query,
@@ -859,7 +862,7 @@ impl Searcher {
             request.max_results,
         );
         if request.include_raw_content {
-            self.attach_raw_content(&mut results, &request.language)
+            self.attach_raw_content(&mut results, &request.accept_language)
                 .await;
         }
 
@@ -1313,7 +1316,11 @@ impl Searcher {
             .collect()
     }
 
-    async fn attach_raw_content(&self, results: &mut [SearchResult], language: &str) {
+    async fn attach_raw_content(
+        &self,
+        results: &mut [SearchResult],
+        language: &crate::fetch::AcceptLanguage,
+    ) {
         let limit = self.settings.search.raw_content_limit.max(1);
         let count = results.len().min(limit);
         if count == 0 {
@@ -1336,7 +1343,11 @@ impl Searcher {
 
     /// Optional page reads use the same DNS, redirect, body and concurrency
     /// checks as MCP. Unchecked engine-response cache entries are not reused.
-    async fn page_text(&self, url: &str, language: &str) -> Option<crate::fetch::PageContent> {
+    async fn page_text(
+        &self,
+        url: &str,
+        language: &crate::fetch::AcceptLanguage,
+    ) -> Option<crate::fetch::PageContent> {
         match self
             .page_reader
             .read_with_language(url, self.settings.search.raw_content_chars.max(1), language)
@@ -1968,10 +1979,20 @@ mod orchestration_tests {
         .unwrap();
         let url = "http://example.org/article";
         let mut english = vec![SearchResult::new(url, "fixture")];
-        searcher.attach_raw_content(&mut english, "en-US").await;
+        searcher
+            .attach_raw_content(
+                &mut english,
+                &crate::fetch::AcceptLanguage::parse("en-US").unwrap(),
+            )
+            .await;
         assert!(english[0].raw_content.is_some());
         let mut japanese = vec![SearchResult::new(url, "fixture")];
-        searcher.attach_raw_content(&mut japanese, "ja-JP").await;
+        searcher
+            .attach_raw_content(
+                &mut japanese,
+                &crate::fetch::AcceptLanguage::parse("ja-JP").unwrap(),
+            )
+            .await;
         assert!(japanese[0].raw_content.is_some());
 
         let _robots = rx.recv().await.unwrap();
@@ -1997,7 +2018,9 @@ mod orchestration_tests {
             "http://127.0.0.1:9/private",
             "poisoned result",
         )];
-        searcher.attach_raw_content(&mut results, "en").await;
+        searcher
+            .attach_raw_content(&mut results, &crate::fetch::AcceptLanguage::default())
+            .await;
         assert!(results[0].raw_content.is_none());
         assert!(results[0].raw_content_truncated.is_none());
     }

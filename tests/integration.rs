@@ -2,11 +2,12 @@
 //! and the public HTTP API.
 
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use axum::Router;
 use axum::body::Body;
-use axum::http::{Request, StatusCode, Uri, header};
+use axum::http::{HeaderMap, Request, StatusCode, Uri, header};
 use axum::routing::get;
 use http_body_util::BodyExt;
 use tower::ServiceExt;
@@ -229,6 +230,134 @@ base_url = "http://{address}/api/v1"
     let expected: String = text.chars().take(20000).chain(['…']).collect();
     assert_eq!(json["results"][0]["raw_content"], expected);
     assert_eq!(json["results"][0]["raw_content_truncated"], true);
+}
+
+#[tokio::test]
+async fn raw_content_uses_only_the_explicit_language_and_separates_cached_variants() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let url = format!("http://example.com:{}/start", address.port());
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let observed = requests.clone();
+    let redirects = Arc::new(Mutex::new(Vec::new()));
+    let redirected = redirects.clone();
+    let engine_calls = Arc::new(AtomicUsize::new(0));
+    let engine_counter = engine_calls.clone();
+    let upstream = Router::new()
+        .route(
+            "/api/v1/search/",
+            get(move || {
+                engine_counter.fetch_add(1, Ordering::SeqCst);
+                let url = url.clone();
+                async move {
+                    axum::Json(serde_json::json!([{
+                        "url": url,
+                        "title": [{"value": "Language article"}],
+                        "extract": [{"value": "Article text."}],
+                    }]))
+                }
+            }),
+        )
+        .route(
+            "/article",
+            get(move |headers: HeaderMap| {
+                let language = headers
+                    .get(header::ACCEPT_LANGUAGE)
+                    .map(|value| value.to_str().unwrap().to_string());
+                let text = match language.as_deref() {
+                    Some("ko-kr,ko;q=0.9,en;q=0.8") => "한국어 페이지",
+                    Some("en-us") => "English page",
+                    None => "Default page",
+                    value => panic!("unexpected page language: {value:?}"),
+                };
+                observed.lock().unwrap().push(language);
+                async move {
+                    (
+                        [(header::CONTENT_TYPE, "text/html")],
+                        format!("<article>{text}</article>"),
+                    )
+                }
+            }),
+        )
+        .route(
+            "/start",
+            get(move |headers: HeaderMap| {
+                redirected.lock().unwrap().push(
+                    headers
+                        .get(header::ACCEPT_LANGUAGE)
+                        .map(|value| value.to_str().unwrap().to_string()),
+                );
+                async { axum::response::Redirect::temporary("/article") }
+            }),
+        )
+        .route(
+            "/robots.txt",
+            get(|headers: HeaderMap| async move {
+                assert!(!headers.contains_key(header::ACCEPT_LANGUAGE));
+                "User-agent: *\nAllow: /\n"
+            }),
+        );
+    let server = tokio::spawn(async move { axum::serve(listener, upstream).await.unwrap() });
+    let mut settings = settings_for(&format!("http://{address}/api/v1"));
+    settings.search.site_scoped_retry = false;
+    let mut searcher = Searcher::new(settings).unwrap();
+    searcher.page_reader = PageReader::new(
+        &searcher.settings.outgoing,
+        &[("example.com".into(), address)],
+    )
+    .unwrap();
+    let app = router(AppState::new(searcher));
+    let base = "/search?q=article&format=json&full=1&include_raw_content=1&language=ko";
+    for (preference, expected) in [
+        ("", "Default page"),
+        ("KO-KR, ko;q=0.900, en;q=0.8", "한국어 페이지"),
+        ("en-US", "English page"),
+        ("ko-kr,ko;q=0.9,en;q=0.8", "한국어 페이지"),
+        ("", "Default page"),
+    ] {
+        let parameter = url::form_urlencoded::Serializer::new(String::new())
+            .append_pair("accept_language", preference)
+            .finish();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("{base}&{parameter}"))
+                    .header(header::ACCEPT_LANGUAGE, "fr")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_text(response).await;
+        let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(json["results"][0]["raw_content"], expected);
+    }
+    assert_eq!(
+        *requests.lock().unwrap(),
+        [
+            None,
+            Some("ko-kr,ko;q=0.9,en;q=0.8".into()),
+            Some("en-us".into())
+        ]
+    );
+    assert_eq!(*redirects.lock().unwrap(), *requests.lock().unwrap());
+    assert_eq!(engine_calls.load(Ordering::SeqCst), 1);
+
+    let (status, body, _) = get_uri(&app,
+        "/search?q=invalid&format=json&include_raw_content=1&accept_language=en%0D%0AX-Test%3Ainjected",
+    ).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        serde_json::from_str::<serde_json::Value>(&body).unwrap()["error"]
+            .as_str()
+            .unwrap()
+            .contains("accept_language")
+    );
+    assert_eq!(engine_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(requests.lock().unwrap().len(), 3);
+    server.abort();
 }
 
 #[tokio::test]
