@@ -1,6 +1,11 @@
 """Offline fixture tests for Japanese benchmark scoring and query construction."""
 
+import contextlib
+import hashlib
+import io
 import json
+import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 from pathlib import Path
@@ -10,6 +15,86 @@ from eval_japanese import broad_metrics, canonical_page, make_query, pinpoint_su
 
 
 class JapaneseBenchmarkTests(unittest.TestCase):
+    def test_additive_qiita_requires_a_baseline_without_qiita(self):
+        import eval_japanese
+
+        for extra in ([], ["--engines", "qiita"], ["--engines", "wikipedia,qiita"]):
+            with self.subTest(extra=extra), \
+                    patch.object(sys, "argv", ["eval_japanese.py", "--dry-run", *extra]), \
+                    patch.object(eval_japanese, "server_snapshot") as snapshot, \
+                    patch.object(eval_japanese, "search") as search, \
+                    contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as error:
+                    eval_japanese.main()
+                self.assertEqual(error.exception.code, 2)
+                snapshot.assert_not_called()
+                search.assert_not_called()
+
+    def test_dry_run_counts_the_matrix_without_network_or_output_files(self):
+        import eval_japanese
+
+        with tempfile.TemporaryDirectory() as directory:
+            diagnostics = Path(directory) / "diagnostics.json"
+            diagnostics.write_text(json.dumps({"cases": [
+                {"id": "one", "exact_error": "エラー", "keyword_terms": ["エラー"]}
+            ]}), encoding="utf-8")
+            broad = Path(directory) / "broad.json"
+            broad.write_text(json.dumps({"cases": [
+                {"id": "two", "query": "recent changes"}
+            ]}), encoding="utf-8")
+            output = Path(directory) / "output"
+            argv = ["eval_japanese.py", "--dry-run", "--output", str(output),
+                    "--engines", "wikipedia", "--variants", "raw,quoted",
+                    "--diagnostics-json", str(diagnostics), "--broad-fresh-json", str(broad)]
+            stdout = io.StringIO()
+            with patch.object(sys, "argv", argv), \
+                    patch.object(eval_japanese, "server_snapshot") as snapshot, \
+                    patch.object(eval_japanese, "search") as search, \
+                    contextlib.redirect_stdout(stdout):
+                eval_japanese.main()
+            self.assertFalse(output.exists())
+            snapshot.assert_not_called()
+            search.assert_not_called()
+            plan = json.loads(stdout.getvalue())
+            self.assertEqual(plan["search_requests"], 24)
+            self.assertEqual(plan["requests_by_group"], {"pinpoint": 16, "broad_fresh": 8})
+            self.assertEqual(plan["qiita_selected_search_requests"], 12)
+            self.assertEqual(plan["engine_conditions"], [
+                {"qiita": False, "requested_engines": ["wikipedia"], "search_requests": 12},
+                {"qiita": True, "requested_engines": ["wikipedia", "qiita"], "search_requests": 12},
+            ])
+            self.assertIsNone(plan["upstream_request_count"])
+            for group, path in (("pinpoint", diagnostics), ("broad_fresh", broad)):
+                self.assertEqual(plan["corpora"][group]["sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+
+    def test_invalid_matrix_values_are_rejected_before_network_access(self):
+        import eval_japanese
+
+        for option, value in (("--qiita", "of,on"), ("--variants", "raw,raw"),
+                              ("--groups", "pinpiont"), ("--languages", "ja,")):
+            with self.subTest(option=option, value=value), \
+                    patch.object(sys, "argv", ["eval_japanese.py", "--dry-run", "--engines", "wikipedia", option, value]), \
+                    patch.object(eval_japanese, "server_snapshot") as snapshot, \
+                    contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    eval_japanese.main()
+                snapshot.assert_not_called()
+
+    def test_existing_evidence_is_not_overwritten(self):
+        import eval_japanese
+
+        with tempfile.TemporaryDirectory() as directory:
+            saved = Path(directory) / "metadata.json"
+            saved.write_text("original evidence", encoding="utf-8")
+            argv = ["eval_japanese.py", "--output", directory, "--qiita", "off"]
+            with patch.object(sys, "argv", argv), \
+                    patch.object(eval_japanese, "server_snapshot") as snapshot, \
+                    contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    eval_japanese.main()
+                snapshot.assert_not_called()
+            self.assertEqual(saved.read_text(encoding="utf-8"), "original evidence")
+
     def test_corpus_has_30_pinned_official_japanese_diagnostics(self):
         corpus = json.loads((Path(__file__).resolve().parents[1] / "bench/japanese-search/diagnostics.json").read_text(encoding="utf-8"))
         self.assertEqual(len(corpus["cases"]), 30)

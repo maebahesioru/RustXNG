@@ -22,21 +22,56 @@ Start the RustXNG server using the configuration you want to evaluate. Supply an
 }
 ```
 
-Then run from the repository root:
+Inspect the request plan before running a provider-backed evaluation. This command
+does not contact the server or create an output directory:
+
+```sh
+python3 tools/eval_japanese.py --dry-run --engines wikipedia --qiita off
+```
+
+The explicit engine list is a comparison condition, not evidence that the
+operator's intended use is permitted. Review the selected providers' conditions,
+quotas, and response-retention rights first. For Qiita, the [API documentation](https://qiita.com/api/v2/docs)
+states 60 requests/hour per IP without authentication and 1,000/hour with
+authentication. Its [application guidance](https://help.qiita.com/ja/articles/qiita-api)
+permits applications within the API's features, prohibits advertising
+monetization of those applications, and does not permit scraping. The plan counts
+RustXNG search calls selecting Qiita, not actual upstream requests; shared IP
+traffic, retries, routing and caches also affect quota use.
+
+After choosing an appropriate configuration, run from the repository root:
 
 ```sh
 python3 tools/eval_japanese.py \
   --base http://127.0.0.1:18991 \
-  --output bench/results/japanese-2026-11-02 \
+  --output /tmp/rustxng-japanese-run \
   --run-context /path/to/run-context.json \
+  --engines wikipedia --qiita off \
   --repeats 2
 ```
 
-The default matrix independently crosses exact, quoted, and curated-keyword pinpoint queries with the server-default and `ja` language conditions, plus Qiita-engine-off/on conditions. The broad/fresh questions run as a separate query group with a one-month time range. That default is 768 serial requests (720 pinpoint and 48 broad/fresh); use `--groups`, `--variants`, `--languages`, and `--qiita` to reduce or isolate conditions. For an additive Qiita comparison, pass the same explicit baseline engine list, such as `--engines bing,duckduckgo`; the `on` condition appends `qiita` to that list. Without `--engines`, the `on` condition selects only Qiita while `off` uses the server default, so the results are not an additive engine comparison. `--locale` adds a separately recorded locale parameter. The script requires at least two repetitions.
+The default matrix independently crosses exact, quoted, and curated-keyword pinpoint queries with the server-default and `ja` language conditions, plus Qiita-engine-off/on conditions. The broad/fresh questions run as a separate query group with a one-month time range. With an explicit baseline, that full matrix is 768 serial requests (720 pinpoint and 48 broad/fresh), including 384 calls selecting Qiita. This exceeds Qiita's hourly anonymous allowance if issued in one hour. Use `--groups`, `--variants`, `--languages`, and `--qiita` to reduce or isolate conditions.
+
+The `on` condition requires an explicit `--engines` baseline and appends `qiita`
+to that same list. The baseline must exclude Qiita, so the `off` condition cannot
+silently include it. Invalid or duplicate matrix values fail before any server
+request. Historical runs made without an explicit baseline retain their original
+meaning; this validation does not turn them into additive comparisons. `--locale`
+adds a separately recorded locale parameter. The script requires at least two
+repetitions.
+
+Use a new output directory for each run. The evaluator refuses to overwrite
+existing metadata, observations, or summaries so historical evidence is retained.
+
+`--diagnostics-json` and `--broad-fresh-json` accept independently frozen corpora.
+Both selected files are hashed in the plan and run metadata, and diagnostic case
+origins and dataset licenses are recorded from the fixture. Supplying a different
+file does not itself establish that its cases are held out or independently
+captured. The default 30 cases remain template instances.
 
 The output directory contains:
 
-- `metadata.json`: corpus/settings hashes, commit, parameters, supplied run context, and before-run server `/stats` and `/stats/errors` snapshots.
+- `metadata.json`: hashes of both selected corpora, the request plan, repository settings hash and commit, parameters, supplied run context, and before-run server `/stats` and `/stats/errors` snapshots. The repository settings hash does not identify the running server's configuration; supply that through `--run-context`.
 - `observations.jsonl`: one complete raw JSON payload and one compact extraction per request, including the actual query transformation, language/Qiita/time conditions, exact reference rank, returned publication dates, and snippet/raw-content byte and Unicode-character counts.
 - `summary.json`: hit@1, hit@5, MRR, failures, p50/p95 latency, and broad/fresh source diversity, duplicate-page, publication-date, and time-window coverage measures.
 

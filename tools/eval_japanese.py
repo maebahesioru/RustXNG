@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import statistics
 import subprocess
 import time
@@ -76,7 +77,11 @@ def build_search_url(base: str, query: str, language: str, qiita: bool,
     if locale:
         params["locale"] = locale
     selected_engines = list(baseline_engines or [])
-    if qiita and "qiita" not in selected_engines:
+    if any(name.casefold() == "qiita" for name in selected_engines):
+        raise ValueError("the baseline engine list must exclude qiita; use --qiita for that condition")
+    if qiita and not selected_engines:
+        raise ValueError("the Qiita on condition requires an explicit --engines baseline")
+    if qiita:
         selected_engines.append("qiita")
     if selected_engines:
         params["engines"] = ",".join(selected_engines)
@@ -211,10 +216,40 @@ def server_snapshot(base: str, path: str, timeout: float) -> dict:
         return {"error": f"{type(error).__name__}: {error}"}
 
 
+def build_work(groups: list[str], diagnostics: list[dict], broad: list[dict],
+               variants: list[str], languages: list[str], qiita_values: list[bool],
+               repeats: int) -> list[tuple]:
+    work = []
+    if "pinpoint" in groups:
+        for case in diagnostics:
+            for variant in variants:
+                for language in languages:
+                    for qiita in qiita_values:
+                        for repeat in range(1, repeats + 1):
+                            work.append(("pinpoint", case, variant, language, qiita, repeat, None))
+    if "broad_fresh" in groups:
+        for case in broad:
+            for language in languages:
+                for qiita in qiita_values:
+                    for repeat in range(1, repeats + 1):
+                        work.append(("broad_fresh", case, "raw", language, qiita, repeat, case.get("time_range", "month")))
+    return work
+
+
+def selection(value: str, allowed: set[str] | None = None) -> list[str]:
+    values = [item.strip() for item in value.split(",")]
+    if not all(values) or len(set(values)) != len(values):
+        raise ValueError("condition lists must be nonempty and contain no duplicates")
+    if allowed is not None and not set(values) <= allowed:
+        raise ValueError(f"unknown condition; expected values from {', '.join(sorted(allowed))}")
+    return values
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", default="http://127.0.0.1:18991")
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--dry-run", action="store_true", help="Print the request plan without contacting the server or creating output files")
     parser.add_argument("--groups", default="pinpoint,broad_fresh")
     parser.add_argument("--variants", default="raw,quoted,keywords")
     parser.add_argument("--languages", default="default,ja")
@@ -226,59 +261,84 @@ def main() -> None:
     parser.add_argument("--locale", help="Optional locale parameter, recorded separately from language")
     parser.add_argument("--engines", help="Comma-separated explicit baseline engine list; Qiita is added in the on condition")
     parser.add_argument("--run-context", type=Path, help="JSON describing cache, engines, local index, region and server settings")
+    parser.add_argument("--diagnostics-json", type=Path, default=DIAGNOSTICS)
     parser.add_argument("--broad-fresh-json", type=Path, default=BROAD_FRESH)
-    parser.add_argument("--diagnostics-json", type=Path, default=DIAGNOSTICS, help="Pinned diagnostic corpus, including independently captured compiler cases")
     args = parser.parse_args()
     if args.repeats < 2:
         parser.error("--repeats must be at least 2")
+    if not math.isfinite(args.delay) or not math.isfinite(args.timeout) or args.delay < 0 or args.timeout <= 0:
+        parser.error("--delay must be nonnegative and --timeout must be positive")
+    if args.output is None and not args.dry_run:
+        parser.error("--output is required unless --dry-run is set")
+    try:
+        groups = selection(args.groups, {"pinpoint", "broad_fresh"})
+        variants = selection(args.variants, {"raw", "quoted", "keywords"})
+        languages = selection(args.languages)
+        qiita_values = [value == "on" for value in selection(args.qiita, {"off", "on"})]
+        baseline_engines = selection(args.engines) if args.engines else []
+        for qiita in qiita_values:
+            build_search_url(args.base, "", "default", qiita, None, False, baseline_engines=baseline_engines)
+    except ValueError as error:
+        parser.error(str(error))
+    diagnostic_data = json.loads(args.diagnostics_json.read_text(encoding="utf-8")) if "pinpoint" in groups else {}
+    diagnostics = diagnostic_data.get("cases", [])
+    broad = json.loads(args.broad_fresh_json.read_text(encoding="utf-8")).get("cases", []) if "broad_fresh" in groups else []
+    work = build_work(groups, diagnostics, broad, variants, languages, qiita_values, args.repeats)
+    if not work:
+        parser.error("the selected corpus and conditions produce no requests")
+    corpus_files = {}
+    for group, path in (("pinpoint", args.diagnostics_json), ("broad_fresh", args.broad_fresh_json)):
+        if group in groups:
+            corpus_files[group] = {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+    plan = {
+        "search_requests": len(work),
+        "requests_by_group": {group: sum(row[0] == group for row in work) for group in groups},
+        "qiita_selected_search_requests": sum(row[4] for row in work),
+        "engine_conditions": [
+            {"qiita": qiita, "requested_engines": (baseline_engines + (["qiita"] if qiita else [])) or None,
+             "search_requests": sum(row[4] == qiita for row in work)}
+            for qiita in qiita_values
+        ],
+        "variants": variants, "languages": languages, "locale": args.locale,
+        "repeats": args.repeats, "delay_seconds": args.delay, "timeout_seconds": args.timeout,
+        "raw_content_requested": args.include_raw_content, "corpora": corpus_files,
+        "upstream_request_count": None,
+        "scope": "Counts RustXNG search calls, not provider requests or quota consumption. Server routing, retries, cache and other clients affect upstream traffic; review provider terms and quota before running.",
+    }
+    if args.dry_run:
+        print(json.dumps(plan, ensure_ascii=False, indent=2))
+        return
+    if any((args.output / name).exists() for name in ("metadata.json", "observations.jsonl", "summary.json")):
+        parser.error("--output already contains evaluation artifacts; use a new directory")
     args.output.mkdir(parents=True, exist_ok=True)
-    groups = set(args.groups.split(","))
-    variants = args.variants.split(",")
-    languages = args.languages.split(",")
-    qiita_values = [value == "on" for value in args.qiita.split(",")]
-    baseline_engines = [value for value in (args.engines or "").split(",") if value]
-    diagnostics = json.loads(args.diagnostics_json.read_text())["cases"]
-    broad = json.loads(args.broad_fresh_json.read_text()).get("cases", []) if "broad_fresh" in groups else []
     started = datetime.now(timezone.utc).isoformat()
     settings_path = HERE / "settings.toml"
     metadata = {
         "started_at": started, "base": args.base,
         "commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=HERE, text=True).strip(),
         "settings_sha256": hashlib.sha256(settings_path.read_bytes()).hexdigest(),
-        "corpus_sha256": hashlib.sha256(args.diagnostics_json.read_bytes()).hexdigest(),
+        "settings_scope": "Repository settings.toml; actual server configuration must be supplied in --run-context",
+        "corpus_sha256": corpus_files.get("pinpoint", {}).get("sha256"),
+        "corpora": corpus_files, "request_plan": plan,
+        "diagnostic_case_origins": sorted({case.get("case_origin", "unspecified") for case in diagnostics}),
         "server_context": load_context(args.run_context),
         "server_snapshots": {"before_stats": server_snapshot(args.base, "/stats", args.timeout),
                              "before_engine_errors": server_snapshot(args.base, "/stats/errors", args.timeout)},
-        "request_defaults": {"format": "json", "max_results": 10, "full": 1, "category": "server default", "engine": "server default", "region": None, "locale": args.locale, "cache_bypass": False, "raw_content_requested": args.include_raw_content},
+        "request_defaults": {"format": "json", "max_results": 10, "full": 1, "category": "server default", "engine": baseline_engines or "server default", "region": None, "locale": args.locale, "cache_bypass": False, "raw_content_requested": args.include_raw_content},
         "conditions": {"variants": variants, "languages": languages, "qiita_engine": qiita_values,
                        "baseline_engines": baseline_engines or "server default (unspecified)"},
         "time_range": {"pinpoint": None, "broad_fresh": "month"},
         "repeats": args.repeats,
-        "source_license": "TypeScript diagnostic localization: Apache-2.0; reference documentation terms remain with TypeScript website",
+        "source_license": diagnostic_data.get("dataset_license", "unspecified"),
         "tokenizer": None,
         "token_count_status": "unmeasured; no tokenizer implementation/version is specified",
-        "limitations": ["No live benchmark is run by this script's tests.", "The Japanese messages are official localization templates with explicit placeholder instantiations, not captured compiler transcripts.", "Cache, engine and local-index state require an operator-supplied --run-context to be fully attributable."],
+        "limitations": ["No live benchmark is run by this script's tests.", "Case origins and licenses are supplied by the fixture; this tool does not establish held-out independence.", "Cache, engine and local-index state require an operator-supplied --run-context to be fully attributable."],
     }
     (args.output / "metadata.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n")
     observations = []
-    total = len(diagnostics) * args.repeats * len(variants) * len(languages) * len(qiita_values) if "pinpoint" in groups else 0
-    total += len(broad) * args.repeats * len(languages) * len(qiita_values) if "broad_fresh" in groups else 0
+    total = len(work)
     with (args.output / "observations.jsonl").open("w") as out:
         index = 0
-        work = []
-        if "pinpoint" in groups:
-            for case in diagnostics:
-                for variant in variants:
-                    for language in languages:
-                        for qiita in qiita_values:
-                            for repeat in range(1, args.repeats + 1):
-                                work.append(("pinpoint", case, variant, language, qiita, repeat, None))
-        if "broad_fresh" in groups:
-            for case in broad:
-                for language in languages:
-                    for qiita in qiita_values:
-                        for repeat in range(1, args.repeats + 1):
-                            work.append(("broad_fresh", case, "raw", language, qiita, repeat, case.get("time_range", "month")))
         for group, case, variant, language, qiita, repeat, time_range in work:
             index += 1
             query = make_query(case, variant) if group == "pinpoint" else case["query"]
