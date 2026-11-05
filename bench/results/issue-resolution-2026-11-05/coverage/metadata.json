@@ -1,0 +1,15 @@
+{
+  "started_at": "2026-11-05T14:16:24.218118+00:00",
+  "binary_sha256": "ad093bc27222d157a7fc0e05c020658540922046d1ec4f533ba54d2c68e8bb25",
+  "settings_sha256": "f9332bf1c203fb9342baf173a7f5d6c712a95f2f0611bc82845bcad9e796000f",
+  "questions_sha256": "b3cda086dd3497764243068f615f0ffb0ee9130e7421df9d417a47033ced214c",
+  "protocol": "Fresh process/cache for every run; shared OS file cache; same two existing local indexes; alternating profile order; no tuning between runs; 1.1 second inter-query delay; max_results=10; no raw page fetch; source API highlights; all HTTP responses retained. Paid API explicitly selected. No DeepSeek calls.",
+  "order": [
+    "standard-1",
+    "api-1",
+    "api-2",
+    "standard-2"
+  ],
+  "completed_at": "2026-11-05T14:29:14.515948+00:00",
+  "final_settings_note": "PubMed was disabled after capture because its two-call offline transport bypasses shared pacing. No question in any of these four retained runs selected PubMed or returned a PubMed-produced result; all observed sources/settings are unchanged. Final local-index change only exempts single-host indexes from host caps; these evaluated indexes contain multiple hosts."
+}

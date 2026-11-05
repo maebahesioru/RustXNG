@@ -250,6 +250,11 @@ pub struct PageReader {
 }
 
 impl PageReader {
+    /// Auxiliary probes must not invoke an operator's paid page backend.
+    pub(crate) fn is_direct(&self) -> bool {
+        self.source.is_none()
+    }
+
     #[cfg(test)]
     pub(crate) fn with_test_client(mut self, client: reqwest::Client) -> Self {
         self.client = client;

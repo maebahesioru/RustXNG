@@ -29,7 +29,7 @@ from reference_urls import first_hit_rank
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def search(base: str, query: str, extra: dict[str, str], timeout: float) -> dict:
+def search(base: str, query: str, extra: dict[str, str], timeout: float, retain_payload: bool = False) -> dict:
     params = {"q": query, "format": "json", "max_results": "10", **extra}
     url = base.rstrip("/") + "/search?" + urllib.parse.urlencode(params)
     request = urllib.request.Request(url, headers={"User-Agent": "rustxng-quality-eval"})
@@ -49,6 +49,7 @@ def search(base: str, query: str, extra: dict[str, str], timeout: float) -> dict
     # Which engines found each result, for per-engine contribution reports.
     engines = [list(item.get("engines") or [item.get("engine", "")]) for item in items]
     return {
+        **({"payload": payload} if retain_payload else {}),
         "millis": millis,
         "urls": urls,
         "engines": engines,
@@ -106,6 +107,7 @@ def main() -> int:
     )
     parser.add_argument("--restart-every", type=int, default=20)
     parser.add_argument("--port", type=int, default=8979)
+    parser.add_argument("--retain-payload", action="store_true", help="Retain the complete JSON response for offline payload-budget comparisons")
     args = parser.parse_args()
 
     extra: dict[str, str] = {}
@@ -129,7 +131,7 @@ def main() -> int:
             base = f"http://127.0.0.1:{args.port}"
             restart_instance(args.restart_binary, args.port, base)
             print(f"  (restarted instance at question {index})", file=sys.stderr)
-        result = search(base, question["query"], extra, args.timeout)
+        result = search(base, question["query"], extra, args.timeout, args.retain_payload)
         rank = hit_rank(result.get("urls") or [], question["gold"])
         if rank is not None:
             ranks.append(rank)

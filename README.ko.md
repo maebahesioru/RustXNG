@@ -63,7 +63,8 @@ HTTP API는 `include_raw_content=1`로 본문을 가져올 수 있습니다. PDF
 
 | 프로필 | 명령 | 검색 원천 |
 | --- | --- | --- |
-| Standard | `rustxng` | 자동 접근을 거부하는 일부 제공자 등을 제외한 기본 구성 |
+| Standard | `rustxng` | 엔드포인트·사용 조건을 기록한 키 없는 항목 34개와 로컬 색인 |
+| API | `rustxng --profile api` | Standard에 명시적으로 설정한 유료 Exa Search 추가 (`EXA_API_KEY`) |
 | Clean | `rustxng --profile clean` | 선택된 공개 API와 로컬 색인 |
 | Full | `rustxng --profile full` | 자동 접근 제한 또는 허가가 확인되지 않은 HTML 검색 제공자도 포함 |
 
@@ -71,7 +72,7 @@ HTTP API는 `include_raw_content=1`로 본문을 가져올 수 있습니다. PDF
 
 MCP에서도 `rustxng mcp --profile clean`처럼 선택할 수 있습니다. 일부 API 제공자는 키나 요금을 요구합니다. RustXNG를 로컬에서 실행해도 검색어는 활성화한 외부 제공자로 전송됩니다.
 
-제공자별 확인 상태는 [이용 조건과 제공자 목록](docs/PROVIDERS.md)에 정리했습니다. 이전에 모든 제공자의 조건을 확인하기 전에 성능을 강조한 것은 제 실수였습니다. 관련 검토는 계속 진행하고 있습니다.
+Standard는 검토하지 않은 제공자를 모두 기본 비활성화합니다. 검토 범위는 기록된 검색 용도이며 콘텐츠 라이선스, 할당량과 배포 목적의 조건은 계속 적용됩니다. 키가 존재하는 것만으로 API를 활성화하지 않습니다. [현재 측정 및 설정](docs/ISSUE-RESOLUTION-2026-11-05.md)을 참고하세요.
 
 ## 설치와 설정
 

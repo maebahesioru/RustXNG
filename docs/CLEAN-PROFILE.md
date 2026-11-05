@@ -4,15 +4,17 @@
 一般Web検索のHTML取得（Google・Bing・DuckDuckGo など）は利用しません。足りない分は自前のインデックス（`rustxng-index`、robots.txt に配慮したクロール）で補います。
 **`clean` は法的な適合性の認定ではありません。** 公開APIでも商用利用、検索結果の保存・再配信、帰属表示、クォータは個別に確認する必要があります。記録と未確認事項は[プロバイダーの利用条件](PROVIDERS.md)・[台帳](providers.csv)を参照してください。
 
+2026-11-05: Standardも条件を記録した取得先だけに絞りました。Cleanはその中の小さい許可リストと、より保守的な全体送信間隔を使います。PyPIのHTML検索とキーが必要なOpenAlexは許可リストから外しました。以下の過去の測定は当時の設定の記録です。
+
 ## 何を有効にしているか
 
-`[search] engine_allowlist` には**23件**の検索元を列挙しています。実際の動作・応答にはAPIの制限や環境が影響します。別に自前のインデックスを2種類指定できます（文書クロールの`index-docs`と、Wikipediaダンプの`index-wikipedia`）。ディレクトリが存在しなければ、その索引は利用されません（[Wikipedia索引](WIKIPEDIA-INDEX.md)）。許可リストは表示名で照合します（`mediawiki`のような内部型IDは共有されるため使用しません）。
+`[search] engine_allowlist` には**21件**の検索元を列挙しています。実際の動作・応答にはAPIの制限や環境が影響します。別に自前のインデックスを2種類指定できます（文書クロールの`index-docs`と、Wikipediaダンプの`index-wikipedia`）。ディレクトリが存在しなければ、その索引は利用されません（[Wikipedia索引](WIKIPEDIA-INDEX.md)）。許可リストは表示名で照合します（`mediawiki`のような内部型IDは共有されるため使用しません）。
 
 | 種別 | エンジン |
 | --- | --- |
 | Wikimedia 系 | wikipedia, wikipedia any words, wikidata, wikibooks, wikinews, wikiquote, wikisource, wikispecies, wikiversity, wikivoyage, wiktionary, wikicommons |
-| 開発者向け | github, stack overflow, crates.io, npm, pypi |
-| 学術 | arxiv, crossref, semantic scholar, openalex |
+| 開発者向け | github, stack overflow, crates.io, npm |
+| 学術 | arxiv, crossref, semantic scholar |
 | 地図・画像 | openstreetmap, openverse |
 
 あわせて次の設定を入れています。

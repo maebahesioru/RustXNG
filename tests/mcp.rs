@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use axum::Router;
-use axum::http::{HeaderMap, header};
+use axum::http::header;
 use axum::response::Redirect;
 use axum::routing::get;
 use rmcp::model::{CallToolRequestParams, CallToolResult};
@@ -78,15 +78,13 @@ async fn connect_with_page(page: String) -> Fixture {
             )
             .route(
                 "/rust",
-                get(move |headers: HeaderMap| {
+                get(move |headers: axum::http::HeaderMap| {
                     counter.fetch_add(1, Ordering::SeqCst);
-                    let page = match headers.get(header::ACCEPT_LANGUAGE) {
-                        Some(language) => format!(
-                            "<article>{} page text</article>",
-                            language.to_str().unwrap(),
-                        ),
-                        None => page.clone(),
-                    };
+                    let language = headers
+                        .get(header::ACCEPT_LANGUAGE)
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or("missing");
+                    let page = page.replace("{{accept-language}}", language);
                     async move { ([(header::CONTENT_TYPE, "text/html")], page) }
                 }),
             )
@@ -217,6 +215,123 @@ async fn tools_are_listed_read_only_with_schemas() {
 }
 
 #[tokio::test]
+async fn actual_structured_payloads_obey_explicit_token_budgets() {
+    let article = format!(
+        "<article>{}</article>",
+        "所有権😀とメモリ安全性。\"quoted\" \\".repeat(500)
+    );
+    let Fixture {
+        client,
+        page_fetches,
+        ..
+    } = connect_with_page(article).await;
+    for encoding in ["cl100k_base", "o200k_base"] {
+        let search = call(
+            &client,
+            "search",
+            json!({
+                "query":"rust", "limit":5,
+                "tokenizer":encoding, "max_payload_tokens":512
+            }),
+        )
+        .await;
+        let payload = structured(&search);
+        let tokenizer = tiktoken::get_encoding(encoding).unwrap();
+        assert!(tokenizer.count(&payload.to_string()) <= 512);
+        assert_eq!(payload["token_budget"]["tokenizer"], encoding);
+        let url = payload["results"][0]["url"].as_str().unwrap().to_owned();
+        let page = call(
+            &client,
+            "read_page",
+            json!({
+                "url":url, "max_chars":20000,
+                "tokenizer":encoding, "max_payload_tokens":256
+            }),
+        )
+        .await;
+        let payload = structured(&page);
+        assert!(tokenizer.count(&payload.to_string()) <= 256);
+        assert_eq!(payload["url"], url);
+        assert!(payload["truncated"].as_bool().unwrap());
+        assert!(!payload["text"].as_str().unwrap().is_empty());
+        assert!(payload["next_offset"].as_u64().unwrap() > 0);
+    }
+    assert_eq!(page_fetches.load(Ordering::Relaxed), 1);
+    for args in [
+        json!({"query":"rust", "max_payload_tokens":100}),
+        json!({"query":"rust", "tokenizer":"guess", "max_payload_tokens":100}),
+        json!({"query":"rust", "tokenizer":"o200k_base"}),
+    ] {
+        assert_eq!(call(&client, "search", args).await.is_error, Some(true));
+    }
+    client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn read_page_uses_explicit_language_and_separates_cached_variants() {
+    let Fixture {
+        client,
+        page_fetches,
+        origin,
+        ..
+    } = connect_with_page("<article>language={{accept-language}}</article>".into()).await;
+    let results = call(&client, "search", json!({"query":"rust", "limit":1})).await;
+    let url = structured(&results)["results"][0]["url"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let korean = call(
+        &client,
+        "read_page",
+        json!({"url":url, "accept_language":"KO-KR ; q=1.000, ko;q=0.900,en;q=0.8"}),
+    )
+    .await;
+    assert_eq!(
+        structured(&korean)["text"],
+        "language=ko-kr,ko;q=0.9,en;q=0.8"
+    );
+    let english = call(
+        &client,
+        "read_page",
+        json!({"url":url, "accept_language":"en-US"}),
+    )
+    .await;
+    assert_eq!(structured(&english)["text"], "language=en-us");
+    let default = call(&client, "read_page", json!({"url":url})).await;
+    assert_eq!(structured(&default)["text"], "language=missing");
+    let again = call(
+        &client,
+        "read_page",
+        json!({"url":url, "accept_language":"ko-kr,ko;q=0.9,en;q=0.8"}),
+    )
+    .await;
+    assert_eq!(
+        structured(&again)["text"],
+        "language=ko-kr,ko;q=0.9,en;q=0.8"
+    );
+    assert_eq!(page_fetches.load(Ordering::Relaxed), 3);
+
+    for language in ["en\r\nX-Test: injected", "en;q=1.001"] {
+        let error = call(
+            &client,
+            "read_page",
+            json!({"url":url, "accept_language":language}),
+        )
+        .await;
+        assert!(error_text(&error).contains("accept_language"));
+    }
+    let unreturned = call(
+        &client,
+        "read_page",
+        json!({"url":format!("{origin}/rust-book"), "accept_language":"ko-KR"}),
+    )
+    .await;
+    assert!(error_text(&unreturned).contains("only reads URLs that search returned"));
+    assert_eq!(page_fetches.load(Ordering::Relaxed), 3);
+    client.cancel().await.unwrap();
+}
+#[tokio::test]
 async fn search_returns_ranked_snippets_without_page_text() {
     let Fixture { client, origin, .. } = connect().await;
     let result = call(&client, "search", json!({"query": "rust", "limit": 2})).await;
@@ -292,87 +407,6 @@ async fn read_page_pages_through_a_returned_url_by_character() {
         1,
         "the page is fetched once and then paged from memory"
     );
-    client.cancel().await.unwrap();
-}
-
-#[tokio::test]
-async fn read_page_keeps_language_variants_separate_while_paging() {
-    let Fixture {
-        client,
-        origin,
-        page_fetches,
-        ..
-    } = connect().await;
-    call(&client, "search", json!({"query": "rust", "limit": 1})).await;
-    let url = format!("{origin}/rust");
-    let preference = "KO-KR ; q=1.000, ko;q=0.900,en;q=0.8";
-    let first = call(
-        &client,
-        "read_page",
-        json!({
-            "url": url, "accept_language": preference, "max_chars": 8,
-        }),
-    )
-    .await;
-    let first = structured(&first);
-    let rest = call(
-        &client,
-        "read_page",
-        json!({
-            "url": url, "accept_language": "ko-kr,ko;q=0.9,en;q=0.8",
-            "offset": first["next_offset"],
-        }),
-    )
-    .await;
-    assert_eq!(
-        format!(
-            "{}{}",
-            first["text"].as_str().unwrap(),
-            structured(&rest)["text"].as_str().unwrap()
-        ),
-        "ko-kr,ko;q=0.9,en;q=0.8 page text",
-    );
-    assert_eq!(page_fetches.load(Ordering::SeqCst), 1);
-
-    let english = call(
-        &client,
-        "read_page",
-        json!({"url": url, "accept_language": "en-US"}),
-    )
-    .await;
-    assert_eq!(structured(&english)["text"], "en-us page text");
-    let default = call(&client, "read_page", json!({"url": url})).await;
-    assert_eq!(structured(&default)["text"], PAGE_TEXT);
-    let korean = call(
-        &client,
-        "read_page",
-        json!({"url": url, "accept_language": preference}),
-    )
-    .await;
-    assert_eq!(
-        structured(&korean)["text"],
-        "ko-kr,ko;q=0.9,en;q=0.8 page text"
-    );
-    assert_eq!(page_fetches.load(Ordering::SeqCst), 3);
-
-    for language in ["en\r\nX-Test: injected", "en;q=1.001"] {
-        let error = call(
-            &client,
-            "read_page",
-            json!({"url": url, "accept_language": language}),
-        )
-        .await;
-        assert!(error_text(&error).contains("accept_language"));
-    }
-    let unreturned = url.replacen("http:", "https:", 1);
-    let error = call(
-        &client,
-        "read_page",
-        json!({"url": unreturned, "accept_language": "ko-KR"}),
-    )
-    .await;
-    assert!(error_text(&error).contains("only reads URLs that search returned"));
-    assert_eq!(page_fetches.load(Ordering::SeqCst), 3);
     client.cancel().await.unwrap();
 }
 
@@ -533,12 +567,7 @@ async fn read_page_only_reaches_public_addresses_and_bounds_downloads() {
         (format!("{origin}/to-loopback"), "could not be fetched"),
         (format!("{origin}/to-localhost"), "could not be fetched"),
     ] {
-        let result = call(
-            &client,
-            "read_page",
-            json!({"url": url, "accept_language": "ko-KR"}),
-        )
-        .await;
+        let result = call(&client, "read_page", json!({"url": url})).await;
         assert!(error_text(&result).contains(reason), "{url}");
     }
     assert_eq!(page_fetches.load(Ordering::SeqCst), 0);

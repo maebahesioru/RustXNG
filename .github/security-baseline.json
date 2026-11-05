@@ -1,25 +1,6 @@
 {
   "expires": "2026-12-03",
   "tracking_issue": "https://github.com/sahenjp/RustXNG/issues/79",
-  "reason": "Known maintenance findings remain visible; no vulnerability or unsoundness findings are allowed. Replace unmaintained dependencies before expiry.",
-  "findings": [
-    {
-      "id": "RUSTSEC-2026-0374",
-      "kind": "unmaintained",
-      "package": "basic-toml",
-      "version": "0.1.10"
-    },
-    {
-      "id": "RUSTSEC-2025-0057",
-      "kind": "unmaintained",
-      "package": "fxhash",
-      "version": "0.2.1"
-    },
-    {
-      "id": "RUSTSEC-2024-0449",
-      "kind": "unmaintained",
-      "package": "unsafe-libyaml",
-      "version": "0.2.11"
-    }
-  ]
+  "reason": "No vulnerability, unsoundness, or unmaintained dependency findings are accepted.",
+  "findings": []
 }

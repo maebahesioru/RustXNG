@@ -1,0 +1,177 @@
+{
+  "before/stats": "unavailable: JSONDecodeError",
+  "before/stats/errors": [],
+  "after/stats": "unavailable: JSONDecodeError",
+  "after/stats/errors": [
+    {
+      "engine": "arxiv",
+      "stats": {
+        "requests": 5,
+        "results": 49,
+        "errors": 0,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 7.22304471
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": false,
+      "resting_for": 0.0
+    },
+    {
+      "engine": "crates.io",
+      "stats": {
+        "requests": 2,
+        "results": 20,
+        "errors": 0,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 1.579312077
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": false,
+      "resting_for": 0.0
+    },
+    {
+      "engine": "exaapi",
+      "stats": {
+        "requests": 97,
+        "results": 970,
+        "errors": 3,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 14.700332605000002
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": false,
+      "resting_for": 0.0
+    },
+    {
+      "engine": "github",
+      "stats": {
+        "requests": 3,
+        "results": 75,
+        "errors": 0,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 3.099544516
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": false,
+      "resting_for": 0.0
+    },
+    {
+      "engine": "mwmbl",
+      "stats": {
+        "requests": 100,
+        "results": 3016,
+        "errors": 0,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 32.55122859500001
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": false,
+      "resting_for": 0.0
+    },
+    {
+      "engine": "npm",
+      "stats": {
+        "requests": 2,
+        "results": 50,
+        "errors": 0,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 0.139281363
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": false,
+      "resting_for": 0.0
+    },
+    {
+      "engine": "wiby",
+      "stats": {
+        "requests": 78,
+        "results": 461,
+        "errors": 1,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 24.168578714
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": true,
+      "resting_for": 258.33629343
+    },
+    {
+      "engine": "wikidata",
+      "stats": {
+        "requests": 8,
+        "results": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 4.180828973
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": true,
+      "resting_for": 113.618332223
+    },
+    {
+      "engine": "wikipedia",
+      "stats": {
+        "requests": 100,
+        "results": 875,
+        "errors": 0,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 51.386875208999975
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": false,
+      "resting_for": 0.0
+    },
+    {
+      "engine": "wikipedia any words",
+      "stats": {
+        "requests": 2,
+        "results": 20,
+        "errors": 0,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 1.440855466
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": false,
+      "resting_for": 0.0
+    }
+  ]
+}

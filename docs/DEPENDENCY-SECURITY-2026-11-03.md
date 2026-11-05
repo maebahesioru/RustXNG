@@ -13,10 +13,11 @@ This is a dependency remediation, not a finding that RustXNG invokes the affecte
 `KeyValueMap` serializer with attacker-controlled empty entries.
 
 The [new RustSec snapshot](audit/2026-11-03/dependencies-mysql28.json) has no
-vulnerabilities or unsoundness warnings. Three maintenance warnings remain:
-`basic-toml`, `fxhash` and `unsafe-libyaml`. They are tracked in
-[issue #79](https://github.com/sahenjp/RustXNG/issues/79), remain visible in CI,
-and retain the 2026-12-03 baseline expiry. Earlier audit files are historical snapshots.
+vulnerabilities or unsoundness warnings. At that snapshot, three maintenance
+warnings remained: `basic-toml`, `fxhash` and `unsafe-libyaml`. Issue #79 removes
+them by disabling Askama's unused config feature, upgrading scraper, and moving
+YAML parsing to the maintained `yaml_serde` compatibility release. Earlier
+audit files are historical snapshots.
 
 Validation includes Rust 1.88, default/slim builds, and an isolated MariaDB fixture
 that runs both MySQL and MariaDB engine implementations through real authentication,

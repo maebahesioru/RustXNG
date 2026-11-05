@@ -1,0 +1,2432 @@
+# rustxng settings — the format mirrors SearXNG's `settings.yml`.
+# Everything here can be overridden by a user file passed with `--config` or
+# `SEARXNG_SETTINGS_PATH`. See README.md and docs/PORTING.md.
+
+[general]
+debug = false
+instance_name = "RustXNG"
+contact_url = ""
+enable_metrics = true
+
+[server]
+bind_address = "127.0.0.1"
+port = 29483
+# リクエストが無いままこの秒数が過ぎたら終了する（0 で無効）。
+# rdsh などが起動するサイドカーが残り続けるのを防ぐ用途。
+# 環境変数 RUSTXNG_IDLE_TIMEOUT でも指定できる。
+idle_timeout = 0
+# Empty or the legacy sample key generates a random key at startup. Set your
+# own shared secret for stable signatures across restarts or multiple workers.
+secret_key = ""
+# The limiter is a simplified per-client rate limit (upstream uses botdetection).
+limiter = false
+limiter_window = 60
+limiter_max = 30
+# image_proxy signs image URLs and refetches them from this instance.
+image_proxy = false
+method = "POST"
+
+[search]
+safe_search = 0
+# Wikipedia's documented opensearch API (DuckDuckGo's endpoint answers bots
+# with a CAPTCHA and every keystroke would be a scraped request).
+autocomplete = "wikipedia"
+autocomplete_min = 4
+default_lang = "auto"
+# --- 自前の索引（無ければ使わない）---
+# rustxng-index で作る BM25 索引（docs/LOCAL-INDEX.md）。空文字列で無効。
+# ディレクトリが無ければ黙って使わない。ヒットは上流の結果に足される。
+local_index_path = "index-docs"
+# Wikipedia の公式ダンプから作る索引（rustxng-wikidump、docs/WIKIPEDIA-INDEX.md）。
+# 外部への問い合わせは増えない。ディレクトリが無ければ黙って使わない。
+wikipedia_index_path = "index-wikipedia"
+# インデックスのヒットを上流の結果に足す（精度が上がる）
+local_index_merge = true
+
+# 結果を返さないエンジンを自動で休ませる（連続して空の応答が続いたとき）
+empty_result_limit = 8
+# 休ませる長さ（秒）
+empty_result_cooldown = 300
+ban_time_on_fail = 5
+max_ban_time_on_fail = 120
+max_page = 0
+timeout_limit = 3.0
+formats = ["html", "csv", "json", "rss"]
+# --- 推奨設定（社内 20 問ベンチの結果。他社サービスとの優劣を示すものではない） ---
+# parallel: 全エンジンを同時に開始。20 問ベンチで最良だった。
+# timeout_limit=3.0: より短くすると品質が落ちた（1.5 秒で MRR 0.74）。3 秒が最良。
+# include_raw_content=1（リクエスト側）で本文を付けられる。生本文はキャッシュされ
+# 繰り返しクエリは高速。
+strategy = "parallel"
+staged_tier = 8
+staged_min_results = 10
+# include_raw_content=1 のとき上位何件まで本文を取得するか（多いほど豊か・遅い）。
+raw_content_limit = 5
+# 本文の文字数上限。8,000文字を超える指定も可能。
+raw_content_chars = 8000
+# Optional JavaScript renderer; see tools/page-renderer/README.md.
+page_renderer_command = []
+# URL/タイトルにクエリ語が含まれる結果をどれだけ押し上げるか（0=上流の位置融合のみ）。
+# 公式ドキュメントのように URL・タイトルにクエリ語が現れるページを上げる。
+# 20 問ベンチで 4.0 が最良だった（MRR 0.838）。
+relevance_weight = 4.0
+
+# クエリがサイト名を指すとき、そのサイト内検索（site: 付き）を二段目として
+# 実行し、公式リファレンスページを取りこぼさないようにする。
+# 100 問ベンチでは全体として逆効果（hit@1 68→62）だったため既定は false。
+# 特定サイトのリファレンスを狙う用途では true にすると見つかりやすい。
+site_scoped_retry = false
+
+# 意味（埋め込み）リランキング。
+# OpenAI 互換の embeddings エンドポイントを指す。tools/embed_server.py
+# （ローカル・高速・キー不要）か、クラウドの embeddings API を指定。
+# 空文字列で無効（位置融合 + 関連度のみ）。
+embedding_url = ""
+embedding_model = "BAAI/bge-small-en-v1.5"
+# コサイン類似度をスコアに足す強さ。高いほど意味検索の優先度が増す。
+embedding_weight = 2.5
+# クエリが指すサイト（arxiv / mdn / python / docker など）の正規ドメインを
+# 押し上げ、ミラー（docker-docs.uclv.cu 等）を下げる強さ。意味検索でも
+# 弁別できない「公式 vs コピー」を分ける。0 で無効。
+# 20 問ベンチで 8.0 が最良だった（MRR 0.870）。
+authority_weight = 8.0
+# 何件の上位結果を埋め込みで並べ替えるか
+embedding_topk = 25
+
+[ui]
+default_theme = "simple"
+default_locale = "en"
+center_alignment = false
+results_on_new_tab = false
+infinite_scroll = false
+search_on_category_select = true
+hotkeys = "default"
+
+[outgoing]
+identified_ua = true
+# Public services with published per-host limits. Other hosts remain parallel.
+host_spacing_overrides = { "api.mwmbl.org" = 1100, "api.openverse.org" = 3100, "crates.io" = 1100, "eutils.ncbi.nlm.nih.gov" = 434, "export.arxiv.org" = 3100, "nominatim.openstreetmap.org" = 1100, "packagist.org" = 1100, "repology.org" = 1100, "wiby.me" = 1100 }
+# Additional trusted CA bundle for TLS-intercepting proxies (PEM).
+# ca_bundle = "/path/to/proxy-ca.pem"
+request_timeout = 4.0
+max_request_timeout = 20.0
+useragent_suffix = ""
+pool_connections = 100
+pool_maxsize = 20
+enable_http2 = true
+verify = true
+retries = 1
+max_redirects = 20
+keepalive_expiry = 5.0
+using_tor_proxy = false
+
+# 上流へ出るときのプロキシ。指定した scheme のリクエストがこのプロキシを通る。
+# ブロックされているエンジン（Google / Bing など）を復活させる用途で使う。
+# 注意: 現状は全エンジン共通で、エンジン個別の指定には未対応。
+# [outgoing.proxies]
+# https = "socks5h://127.0.0.1:9050"
+# http = "socks5h://127.0.0.1:9050"
+
+# Response cache.
+# backend = "memory" keeps entries inside the process; backend = "valkey"
+# stores them in Valkey / Redis so several instances share one cache.
+[cache]
+backend = "memory"
+url = "redis://127.0.0.1:6379/0"
+ttl = 300
+# include_raw_content のページ本文もキャッシュするため、8 MB だとページが
+# 早々に押し出される。32 MB に広げて繰り返しの検索・本文取得を速く保つ。
+max_bytes = 33554432
+
+# Deep research: GET /research?q=... がサブクエリを計画し、複数回検索して
+# ページ本文を集め、LLM があれば引用付き markdown レポートを生成する。
+# enabled = true かつ api_key があれば LLM を使う。無ければ証拠バンドルのみ。
+[research]
+enabled = false
+base_url = "https://api.openai.com/v1"
+api_key = ""
+model = "gpt-4o-mini"
+max_queries = 5
+max_sources = 10
+timeout = 60
+
+# MCP の read_page と HTTP の include_raw_content が使う本文取得。
+# provider = "direct" は宛先をローカルで検証する従来の取得を使う。
+# provider = "deepseek" は URL を DeepSeek Fetch API へ送り、Markdown を受け取る。
+# 成功した取得ごとに課金されるため、既定は direct のままにしている。
+[fetch]
+provider = "direct"
+timeout = 20.0
+
+[fetch.deepseek]
+base_url = "https://api.deepseek.com"
+api_key = ""
+
+[plugins]
+enabled = []
+disabled = []
+
+categories_as_tabs = ["general", "images", "videos", "news", "map", "music", "it", "science", "files", "social media"]
+
+# ---------------------------------------------------------------------------
+# Engines
+# ---------------------------------------------------------------------------
+# `engine` selects the implementation (searx/engines/<engine>.py upstream),
+# `shortcut` is the `!bang`. Engine specific options stay where SearXNG puts
+# them so that an existing configuration keeps working.
+
+[[engines]]
+name = "duckduckgo"
+engine = "duckduckgo"
+shortcut = "ddg"
+categories = ["general", "web"]
+disabled = true  # the site blocks automated queries (CAPTCHA / access denied / 429 on the first request, 2026-11-04)
+
+[[engines]]
+name = "bing"
+engine = "bing"
+disabled = true # Permission/reuse scope pending; see docs/PROVIDERS.md.
+shortcut = "bi"
+categories = ["general", "web"]
+
+[[engines]]
+name = "brave"
+engine = "brave"
+shortcut = "brave"
+categories = ["general", "web"]
+disabled = true  # the site blocks automated queries (CAPTCHA / access denied / 429 on the first request, 2026-11-04)
+
+[[engines]]
+name = "mojeek"
+engine = "mojeek"
+# HTML automation requires provider permission; see docs/PROVIDERS.md.
+disabled = true
+shortcut = "mjk"
+categories = ["general", "web"]
+
+[[engines]]
+name = "mwmbl"
+engine = "mwmbl"
+shortcut = "mwm"
+categories = ["general"]
+
+[[engines]]
+name = "wikipedia"
+engine = "wikipedia"
+shortcut = "wp"
+categories = ["general"]
+
+# Companion to "wikipedia": searches the named entities of a long question.
+[[engines]]
+name = "wikipedia entities"
+engine = "wikipedia_entities"
+shortcut = "wpe"
+categories = ["general"]
+
+# Companion to "wikipedia": any of the topic words of a long question, best match first.
+[[engines]]
+name = "wikipedia any words"
+engine = "wikipedia_any"
+shortcut = "wpa"
+categories = ["general"]
+
+[[engines]]
+name = "wikidata"
+engine = "wikidata"
+shortcut = "wd"
+categories = ["general"]
+
+[[engines]]
+name = "hackernews"
+engine = "hackernews"
+shortcut = "hn"
+categories = ["it", "news"]
+
+[[engines]]
+name = "github"
+engine = "github"
+shortcut = "gh"
+categories = ["it", "repositories"]
+
+[[engines]]
+name = "stack overflow"
+engine = "stackexchange"
+shortcut = "so"
+categories = ["it", "q&a"]
+api_site = "stackoverflow"
+
+[[engines]]
+name = "crates.io"
+engine = "crates"
+shortcut = "crates"
+categories = ["it", "packages", "cargo"]
+
+[[engines]]
+name = "npm"
+engine = "npm"
+shortcut = "npm"
+categories = ["it", "packages"]
+
+[[engines]]
+name = "pypi"
+engine = "pypi"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "pypi"
+categories = ["it", "packages"]
+
+[[engines]]
+name = "docker hub"
+engine = "docker_hub"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "dh"
+categories = ["it", "packages"]
+
+[[engines]]
+name = "arxiv"
+engine = "arxiv"
+shortcut = "arx"
+categories = ["science", "scientific publications"]
+
+[[engines]]
+name = "crossref"
+engine = "crossref"
+shortcut = "cr"
+categories = ["science", "scientific publications"]
+
+[[engines]]
+name = "cinii"
+engine = "cinii"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "ci"
+categories = ["science", "scientific publications"]
+
+[[engines]]
+name = "semantic scholar"
+engine = "semantic_scholar"
+shortcut = "se"
+categories = ["science", "scientific publications"]
+
+[[engines]]
+name = "openlibrary"
+engine = "openlibrary"
+shortcut = "ol"
+categories = ["general", "files"]
+
+disabled = true  # always times out and returns nothing; costs every search its full timeout
+
+[[engines]]
+name = "openstreetmap"
+engine = "openstreetmap"
+shortcut = "osm"
+categories = ["map"]
+
+[[engines]]
+name = "photon"
+engine = "photon"
+shortcut = "ph"
+categories = ["map"]
+
+[[engines]]
+name = "dailymotion"
+engine = "dailymotion"
+shortcut = "dm"
+categories = ["videos"]
+
+[[engines]]
+name = "deezer"
+engine = "deezer"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "dz"
+categories = ["music"]
+
+[[engines]]
+name = "openverse"
+engine = "openverse"
+shortcut = "ov"
+categories = ["images"]
+
+[[engines]]
+name = "wikicommons"
+engine = "wikicommons"
+shortcut = "wcm"
+categories = ["images"]
+
+
+[[engines]]
+name = "bing news"
+engine = "bing_news"
+disabled = true
+shortcut = "bnews"
+categories = ["news"]
+
+# --- imported declarative engines (generated by tools/import_engines.py) ---
+# 44 engines imported from SearXNG settings.yml
+
+[[engines]]
+name = "abcnyheter"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "xpath"
+shortcut = "abc"
+categories = ["general"]
+paging = true
+search_url = "https://startsiden.abcnyheter.no/sok/?q={query}&page={pageno}"
+results_xpath = "//ul[contains(@class, \"results__list\")]/li[contains(@class, \"result\")]"
+url_xpath = "./a/@href"
+title_xpath = "./a/h3"
+content_xpath = "./div"
+[[engines]]
+name = "anaconda"
+engine = "xpath"
+shortcut = "conda"
+categories = ["it"]
+paging = true
+timeout = 6.0
+search_url = "https://anaconda.org/search?q={query}&page={pageno}"
+results_xpath = "//tbody/tr"
+url_xpath = "./td/h5/a[last()]/@href"
+title_xpath = "./td/h5"
+content_xpath = "./td[h5]/text()"
+first_page_num = 0
+disabled = true  # requires a self-hosted instance
+[[engines]]
+name = "nixos wiki"
+engine = "mediawiki"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "nixw"
+categories = ["it", "software wikis"]
+base_url = "https://wiki.nixos.org/"
+search_type = "text"
+[[engines]]
+name = "ayo"
+engine = "xpath"
+shortcut = "ayo"
+categories = ["general"]
+search_url = "https://search.ayo.de/search?q={query}"
+results_xpath = "//div[contains(@class, 'search-result')]/div"
+url_xpath = ".//a/@href"
+title_xpath = ".//h3"
+content_xpath = ".//p"
+suggestion_xpath = ".//a[starts-with(@href, \"https://search.ayo.de\")]"
+disabled = true  # requires a base_url
+[[engines]]
+name = "bitbucket"
+engine = "xpath"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "bb"
+categories = ["it", "repos"]
+paging = true
+timeout = 4.0
+search_url = "https://bitbucket.org/repo/all/{pageno}?name={query}"
+url_xpath = "//article[@class=\"repo-summary\"]//a[@class=\"repo-link\"]/@href"
+title_xpath = "//article[@class=\"repo-summary\"]//a[@class=\"repo-link\"]"
+content_xpath = "//article[@class=\"repo-summary\"]/p"
+[[engines]]
+name = "crowdview"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "json_engine"
+shortcut = "cv"
+categories = ["general"]
+paging = false
+search_url = "https://crowdview-next-js.onrender.com/api/search-v3?query={query}"
+results_query = "results"
+url_query = "link"
+title_query = "title"
+content_query = "snippet"
+content_html_to_text = true
+title_html_to_text = true
+[[engines]]
+name = "encyclosearch"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "json_engine"
+shortcut = "es"
+categories = ["general"]
+paging = true
+search_url = "https://encyclosearch.org/encyclosphere/search?q={query}&page={pageno}&resultsPerPage=15"
+results_query = "Results"
+url_query = "SourceURL"
+title_query = "Title"
+content_query = "Description"
+[[engines]]
+name = "erowid"
+engine = "xpath"
+shortcut = "ew"
+paging = true
+search_url = "https://www.erowid.org/search.php?q={query}&s={pageno}"
+url_xpath = "//dl[@class=\"results-list\"]/dt[@class=\"result-title\"]/a/@href"
+title_xpath = "//dl[@class=\"results-list\"]/dt[@class=\"result-title\"]/a/text()"
+content_xpath = "//dl[@class=\"results-list\"]/dd[@class=\"result-details\"]"
+first_page_num = 0
+disabled = true  # fails on every request (2026-11-04); costs each search its timeout
+
+[[engines]]
+name = "etymonline"
+engine = "xpath"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "et"
+categories = ["dictionaries"]
+paging = true
+search_url = "https://etymonline.com/search?page={pageno}&q={query}"
+url_xpath = "//a[contains(@class, \"word__name--\")]/@href"
+title_xpath = "//a[contains(@class, \"word__name--\")]"
+content_xpath = "//section[contains(@class, \"word__defination\")]"
+first_page_num = 1
+[[engines]]
+name = "fastbot"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "xpath"
+shortcut = "fa"
+categories = ["general"]
+search_url = "https://fastbot.de/search?q={query}"
+results_xpath = "//section[contains(@class, 'organic-results')]/div[contains(@class, 'result-item')]"
+url_xpath = "(./a/@href)[last()]"
+title_xpath = "(./a)[last()]"
+content_xpath = "./div[contains(@class, 'snippet')]"
+suggestion_xpath = "//section[contains(@class, 'related-searches')]//a/span[1]"
+[[engines]]
+name = "free software directory"
+engine = "mediawiki"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "fsd"
+categories = ["it", "software wikis"]
+timeout = 5.0
+base_url = "https://directory.fsf.org/"
+search_type = "title"
+[[engines]]
+name = "fynd"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "xpath"
+shortcut = "fynd"
+categories = ["general"]
+paging = true
+safesearch = true
+search_url = "https://fynd.bot/?search={query}&offset={pageno}{safe_search}"
+results_xpath = "//div[contains(@class, \"result-item\")]"
+url_xpath = ".//a/@href"
+title_xpath = ".//div[contains(@class, \"title-line\")]"
+content_xpath = ".//div[contains(@class, \"description\")]"
+thumbnail_xpath = ".//img[contains(@class, \"preview-img\")]/@src"
+first_page_num = 0
+[[engines]]
+name = "gabanza"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "xpath"
+shortcut = "gab"
+categories = ["general"]
+timeout = 4
+search_url = "https://www.gabanza.com/search?query={query}"
+results_xpath = "//div[contains(@class, \"border-t\")]/div/div"
+url_xpath = "(.//a/@href)[1]"
+title_xpath = "./a"
+content_xpath = ".//p"
+[[engines]]
+name = "gentoo"
+engine = "mediawiki"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "ge"
+categories = ["it", "software wikis"]
+timeout = 10
+base_url = "https://wiki.gentoo.org/"
+search_type = "text"
+api_path = "api.php"
+[[engines]]
+name = "habrahabr"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "xpath"
+shortcut = "habr"
+categories = ["it"]
+paging = true
+timeout = 4.0
+search_url = "https://habr.com/en/search/page{pageno}/?q={query}"
+results_xpath = "//article[contains(@class, \"tm-articles-list__item\")]"
+url_xpath = ".//a[@class=\"tm-title__link\"]/@href"
+title_xpath = ".//a[@class=\"tm-title__link\"]"
+content_xpath = ".//div[contains(@class, \"article-formatted-body\")]"
+[[engines]]
+name = "hoogle"
+engine = "xpath"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "ho"
+categories = ["it", "packages"]
+search_url = "https://hoogle.haskell.org/?hoogle={query}"
+results_xpath = "//div[@class=\"result\"]"
+url_xpath = ".//div[@class=\"ans\"]//a/@href"
+title_xpath = ".//div[@class=\"ans\"]//a"
+content_xpath = ".//div[@class=\"from\"]"
+[[engines]]
+name = "library genesis"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "xpath"
+shortcut = "lg"
+categories = ["files"]
+timeout = 7.0
+search_url = "https://libgen.rs/search.php?req={query}"
+url_xpath = "//a[contains(@href,\"book/index.php?md5\")]/@href"
+title_xpath = "//a[contains(@href,\"book/\")]/text()[1]"
+content_xpath = "//td/a[1][contains(@href,\"=author\")]/text()"
+[[engines]]
+name = "lobste.rs"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "xpath"
+shortcut = "lo"
+categories = ["it"]
+timeout = 5.0
+search_url = "https://lobste.rs/search?q={query}&what=stories&order=relevance"
+results_xpath = "//li[contains(@class, \"story\")]"
+url_xpath = ".//a[@class=\"u-url\"]/@href"
+title_xpath = ".//a[@class=\"u-url\"]"
+content_xpath = ".//a[@class=\"domain\"]"
+[[engines]]
+name = "mdn"
+engine = "json_engine"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "mdn"
+categories = ["it"]
+paging = true
+search_url = "https://developer.mozilla.org/api/v1/search?q={query}&page={pageno}"
+results_query = "documents"
+url_query = "mdn_url"
+title_query = "title"
+content_query = "summary"
+url_prefix = "https://developer.mozilla.org"
+[[engines]]
+name = "mankier"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "json_engine"
+shortcut = "man"
+categories = ["it"]
+search_url = "https://www.mankier.com/api/v2/mans/?q={query}"
+results_query = "results"
+url_query = "url"
+title_query = "name"
+content_query = "description"
+[[engines]]
+name = "openairedatasets"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "json_engine"
+shortcut = "oad"
+categories = ["science"]
+paging = true
+timeout = 5.0
+search_url = "https://api.openaire.eu/search/datasets?format=json&page={pageno}&size=10&title={query}"
+results_query = "response/results/result"
+url_query = "metadata/oaf:entity/oaf:result/children/instance/webresource/url/$"
+title_query = "metadata/oaf:entity/oaf:result/title/$"
+content_query = "metadata/oaf:entity/oaf:result/description/$"
+content_html_to_text = true
+[[engines]]
+name = "openairepublications"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "json_engine"
+shortcut = "oap"
+categories = ["science"]
+paging = true
+timeout = 5.0
+search_url = "https://api.openaire.eu/search/publications?format=json&page={pageno}&size=10&title={query}"
+results_query = "response/results/result"
+url_query = "metadata/oaf:entity/oaf:result/children/instance/webresource/url/$"
+title_query = "metadata/oaf:entity/oaf:result/title/$"
+content_query = "metadata/oaf:entity/oaf:result/description/$"
+content_html_to_text = true
+[[engines]]
+name = "openrepos"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "xpath"
+shortcut = "or"
+categories = ["files"]
+paging = true
+timeout = 4.0
+search_url = "https://openrepos.net/search/node/{query}?page={pageno}"
+url_xpath = "//li[@class=\"search-result\"]//h3[@class=\"title\"]/a/@href"
+title_xpath = "//li[@class=\"search-result\"]//h3[@class=\"title\"]/a"
+content_xpath = "//li[@class=\"search-result\"]//div[@class=\"search-snippet-info\"]//p[@class=\"search-snippet\"]"
+[[engines]]
+name = "packagist"
+engine = "json_engine"
+shortcut = "pack"
+categories = ["it", "packages"]
+paging = true
+timeout = 5.0
+search_url = "https://packagist.org/search.json?q={query}&page={pageno}"
+results_query = "results"
+url_query = "url"
+title_query = "name"
+content_query = "description"
+[[engines]]
+name = "pub.dev"
+engine = "xpath"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "pd"
+categories = ["packages", "it"]
+paging = true
+timeout = 3.0
+search_url = "https://pub.dev/packages?q={query}&page={pageno}"
+results_xpath = "//div[contains(@class,\"packages-item\")]"
+url_xpath = "./div/h3/a/@href"
+title_xpath = "./div/h3/a"
+content_xpath = "./div/div/div[contains(@class,\"packages-description\")]/span"
+first_page_num = 1
+[[engines]]
+name = "searchmysite"
+engine = "xpath"
+shortcut = "sms"
+categories = ["general", "blogs"]
+paging = true
+search_url = "https://searchmysite.net/search/?q={query}&page={pageno}"
+results_xpath = "//div[contains(@class,'search-result')]"
+url_xpath = ".//a[contains(@class,'result-link')]/@href"
+title_xpath = ".//span[contains(@class,'result-title-txt')]/text()"
+content_xpath = "./p[@id='result-hightlight']"
+disabled = true  # the site blocks automated queries (CAPTCHA / access denied / 429 on the first request, 2026-11-04)
+
+[[engines]]
+name = "tmdb"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "xpath"
+shortcut = "tm"
+categories = ["movies"]
+paging = true
+search_url = "https://www.themoviedb.org/search?page={pageno}&query={query}"
+results_xpath = "//div[contains(@class,\"movie\") or contains(@class,\"tv\")]//div[contains(@class,\"card\")]"
+url_xpath = ".//div[contains(@class,\"poster\")]/a/@href"
+title_xpath = ".//div[contains(@class,\"title\")]//h2"
+content_xpath = ".//div[contains(@class,\"overview\")]"
+thumbnail_xpath = ".//img/@src"
+[[engines]]
+name = "torch"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "xpath"
+shortcut = "tch"
+categories = ["onions"]
+paging = true
+search_url = "http://xmh57jrknzkhv6y3ls3ubitzfqnkrwxhopf5aygthi7d6rplyvk3noyd.onion/cgi-bin/omega/omega?P={query}&DEFAULTOP=and"
+results_xpath = "//table//tr"
+url_xpath = "./td[2]/a"
+title_xpath = "./td[2]/b"
+content_xpath = "./td[2]/small"
+[[engines]]
+name = "wiby"
+engine = "json_engine"
+shortcut = "wib"
+categories = ["general", "blogs"]
+paging = true
+search_url = "https://wiby.me/json/?q={query}&p={pageno}"
+url_query = "URL"
+title_query = "Title"
+content_query = "Snippet"
+[[engines]]
+name = "wikibooks"
+engine = "mediawiki"
+shortcut = "wb"
+# Not in "general": no general-search answer came from it (SealQA 2026-11-04), as in upstream where it is off.
+categories = ["wikimedia"]
+weight = 0.5
+base_url = "https://{language}.wikibooks.org/"
+search_type = "text"
+[[engines]]
+name = "wikinews"
+engine = "mediawiki"
+shortcut = "wn"
+categories = ["news", "wikimedia"]
+base_url = "https://{language}.wikinews.org/"
+search_type = "text"
+srsort = "create_timestamp_desc"
+[[engines]]
+name = "wikiquote"
+engine = "mediawiki"
+shortcut = "wq"
+# Not in "general": no general-search answer came from it (SealQA 2026-11-04), as in upstream where it is off.
+categories = ["wikimedia"]
+weight = 0.5
+base_url = "https://{language}.wikiquote.org/"
+search_type = "text"
+[[engines]]
+name = "wikisource"
+engine = "mediawiki"
+shortcut = "ws"
+# Not in "general": no general-search answer came from it (SealQA 2026-11-04), as in upstream where it is off.
+categories = ["wikimedia"]
+weight = 0.5
+base_url = "https://{language}.wikisource.org/"
+search_type = "text"
+[[engines]]
+name = "wikispecies"
+engine = "mediawiki"
+shortcut = "wsp"
+# Not in "general": no general-search answer came from it (SealQA 2026-11-04), as in upstream where it is off.
+categories = ["science", "wikimedia"]
+base_url = "https://species.wikimedia.org/"
+search_type = "text"
+[[engines]]
+name = "wiktionary"
+engine = "mediawiki"
+shortcut = "wt"
+categories = ["dictionaries", "wikimedia"]
+base_url = "https://{language}.wiktionary.org/"
+search_type = "text"
+[[engines]]
+name = "wikiversity"
+engine = "mediawiki"
+shortcut = "wv"
+# Not in "general": no general-search answer came from it (SealQA 2026-11-04), as in upstream where it is off.
+categories = ["wikimedia"]
+weight = 0.5
+base_url = "https://{language}.wikiversity.org/"
+search_type = "text"
+[[engines]]
+name = "wikivoyage"
+engine = "mediawiki"
+shortcut = "wy"
+# Not in "general": no general-search answer came from it (SealQA 2026-11-04), as in upstream where it is off.
+categories = ["wikimedia"]
+weight = 0.5
+base_url = "https://{language}.wikivoyage.org/"
+search_type = "text"
+[[engines]]
+name = "rubygems"
+engine = "xpath"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "rbg"
+categories = ["it", "packages"]
+paging = true
+search_url = "https://rubygems.org/search?page={pageno}&query={query}"
+results_xpath = "/html/body/main/div/a[@class=\"gems__gem\"]"
+url_xpath = "./@href"
+title_xpath = "./span/h2"
+content_xpath = "./span/p"
+suggestion_xpath = "/html/body/main/div/div[@class=\"search__suggestions\"]/p/a"
+first_page_num = 1
+[[engines]]
+name = "reloado"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "xpath"
+shortcut = "rel"
+categories = ["general"]
+paging = true
+search_url = "https://reloado.com/search?q={query}&page={pageno}"
+results_xpath = "//div[contains(@class, 'result-item')]"
+url_xpath = ".//div[contains(@class, 'result-title')]/a/@href"
+title_xpath = ".//div[contains(@class, 'result-title')]/a"
+content_xpath = ".//div[contains(@class, 'result-excerpt')]"
+[[engines]]
+name = "searchch"
+engine = "xpath"
+shortcut = "sch"
+paging = true
+search_url = "https://search.ch/web/api/loadmore.html?path=/web/&q={query}&page={pageno}"
+results_xpath = "//div[contains(@class, 'www-feed-web-result')]"
+url_xpath = "concat('https://', substring-after(.//a[contains(@class, 'sl-gus-result-url')]/@href, '://'))"
+title_xpath = ".//a[contains(@class, 'sl-gus-result-title')]"
+content_xpath = ".//div[contains(@class, 'sl-gus-result-body')]"
+disabled = true  # requires a base_url
+[[engines]]
+name = "woxikon.de synonyme"
+engine = "xpath"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "woxi"
+categories = ["dictionaries"]
+timeout = 5.0
+search_url = "https://synonyme.woxikon.de/synonyme/{query}.php"
+url_xpath = "//div[@class=\"upper-synonyms\"]/a/@href"
+title_xpath = "//div[@class=\"upper-synonyms\"]/a"
+content_xpath = "//div[@class=\"synonyms-list-group\"]"
+[[engines]]
+name = "wikimini"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "xpath"
+shortcut = "wkmn"
+categories = ["general"]
+search_url = "https://fr.wikimini.org/w/index.php?search={query}&title=Sp%C3%A9cial%3ASearch&fulltext=Search"
+url_xpath = "//li/div[@class=\"mw-search-result-heading\"]/a/@href"
+title_xpath = "//li//div[@class=\"mw-search-result-heading\"]/a"
+content_xpath = "//li/div[@class=\"searchresult\"]"
+[[engines]]
+name = "zapmeta"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "xpath"
+shortcut = "zpm"
+categories = ["general"]
+paging = true
+search_url = "https://www.zapmeta.com/search?q={query}&pg={pageno}"
+results_xpath = "//article[contains(@class, \"organic-results-item\")]"
+url_xpath = "./h2/a/@href"
+title_xpath = "./h2"
+content_xpath = "./p"
+[[engines]]
+name = "minecraft wiki"
+engine = "mediawiki"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "mcw"
+categories = ["software wikis"]
+base_url = "https://minecraft.wiki/"
+search_type = "text"
+api_path = "api.php"
+
+# --- end of imported declarative engines ---
+
+# --- imported code engines (generated by tools/import_engines.py) ---
+[[engines]]
+name = "apple_app_store"
+engine = "apple_app_store"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+categories = ["it", "apps"]
+safesearch = true
+
+[[engines]]
+name = "dogpile"
+engine = "dogpile"
+shortcut = "dp"
+categories = ["general"]
+paging = true
+safesearch = true
+disabled = true  # the site blocks automated queries (CAPTCHA / access denied / 429 on the first request, 2026-11-04)
+
+[[engines]]
+name = "openclipart"
+engine = "openclipart"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "oca"
+categories = ["images"]
+paging = true
+
+[[engines]]
+name = "lemmy"
+engine = "lemmy"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+categories = ["social media"]
+paging = true
+
+[[engines]]
+name = "luxxle"
+engine = "luxxle"
+shortcut = "lx"
+categories = ["general"]
+safesearch = true
+disabled = true  # fails on every request (2026-11-04); costs each search its timeout
+
+[[engines]]
+name = "findborg"
+engine = "findborg"
+shortcut = "fbg"
+categories = ["general"]
+time_range_support = true
+disabled = true  # the site blocks automated queries (CAPTCHA / access denied / 429 on the first request, 2026-11-04)
+
+[[engines]]
+name = "mastodon"
+engine = "mastodon"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+categories = ["social media"]
+
+[[engines]]
+name = "pixabay"
+engine = "pixabay"
+shortcut = "pix"
+categories = ["images"]
+paging = true
+time_range_support = true
+safesearch = true
+disabled = true  # needs credentials or an instance URL
+[[engines]]
+name = "apkmirror"
+engine = "apkmirror"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "apk"
+categories = ["it", "apps"]
+paging = true
+
+[[engines]]
+name = "bandcamp"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "bandcamp"
+shortcut = "bc"
+categories = ["music"]
+
+[[engines]]
+name = "genius"
+engine = "genius"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "gen"
+categories = ["music", "lyrics"]
+
+[[engines]]
+name = "goodreads"
+engine = "goodreads"
+shortcut = "good"
+categories = ["general"]
+
+disabled = true  # always times out and returns nothing; costs every search its full timeout
+
+[[engines]]
+name = "imdb"
+engine = "imdb"
+disabled = true
+shortcut = "imdb"
+categories = ["movies"]
+
+[[engines]]
+name = "mixcloud"
+engine = "mixcloud"
+shortcut = "mc"
+categories = ["music"]
+
+[[engines]]
+name = "soundcloud"
+engine = "soundcloud"
+shortcut = "sc"
+categories = ["music"]
+disabled = true  # needs credentials or an instance URL
+[[engines]]
+name = "wallhaven"
+engine = "wallhaven"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+categories = ["images"]
+
+[[engines]]
+name = "500px"
+engine = "500px"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "500px"
+categories = ["stock images"]
+paging = true
+
+[[engines]]
+name = "9gag"
+engine = "9gag"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "9g"
+categories = ["social media"]
+paging = true
+
+[[engines]]
+name = "andisearch"
+engine = "andisearch"
+shortcut = "andi"
+categories = ["general"]
+disabled = true  # the site blocks automated queries (CAPTCHA / access denied / 429 on the first request, 2026-11-04)
+
+[[engines]]
+name = "baidu"
+engine = "baidu"
+shortcut = "bd"
+categories = ["general"]
+paging = true
+time_range_support = true
+
+disabled = true  # always times out and returns nothing; costs every search its full timeout
+
+[[engines]]
+name = "findfiles"
+engine = "findfiles"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "ff"
+categories = ["files"]
+paging = true
+safesearch = true
+
+[[engines]]
+name = "fireball"
+engine = "fireball"
+shortcut = "fb"
+categories = ["general"]
+safesearch = true
+disabled = true  # the site blocks automated queries (CAPTCHA / access denied / 429 on the first request, 2026-11-04)
+
+[[engines]]
+name = "naver"
+engine = "naver"
+# Off by default: published terms not yet reconciled (docs/audit); enable only after checking them.
+disabled = true
+shortcut = "nv"
+categories = ["general"]
+paging = true
+time_range_support = true
+
+[[engines]]
+name = "peertube"
+engine = "peertube"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "ptb"
+categories = ["videos"]
+paging = true
+time_range_support = true
+safesearch = true
+
+[[engines]]
+name = "pexels"
+engine = "pexels"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "px"
+categories = ["stock images"]
+paging = true
+time_range_support = true
+
+[[engines]]
+name = "qwant"
+engine = "qwant"
+shortcut = "qw"
+categories = ["general", "web"]
+paging = true
+safesearch = true
+disabled = true  # the site blocks automated queries (CAPTCHA / access denied / 429 on the first request, 2026-11-04)
+
+[[engines]]
+name = "sepiasearch"
+engine = "sepiasearch"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "sep"
+categories = ["videos"]
+paging = true
+time_range_support = true
+safesearch = true
+
+[[engines]]
+name = "tootfinder"
+engine = "tootfinder"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "toot"
+categories = ["social media"]
+
+[[engines]]
+name = "tusksearch"
+engine = "tusksearch"
+shortcut = "tsk"
+categories = ["general"]
+paging = true
+disabled = true  # the site blocks automated queries (CAPTCHA / access denied / 429 on the first request, 2026-11-04)
+
+[[engines]]
+name = "unsplash"
+engine = "unsplash"
+disabled = true # Internal endpoint; official API migration needs attribution review.
+shortcut = "us"
+categories = ["stock images"]
+paging = true
+
+[[engines]]
+name = "artstation"
+disabled = true  # category typo fixed: this entry never ran before; enable it after reviewing the provider
+engine = "artstation"
+shortcut = "as"
+categories = ["images"]
+
+[[engines]]
+name = "deviantart"
+engine = "deviantart"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+categories = ["images"]
+
+[[engines]]
+name = "flickr"
+engine = "flickr_noapi"
+disabled = true
+shortcut = "fl"
+categories = ["images"]
+
+[[engines]]
+name = "giphy"
+engine = "giphy"
+shortcut = "gif"
+categories = ["images"]
+disabled = true  # needs credentials or an instance URL
+[[engines]]
+name = "imgur"
+engine = "imgur"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "img"
+categories = ["images"]
+
+[[engines]]
+name = "alpinelinux"
+engine = "alpinelinux"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+categories = ["packages", "it"]
+paging = true
+
+[[engines]]
+name = "annas_archive"
+engine = "annas_archive"
+shortcut = "aab"
+categories = ["files", "books"]
+paging = true
+disabled = true  # requires a base_url (mirror)
+[[engines]]
+name = "discourse"
+engine = "discourse"
+categories = ["general", "social media"]
+paging = true
+time_range_support = true
+disabled = true  # needs credentials or an instance URL
+[[engines]]
+name = "duckduckgo_extra"
+engine = "duckduckgo_extra"
+categories = ["images", "videos", "news"]
+paging = true
+disabled = true  # needs credentials or an instance URL
+[[engines]]
+name = "duckduckgo_web"
+engine = "duckduckgo_web"
+shortcut = "ddgb"
+categories = ["general", "web"]
+paging = true
+disabled = true  # the site blocks automated queries (CAPTCHA / access denied / 429 on the first request, 2026-11-04)
+
+[[engines]]
+name = "r1337x"
+engine = "1337x"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+categories = ["files"]
+paging = true
+
+[[engines]]
+name = "r360search"
+engine = "360search"
+shortcut = "360"
+categories = ["general"]
+paging = true
+time_range_support = true
+
+disabled = true  # always times out and returns nothing; costs every search its full timeout
+
+[[engines]]
+name = "artic"
+engine = "artic"
+shortcut = "arc"
+categories = ["images"]
+paging = true
+
+[[engines]]
+name = "bing_images"
+engine = "bing_images"
+disabled = true
+shortcut = "bii"
+categories = ["images", "web"]
+paging = true
+time_range_support = true
+
+[[engines]]
+name = "bing_videos"
+engine = "bing_videos"
+disabled = true
+shortcut = "biv"
+categories = ["videos", "web"]
+paging = true
+time_range_support = true
+
+[[engines]]
+name = "bitchute"
+engine = "bitchute"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "bit"
+categories = ["videos"]
+paging = true
+
+[[engines]]
+name = "bpb"
+engine = "bpb"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "bpb"
+categories = ["general"]
+paging = true
+
+[[engines]]
+name = "braveapi"
+engine = "braveapi"
+shortcut = "braveapi"
+categories = ["general", "web"]
+paging = true
+time_range_support = true
+disabled = true  # needs credentials or an instance URL
+[[engines]]
+name = "cachy_os"
+engine = "cachy_os"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "cachy_os"
+categories = ["packages", "it"]
+paging = true
+
+[[engines]]
+name = "ccc_media"
+engine = "ccc_media"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "ccc_media"
+categories = ["videos"]
+paging = true
+
+[[engines]]
+name = "chinaso"
+engine = "chinaso"
+shortcut = "chinaso"
+categories = ["general"]
+paging = true
+time_range_support = true
+
+disabled = true  # always times out and returns nothing; costs every search its full timeout
+
+[[engines]]
+name = "cloudflareai"
+engine = "cloudflareai"
+shortcut = "cfai"
+categories = ["general"]
+disabled = true  # needs credentials or an instance URL
+[[engines]]
+name = "core"
+engine = "core"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "core"
+categories = ["science", "scientific publications"]
+paging = true
+
+[[engines]]
+name = "r360search_videos"
+engine = "360search_videos"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "360search_videos"
+categories = ["videos"]
+paging = true
+
+[[engines]]
+name = "iqiyi"
+engine = "iqiyi"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "iq"
+categories = ["videos"]
+paging = true
+time_range_support = true
+
+[[engines]]
+name = "niconico"
+engine = "niconico"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "nico"
+categories = ["videos"]
+paging = true
+time_range_support = true
+
+[[engines]]
+name = "odysee"
+engine = "odysee"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "od"
+categories = ["videos"]
+paging = true
+time_range_support = true
+
+[[engines]]
+name = "rumble"
+engine = "rumble"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "ru"
+categories = ["videos"]
+paging = true
+
+[[engines]]
+name = "vimeo"
+engine = "vimeo"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "vm"
+categories = ["videos"]
+paging = true
+
+[[engines]]
+name = "github_code"
+engine = "github_code"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "ghc"
+categories = ["code"]
+paging = true
+
+[[engines]]
+name = "gitlab"
+engine = "gitlab"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "gl"
+categories = ["it", "repos"]
+paging = true
+
+[[engines]]
+name = "marginalia"
+engine = "marginalia"
+shortcut = "mar"
+categories = ["general", "blogs"]
+paging = true
+disabled = true  # needs credentials or an instance URL
+[[engines]]
+name = "seznam"
+engine = "seznam"
+disabled = true
+shortcut = "szn"
+categories = ["general", "web"]
+
+[[engines]]
+name = "yahoo"
+engine = "yahoo"
+shortcut = "yh"
+categories = ["general", "web"]
+paging = true
+time_range_support = true
+disabled = true  # Yahoo terms 2.4(9) forbid automated collection without prior permission
+
+[[engines]]
+name = "yahoo japan"
+engine = "yahoo_japan"
+# HTML automation requires provider permission; see docs/PROVIDERS.md.
+disabled = true
+shortcut = "yjp"
+categories = ["general", "web"]
+
+[[engines]]
+name = "yandex"
+engine = "yandex"
+shortcut = "yd"
+categories = ["general"]
+paging = true
+time_range_support = true
+disabled = true  # the site blocks automated queries (CAPTCHA / access denied / 429 on the first request, 2026-11-04)
+
+[[engines]]
+name = "ebay"
+engine = "ebay"
+disabled = true
+shortcut = "eb"
+categories = ["shopping"]
+paging = true
+
+[[engines]]
+name = "europepmc"
+engine = "europepmc"
+shortcut = "epmc"
+categories = ["science", "scientific publications"]
+paging = true
+
+[[engines]]
+name = "geizhals"
+engine = "geizhals"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "geiz"
+categories = ["shopping"]
+paging = true
+
+[[engines]]
+name = "gitea"
+engine = "gitea"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "gitea"
+categories = ["it", "repos"]
+paging = true
+
+[[engines]]
+name = "hex"
+engine = "hex"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "hex"
+categories = ["it", "packages"]
+paging = true
+
+[[engines]]
+name = "neosearch"
+engine = "neosearch"
+shortcut = "neo"
+categories = ["general"]
+disabled = true  # the site blocks automated queries (CAPTCHA / access denied / 429 on the first request, 2026-11-04)
+
+[[engines]]
+name = "openalex"
+engine = "openalex"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "oa"
+categories = ["science", "scientific publications"]
+paging = true
+
+[[engines]]
+name = "pkg_go_dev"
+engine = "pkg_go_dev"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "pgo"
+categories = ["packages", "it"]
+
+[[engines]]
+name = "sogou"
+engine = "sogou"
+shortcut = "sogou"
+categories = ["general"]
+paging = true
+time_range_support = true
+disabled = true  # fails on every request (2026-11-04); costs each search its timeout
+
+[[engines]]
+name = "sogou_images"
+engine = "sogou_images"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "sogoui"
+categories = ["images"]
+paging = true
+
+[[engines]]
+name = "sogou_videos"
+engine = "sogou_videos"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "sogouv"
+categories = ["videos"]
+paging = true
+
+[[engines]]
+name = "sourcehut"
+engine = "sourcehut"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "srht"
+categories = ["it", "repos"]
+paging = true
+
+[[engines]]
+name = "springer"
+engine = "springer"
+shortcut = "springer"
+categories = ["science", "scientific publications"]
+paging = true
+disabled = true  # needs credentials or an instance URL
+[[engines]]
+name = "steam"
+engine = "steam"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "stm"
+categories = ["general"]
+
+[[engines]]
+name = "swisscows"
+engine = "swisscows"
+# Off by default: uses a signed endpoint whose third-party use is unconfirmed; enable only with the operator's permission.
+disabled = true
+shortcut = "sw"
+categories = ["general"]
+paging = true
+time_range_support = true
+
+[[engines]]
+name = "www1x"
+engine = "www1x"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "1x"
+categories = ["stock images"]
+
+[[engines]]
+name = "yep"
+engine = "yep"
+shortcut = "yep"
+categories = ["general"]
+disabled = true  # fails on every request (2026-11-04); costs each search its timeout
+
+[[engines]]
+name = "duden"
+engine = "duden"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "du"
+categories = ["dictionaries"]
+paging = true
+
+[[engines]]
+name = "fdroid"
+engine = "fdroid"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "fd"
+categories = ["it", "apps"]
+paging = true
+
+[[engines]]
+name = "flaticon"
+engine = "flaticon"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "fli"
+categories = ["images", "icons"]
+paging = true
+
+[[engines]]
+name = "iconify"
+engine = "iconify"
+shortcut = "ico"
+categories = ["images", "icons"]
+paging = true
+
+[[engines]]
+name = "jisho"
+engine = "jisho"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "js"
+categories = ["dictionaries"]
+
+[[engines]]
+name = "pinterest"
+engine = "pinterest"
+disabled = true
+shortcut = "pin"
+categories = ["images"]
+paging = true
+
+[[engines]]
+name = "pixiv"
+engine = "pixiv"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "pv"
+categories = ["images"]
+paging = true
+
+[[engines]]
+name = "pubmed"
+engine = "pubmed"
+shortcut = "pub"
+categories = ["science", "scientific publications"]
+paging = true
+
+[[engines]]
+name = "qiita"
+engine = "qiita"
+disabled = true
+shortcut = "qi"
+categories = ["it"]
+paging = true
+# Unauthenticated requests are limited to 60/hour; set api_key (a personal
+# access token) to raise the limit to 1,000/hour.
+
+[[engines]]
+name = "quark"
+engine = "quark"
+shortcut = "qk"
+categories = ["general"]
+paging = true
+time_range_support = true
+disabled = true  # the site blocks automated queries (CAPTCHA / access denied / 429 on the first request, 2026-11-04)
+
+[[engines]]
+name = "repology"
+engine = "repology"
+shortcut = "rep"
+categories = ["packages", "it"]
+
+[[engines]]
+name = "shopify_stock"
+engine = "shopify_stock"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "shs"
+categories = ["stock images"]
+paging = true
+
+[[engines]]
+name = "wordnik"
+engine = "wordnik"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "wnik"
+categories = ["dictionaries", "define"]
+
+[[engines]]
+name = "emojipedia"
+engine = "emojipedia"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+categories = []
+
+[[engines]]
+name = "wolframalpha_api"
+engine = "wolframalpha_api"
+shortcut = "waa"
+categories = ["general"]
+disabled = true  # needs credentials or an instance URL
+[[engines]]
+name = "currency_convert"
+engine = "currency_convert"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "cc"
+categories = ["currency", "general"]
+
+[[engines]]
+name = "dictzone"
+engine = "dictzone"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+categories = ["general", "translate"]
+
+[[engines]]
+name = "kickass"
+engine = "kickass"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "kc"
+categories = ["files"]
+paging = true
+
+[[engines]]
+name = "nyaa"
+engine = "nyaa"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "nt"
+categories = ["files"]
+paging = true
+
+[[engines]]
+name = "open_meteo"
+engine = "open_meteo"
+shortcut = "om"
+categories = ["weather"]
+
+[[engines]]
+name = "piratebay"
+engine = "piratebay"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "tpb"
+categories = ["files"]
+
+[[engines]]
+name = "solidtorrents"
+engine = "solidtorrents"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "solid"
+categories = ["files"]
+paging = true
+
+[[engines]]
+name = "tokyotoshokan"
+engine = "tokyotoshokan"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "tt"
+categories = ["files"]
+paging = true
+
+[[engines]]
+name = "wolframalpha_noapi"
+engine = "wolframalpha_noapi"
+shortcut = "wa"
+categories = ["general"]
+disabled = true  # needs credentials or an instance URL
+[[engines]]
+name = "flickr api"
+engine = "flickr"
+shortcut = "fla"
+categories = ["images"]
+paging = true
+disabled = true  # needs credentials or an instance URL
+[[engines]]
+name = "acfun"
+engine = "acfun"
+shortcut = "acf"
+categories = ["videos"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "ahmia"
+engine = "ahmia"
+categories = ["onions"]
+paging = true
+time_range_support = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "bilibili"
+engine = "bilibili"
+shortcut = "bil"
+categories = ["videos"]
+paging = true
+time_range_support = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "bt4g"
+engine = "bt4g"
+shortcut = "bt4g"
+categories = ["files"]
+paging = true
+time_range_support = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "btdigg"
+engine = "btdigg"
+shortcut = "bt"
+categories = ["files"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "chefkoch"
+engine = "chefkoch"
+shortcut = "chef"
+categories = []
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "destatis"
+engine = "destatis"
+shortcut = "destat"
+categories = []
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "huggingface"
+engine = "huggingface"
+shortcut = "hf"
+categories = ["it", "repos"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "jina"
+engine = "jina"
+shortcut = "ji"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "lib_rs"
+engine = "lib_rs"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "lrs"
+categories = ["it", "packages"]
+# verified working (returned results in the engine sweep)
+
+[[engines]]
+name = "metacpan"
+engine = "metacpan"
+shortcut = "cpan"
+categories = ["it", "packages"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "nvd"
+engine = "nvd"
+shortcut = "nvd"
+categories = ["it"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "pdbe"
+engine = "pdbe"
+shortcut = "pdb"
+categories = ["science"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "torznab"
+engine = "torznab"
+categories = ["files"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "ansa"
+engine = "ansa"
+shortcut = "ans"
+categories = ["news"]
+paging = true
+time_range_support = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "apple_maps"
+engine = "apple_maps"
+shortcut = "apm"
+categories = ["map"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "archlinux"
+engine = "archlinux"
+shortcut = "al"
+categories = ["it", "software wikis"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "boardreader"
+engine = "boardreader"
+shortcut = "boa"
+categories = ["general", "social media"]
+paging = true
+time_range_support = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "devicons"
+engine = "devicons"
+shortcut = "di"
+categories = ["images", "icons"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "duckduckgo_definitions"
+engine = "duckduckgo_definitions"
+shortcut = "ddd"
+categories = ["general"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "grokipedia"
+engine = "grokipedia"
+shortcut = "gp"
+categories = ["general"]
+disabled = true  # no answer of either benchmark came from it (2026-11-04); it only took result slots
+paging = true
+
+[[engines]]
+name = "il_post"
+engine = "il_post"
+shortcut = "pst"
+categories = ["news"]
+paging = true
+time_range_support = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "ipernity"
+engine = "ipernity"
+shortcut = "ip"
+categories = ["images"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "magnific"
+engine = "magnific"
+shortcut = "mag"
+categories = ["stock images"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "mediathekviewweb"
+engine = "mediathekviewweb"
+shortcut = "mvw"
+categories = ["videos"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "microsoft_learn"
+engine = "microsoft_learn"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
+shortcut = "msl"
+categories = ["it"]
+paging = true
+# verified working (returned results in the engine sweep)
+
+[[engines]]
+name = "moviepilot"
+engine = "moviepilot"
+shortcut = "mp"
+categories = ["movies"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "neocities"
+engine = "neocities"
+shortcut = "nc"
+categories = ["general", "blogs"]
+paging = true
+disabled = true  # fails on every request (2026-11-04); costs each search its timeout
+
+[[engines]]
+name = "picjumbo"
+engine = "picjumbo"
+shortcut = "pj"
+categories = ["stock images"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "podchaser"
+engine = "podchaser"
+shortcut = "poc"
+categories = []
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "reuters"
+engine = "reuters"
+shortcut = "reuters"
+categories = ["news"]
+paging = true
+time_range_support = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "rottentomatoes"
+engine = "rottentomatoes"
+disabled = true
+shortcut = "rt"
+categories = ["movies"]
+# verified working (results observed in the engine sweep)
+
+[[engines]]
+name = "s1search_rampjs"
+engine = "s1search_rampjs"
+shortcut = "s1j"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "scanr_structures"
+engine = "scanr_structures"
+shortcut = "scs"
+categories = ["science"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "iseek"
+engine = "iseek"
+shortcut = "isk"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "keenable"
+engine = "keenable"
+# Off by default: calls a public endpoint even without an API key; enable only with a key and after checking the terms.
+disabled = true
+shortcut = "keen"
+categories = ["general"]
+# verified working (results observed in the 100-question sweep)
+
+[[engines]]
+name = "libretranslate"
+engine = "libretranslate"
+shortcut = "lt"
+categories = ["general", "translate"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "privacywall"
+engine = "privacywall"
+shortcut = "pw"
+categories = ["general"]
+paging = true
+time_range_support = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "public_domain_image_archive"
+engine = "public_domain_image_archive"
+shortcut = "pdia"
+categories = ["images"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "radio_browser"
+engine = "radio_browser"
+shortcut = "rb"
+categories = ["music", "radio"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "astrophysics_data_system"
+engine = "astrophysics_data_system"
+shortcut = "ads"
+categories = ["science", "scientific publications"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "chatnoir"
+engine = "chatnoir"
+shortcut = "cha"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "findthatmeme"
+engine = "findthatmeme"
+shortcut = "ftm"
+categories = ["images"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "frinkiac"
+engine = "frinkiac"
+shortcut = "frk"
+categories = ["images"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "fyyd"
+engine = "fyyd"
+shortcut = "fy"
+categories = []
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "gmx"
+engine = "gmx"
+shortcut = "gmx"
+categories = ["general"]
+paging = true
+time_range_support = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "ina"
+engine = "ina"
+shortcut = "in"
+categories = ["videos"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "lucide"
+engine = "lucide"
+shortcut = "luc"
+categories = ["images", "icons"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "tiger"
+engine = "tiger"
+shortcut = "tig"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "tineye"
+engine = "tineye"
+shortcut = "tin"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "uxwing"
+engine = "uxwing"
+shortcut = "ux"
+categories = ["images", "icons"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "deepl"
+engine = "deepl"
+shortcut = "dpl"
+categories = ["general", "translate"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "resulthunter"
+engine = "resulthunter"
+shortcut = "reh"
+categories = ["general"]
+paging = true
+time_range_support = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "searchzee"
+engine = "searchzee"
+shortcut = "sz"
+categories = ["general"]
+paging = true
+time_range_support = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "seekninja"
+engine = "seekninja"
+shortcut = "sen"
+categories = ["general"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "selfhst"
+engine = "selfhst"
+shortcut = "si"
+categories = ["images", "icons"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "senscritique"
+engine = "senscritique"
+shortcut = "scr"
+categories = ["movies"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "sogou_wechat"
+engine = "sogou_wechat"
+shortcut = "sogouw"
+categories = ["news"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "spotify"
+engine = "spotify"
+shortcut = "stf"
+categories = ["music"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "stocksnap"
+engine = "stocksnap"
+shortcut = "sto"
+categories = ["stock images"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "swisscows_news"
+engine = "swisscows_news"
+shortcut = "swn"
+categories = ["news"]
+paging = true
+time_range_support = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "tagesschau"
+engine = "tagesschau"
+shortcut = "ts"
+categories = ["general", "news"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "voidlinux"
+engine = "voidlinux"
+shortcut = "void"
+categories = ["packages", "it"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "vuhuv"
+engine = "vuhuv"
+shortcut = "vu"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "xprivo"
+engine = "xprivo"
+shortcut = "xpr"
+categories = ["general"]
+paging = true
+time_range_support = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "exaapi"
+engine = "exaapi"
+shortcut = "exa"
+categories = ["general", "web"]
+disabled = true  # unverified; remove when confirmed working
+
+# DeepSeek Search API. Needs api_key here or DEEPSEEK_API_KEY. Billed per
+# successful request; see https://api-docs.deepseek.com/guides/search
+[[engines]]
+name = "deepseek"
+engine = "deepseek"
+shortcut = "ds"
+categories = ["general", "web"]
+disabled = true
+api_key = ""
+# count = 10            # 1-50
+# need_content = false  # true also returns the full page text
+
+[[engines]]
+name = "freesound"
+engine = "freesound"
+shortcut = "fnd"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "kagi"
+engine = "kagi"
+shortcut = "kg"
+categories = ["general"]
+paging = true
+time_range_support = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "ollama"
+engine = "ollama"
+shortcut = "ollama"
+categories = ["it", "repos"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "translated"
+engine = "translated"
+shortcut = "tl"
+categories = ["general", "translate"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "wttr"
+engine = "wttr"
+shortcut = "wttr"
+categories = ["weather"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "yacy"
+engine = "yacy"
+shortcut = "ya"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "yahoo_news"
+engine = "yahoo_news"
+shortcut = "yhn"
+categories = ["news"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "azure"
+engine = "azure"
+shortcut = "az"
+categories = ["it", "cloud"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "meilisearch"
+engine = "meilisearch"
+shortcut = "mes"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "solr"
+engine = "solr"
+shortcut = "slr"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "elasticsearch"
+engine = "elasticsearch"
+shortcut = "els"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "yandex_api"
+engine = "yandex_api"
+shortcut = "yandex"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "duckduckgo_weather"
+engine = "duckduckgo_weather"
+categories = ["weather"]
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "yandex_music"
+engine = "yandex_music"
+categories = ["music"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "zlibrary"
+engine = "zlibrary"
+categories = ["files", "books"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "mariadb_server"
+engine = "mariadb_server"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "mongodb"
+engine = "mongodb"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "mysql_server"
+engine = "mysql_server"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "opensemantic"
+engine = "opensemantic"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "postgresql"
+engine = "postgresql"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "recoll"
+engine = "recoll"
+categories = ["general"]
+paging = true
+time_range_support = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "sqlite"
+engine = "sqlite"
+categories = ["general"]
+paging = true
+disabled = true  # unverified; remove when confirmed working
+
+[[engines]]
+name = "valkey_server"
+engine = "valkey_server"
+categories = ["general"]
+disabled = true  # unverified; remove when confirmed working
+
+# Additional Bing markets are opt-in: separate names/shortcuts retain independent entries.
+[[engines]]
+name = "bing UK"
+engine = "bing"
+shortcut = "buk"
+categories = ["general", "web"]
+mkt = "en-GB"
+disabled = true
+
+[[engines]]
+name = "bing Germany"
+engine = "bing"
+shortcut = "bde"
+categories = ["general", "web"]
+mkt = "de-DE"
+disabled = true
+
+[[engines]]
+name = "bing Japan"
+engine = "bing"
+shortcut = "bjp"
+categories = ["general", "web"]
+mkt = "ja-JP"
+disabled = true

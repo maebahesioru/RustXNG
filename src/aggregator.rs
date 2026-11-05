@@ -42,7 +42,7 @@ pub struct SearchRequest {
     pub exclude_domains: Vec<String>,
     /// Fetch the page text for the top results and return it as raw_content.
     pub include_raw_content: bool,
-    /// Explicit language preference for page text, independent of engine locale.
+    /// Explicit Accept-Language preference for fetched page content.
     pub accept_language: crate::fetch::AcceptLanguage,
     /// How the selected engines are started.
     pub strategy: crate::settings::SearchStrategy,
@@ -188,7 +188,14 @@ async fn bounded_index_search(
         }
     });
     match tokio::time::timeout(budget, task).await {
-        Ok(Ok(Ok(hits))) => hits,
+        Ok(Ok(Ok(mut hits))) => {
+            // One site near-duplicate pages must not crowd out the other
+            // sources in the merge (python release pages flooded a docs query).
+            if !loose {
+                hits = cap_per_host(hits, MAX_PER_HOST);
+            }
+            hits
+        }
         Ok(Ok(Err(error))) => {
             tracing::debug!(%error, "local index search failed");
             Vec::new()
@@ -198,6 +205,41 @@ async fn bounded_index_search(
             Vec::new()
         }
     }
+}
+
+/// At most this many hits per host from a multi-host index. A single-host
+/// index (the encyclopedia) is exempt: every hit is the same host.
+const MAX_PER_HOST: usize = 3;
+
+/// Keep at most MAX hits per host, best first.
+fn cap_per_host(hits: Vec<crate::localindex::Hit>, max: usize) -> Vec<crate::localindex::Hit> {
+    let hosts: std::collections::HashSet<_> = hits
+        .iter()
+        .filter_map(|hit| {
+            url::Url::parse(&hit.url)
+                .ok()?
+                .host_str()
+                .map(str::to_owned)
+        })
+        .collect();
+    if hosts.len() <= 1 {
+        return hits;
+    }
+    let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    hits.into_iter()
+        .filter(|hit| {
+            let host = url::Url::parse(&hit.url)
+                .ok()
+                .and_then(|parsed| parsed.host_str().map(str::to_string))
+                .unwrap_or_default();
+            let count = counts.entry(host).or_insert(0);
+            if *count >= max {
+                return false;
+            }
+            *count += 1;
+            true
+        })
+        .collect()
 }
 
 fn open_wiki_index(settings: &Settings) -> Option<Arc<crate::localindex::LocalIndex>> {
@@ -795,8 +837,20 @@ impl Searcher {
         }
         let network = Arc::clone(&self.network);
         let kinds = crate::official::kinds_for(&request.query.query_text());
+        let locale = request.language.clone();
+        let cache = Arc::clone(&self.cache);
+        let reader = self.page_reader.clone();
         Some(tokio::spawn(async move {
-            crate::official::lookup(&network, &articles, &kinds, OFFICIAL_SITE_BUDGET).await
+            crate::official::lookup_cached(
+                &network,
+                &cache,
+                &reader,
+                &articles,
+                &kinds,
+                OFFICIAL_SITE_BUDGET,
+                &locale,
+            )
+            .await
         }))
     }
 
@@ -1489,6 +1543,104 @@ mod orchestration_tests {
         assert!(searcher.site_routes(&request, &selected).is_none());
         let request = SearchRequest::new(query("arxiv", &searcher.registry));
         assert!(searcher.site_routes(&request, &selected).is_none());
+    }
+
+    #[test]
+    fn local_index_diversity_keeps_order_and_exempts_single_host_indexes() {
+        let hit = |host: &str, number| crate::localindex::Hit {
+            url: format!("https://{host}/{number}"),
+            title: String::new(),
+            snippet: String::new(),
+            score: 1.0,
+        };
+        let same = (0..5).map(|i| hit("docs.example", i)).collect();
+        assert_eq!(cap_per_host(same, 3).len(), 5);
+        let mut mixed: Vec<_> = (0..5).map(|i| hit("docs.example", i)).collect();
+        mixed.push(hit("reference.example", 0));
+        let kept = cap_per_host(mixed, 3);
+        assert_eq!(kept.len(), 4);
+        assert_eq!(kept[0].url, "https://docs.example/0");
+        assert_eq!(kept[2].url, "https://docs.example/2");
+        assert_eq!(kept[3].url, "https://reference.example/0");
+    }
+
+    #[tokio::test]
+    async fn raw_content_uses_and_isolates_request_languages() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+        let server = tokio::spawn(async move {
+            for _ in 0..3 {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = Vec::new();
+                let mut buffer = [0u8; 1024];
+                loop {
+                    let count = stream.read(&mut buffer).await.unwrap();
+                    if count == 0 {
+                        break;
+                    }
+                    request.extend_from_slice(&buffer[..count]);
+                    if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                let request = String::from_utf8_lossy(&request).into_owned();
+                let is_robots = request.starts_with("GET /robots.txt ");
+                tx.send(request).unwrap();
+                let body = if is_robots {
+                    ""
+                } else {
+                    "<html><body>localized fixture text</body></html>"
+                };
+                let status = if is_robots { "404 Not Found" } else { "200 OK" };
+                let response = format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+
+        let mut searcher = searcher(vec![]);
+        searcher.page_reader = crate::fetch::PageReader::new(
+            &searcher.settings.outgoing,
+            &[("example.org".into(), address)],
+        )
+        .unwrap();
+        let url = "http://example.org/article";
+        let mut english = vec![SearchResult::new(url, "fixture")];
+        searcher
+            .attach_raw_content(
+                &mut english,
+                &crate::fetch::AcceptLanguage::parse("en-US").unwrap(),
+            )
+            .await;
+        assert!(english[0].raw_content.is_some());
+        let mut japanese = vec![SearchResult::new(url, "fixture")];
+        searcher
+            .attach_raw_content(
+                &mut japanese,
+                &crate::fetch::AcceptLanguage::parse("ja-JP").unwrap(),
+            )
+            .await;
+        assert!(japanese[0].raw_content.is_some());
+
+        let _robots = rx.recv().await.unwrap();
+        let english_request = rx.recv().await.unwrap();
+        let japanese_request = rx.recv().await.unwrap();
+        assert!(
+            english_request
+                .to_ascii_lowercase()
+                .contains("accept-language: en-us")
+        );
+        assert!(
+            japanese_request
+                .to_ascii_lowercase()
+                .contains("accept-language: ja-jp")
+        );
+        server.await.unwrap();
     }
 
     #[tokio::test]

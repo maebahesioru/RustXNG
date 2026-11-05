@@ -7,14 +7,14 @@ use crate::engine::util::*;
 use crate::engine::{
     Engine, EngineDefaults, EngineError, EngineItem, EngineMeta, EngineRequest, EngineResponse,
 };
-use crate::query::Query;
+use crate::query::{Query, TimeRange};
 use crate::settings::EngineConfig;
 
 const DEFAULTS: EngineDefaults = EngineDefaults {
     categories: &["general", "web"],
     shortcut: "exa",
     paging: false,
-    time_range_support: false,
+    time_range_support: true,
     safesearch: true,
     language_support: false,
     weight: 1.0,
@@ -26,6 +26,7 @@ const SEARCH_TYPES: &[&str] = &[
     "fast",
     "auto",
     "instant",
+    "lite",
     "deep",
     "deep-lite",
     "deep-reasoning",
@@ -37,6 +38,7 @@ const DEFAULT_CHARACTERS: i64 = 500;
 /// Exa, a search API for AI agents. Requires an api_key.
 pub struct ExaApi {
     meta: EngineMeta,
+    api_key: String,
 }
 
 fn iso_date(value: &str) -> String {
@@ -47,13 +49,20 @@ fn iso_date(value: &str) -> String {
 impl ExaApi {
     /// The checks of the upstream setup() hook.
     pub fn from_config(config: &EngineConfig) -> Result<Arc<Self>, String> {
-        let key = config
+        let api_key = config
             .api_key
             .as_deref()
-            .or_else(|| config.opt_str("api_key"));
-        if key.map(str::trim).unwrap_or_default().is_empty() {
-            return Err("exaapi requires an api_key".to_string());
-        }
+            .or_else(|| config.opt_str("api_key"))
+            .map(str::trim)
+            .filter(|key| !key.is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                std::env::var("EXA_API_KEY")
+                    .ok()
+                    .map(|key| key.trim().to_string())
+                    .filter(|key| !key.is_empty())
+            })
+            .ok_or_else(|| "exaapi requires an api_key or EXA_API_KEY".to_string())?;
         let results = config
             .opt_i64("results_per_page")
             .unwrap_or(DEFAULT_RESULTS);
@@ -73,18 +82,8 @@ impl ExaApi {
         }
         Ok(Arc::new(Self {
             meta: EngineMeta::from_config(config, DEFAULTS),
+            api_key,
         }))
-    }
-
-    fn api_key(&self) -> Result<&str, EngineError> {
-        let key = self
-            .meta
-            .api_key
-            .as_deref()
-            .or_else(|| self.meta.opt_str("api_key"));
-        key.map(str::trim)
-            .filter(|key| !key.is_empty())
-            .ok_or_else(|| EngineError::Message("exaapi requires an api_key".into()))
     }
 }
 
@@ -94,7 +93,7 @@ impl Engine for ExaApi {
     }
 
     fn build_request(&self, query: &Query, _pageno: u32) -> Result<EngineRequest, EngineError> {
-        let key = self.api_key()?;
+        let key = &self.api_key;
         let max_characters = self
             .meta
             .opt_i64("content_max_characters")
@@ -112,6 +111,18 @@ impl Engine for ExaApi {
             "numResults": self.meta.opt_i64("results_per_page").unwrap_or(DEFAULT_RESULTS),
             "contents": contents,
         });
+        if let Some(range) = query.time_range {
+            let days = match range {
+                TimeRange::Day => 1,
+                TimeRange::Week => 7,
+                TimeRange::Month => 30,
+                TimeRange::Year => 365,
+            };
+            body["startPublishedDate"] = serde_json::Value::String(
+                (chrono::Utc::now() - chrono::Duration::days(days))
+                    .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            );
+        }
         if query.safesearch > 0 {
             body["moderation"] = serde_json::Value::Bool(true);
         }
@@ -178,6 +189,35 @@ mod tests {
 
     fn query(raw: &str) -> Query {
         Query::parse(raw, &crate::engine::EngineRegistry::default(), &[])
+    }
+
+    #[test]
+    fn lite_search_uses_native_publication_date_filters_and_explicit_key() {
+        let mut config = EngineConfig::new("exaapi", "exaapi", "exa", &["general"]);
+        config.api_key = Some("configured-key".into());
+        config
+            .extra
+            .insert("search_type".into(), toml::Value::String("lite".into()));
+        let engine = ExaApi::from_config(&config).unwrap();
+        assert!(engine.meta().time_range_support);
+        let mut query = query("published this week");
+        query.time_range = Some(TimeRange::Week);
+        let before = chrono::Utc::now() - chrono::Duration::days(7);
+        let request = engine.build_request(&query, 1).unwrap();
+        assert_eq!(
+            request
+                .headers
+                .get("x-api-key")
+                .and_then(|value| value.to_str().ok()),
+            Some("configured-key")
+        );
+        let body = request.json.unwrap();
+        assert_eq!(body["type"], "lite");
+        let since =
+            chrono::DateTime::parse_from_rfc3339(body["startPublishedDate"].as_str().unwrap())
+                .unwrap();
+        assert!((since.timestamp() - before.timestamp()).abs() <= 1);
+        assert_eq!(body["query"], "published this week");
     }
 
     #[test]

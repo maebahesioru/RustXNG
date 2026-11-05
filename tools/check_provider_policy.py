@@ -2,10 +2,12 @@
 """Check Standard defaults; a documented pending review is not permission approval."""
 from __future__ import annotations
 
+import hashlib
 import json
 import tomllib
 from datetime import date
 from pathlib import Path
+from provider_policy import GENERIC_MODULES, adapter_source, review_for
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -30,16 +32,31 @@ def spacing_for(outgoing: dict, host: str) -> int:
 
 def validate(settings: dict, policy: dict, pending: dict) -> list[str]:
     errors = []
+    allowlist = {name.strip().lower() for name in settings.get("search", {}).get("engine_allowlist", [])}
     for engine in settings["engines"]:
-        if engine.get("disabled", False) or engine.get("inactive", False):
+        if engine.get("inactive", False):
+            continue
+        if allowlist:
+            if engine["name"].lower() not in allowlist and engine.get("engine", engine["name"]).lower() not in allowlist:
+                continue
+        elif engine.get("disabled", False):
             continue
         name = engine["name"]
         module = engine.get("engine", name)
-        review = policy["providers"].get(module, {})
+        review = review_for(engine, policy)
         allowed = review.get("standard_allowed")
         if allowed is False:
             errors.append(f"{name}: {module} must be disabled in Standard ({review.get('decision')})")
         elif allowed is True:
+            if review.get("status") != "reviewed_allowed_for_scope":
+                errors.append(f"{name}: affirmative review status required")
+            source = adapter_source(ROOT, module)
+            if not source.exists() or hashlib.sha256(source.read_bytes()).hexdigest() != review.get("source_sha256"):
+                errors.append(f"{name}: adapter changed; verify endpoint/use conditions and update its review")
+            if module in GENERIC_MODULES and name not in policy.get("engines", {}):
+                errors.append(f"{name}: generic module {module} needs an exact named endpoint review")
+            if review.get("module", module) != module:
+                errors.append(f"{name}: reviewed module does not match the configured module")
             for field in ("base_url", "search_url"):
                 if engine.get(field, "") != review.get(field, ""):
                     errors.append(f"{name}: configured {field} needs a separate endpoint review")
@@ -55,19 +72,31 @@ def validate(settings: dict, policy: dict, pending: dict) -> list[str]:
                 host = review["rate_limit_host"]
                 if spacing_for(settings.get("outgoing", {}), host) < minimum:
                     errors.append(f"{name}: {host} requires at least {minimum} ms between requests")
-        elif pending.get(name) != identity(engine):
-            errors.append(f"{name}: new or changed Standard provider needs a permission review")
+        else:
+            errors.append(f"{name}: Standard provider needs an affirmative permission review; a pending snapshot is not approval")
     return errors
 
 
 def main() -> None:
     settings = tomllib.loads((ROOT / "settings.toml").read_text(encoding="utf-8"))
     policy = json.loads((ROOT / "docs/provider-policy.json").read_text(encoding="utf-8"))
-    pending = json.loads((ROOT / "docs/provider-review-pending.json").read_text(encoding="utf-8"))["engines"]
-    errors = validate(settings, policy, pending)
+    errors = validate(settings, policy, {})
+    # The paid and allowlisted profiles meet the same endpoint requirements.
+    for profile in ("api", "clean"):
+        overlay = tomllib.loads((ROOT / f"settings.{profile}.toml").read_text(encoding="utf-8"))
+        engines = {entry["name"]: entry for entry in overlay.get("engines", [])}
+        reviewed = {**settings, "engines": [{**entry, **engines.get(entry["name"], {})} for entry in settings["engines"]]}
+        for section in ("search", "outgoing"):
+            reviewed[section] = {**settings.get(section, {}), **overlay.get(section, {})}
+            if section == "outgoing":
+                reviewed[section]["host_spacing_overrides"] = {
+                    **settings.get(section, {}).get("host_spacing_overrides", {}),
+                    **overlay.get(section, {}).get("host_spacing_overrides", {}),
+                }
+        errors.extend(validate(reviewed, policy, {}))
     if errors:
         raise SystemExit("\n".join(errors))
-    print("Standard policy checks passed. Pending entries remain unreviewed; see docs/PROVIDERS.md.")
+    print("Standard policy checks passed: every enabled entry has a recorded conditional review.")
 
 
 if __name__ == "__main__":

@@ -1,209 +1,189 @@
 {
   "recorded_at": "2026-11-05",
-  "scope": "Existing, unreviewed Standard entries. This snapshot prevents unaudited expansion; it does not grant permission or assert compliance.",
+  "scope": "Disabled inventory worklist only. No grandfathering, approval or active exception. Every enabled Standard/API entry needs an affirmative endpoint review.",
   "engines": {
-    "wikipedia": {
-      "module": "wikipedia",
+    "duckduckgo": {
+      "module": "duckduckgo",
       "base_url": "",
       "search_url": ""
     },
-    "wikipedia entities": {
-      "module": "wikipedia_entities",
+    "brave": {
+      "module": "brave",
       "base_url": "",
       "search_url": ""
     },
-    "wikipedia any words": {
-      "module": "wikipedia_any",
+    "openlibrary": {
+      "module": "openlibrary",
       "base_url": "",
       "search_url": ""
     },
-    "wikidata": {
-      "module": "wikidata",
+    "abcnyheter": {
+      "module": "xpath",
       "base_url": "",
-      "search_url": ""
+      "search_url": "https://startsiden.abcnyheter.no/sok/?q={query}&page={pageno}"
     },
-    "github": {
-      "module": "github",
+    "anaconda": {
+      "module": "xpath",
       "base_url": "",
-      "search_url": ""
-    },
-    "stack overflow": {
-      "module": "stackexchange",
-      "base_url": "",
-      "search_url": ""
-    },
-    "crates.io": {
-      "module": "crates",
-      "base_url": "",
-      "search_url": ""
-    },
-    "npm": {
-      "module": "npm",
-      "base_url": "",
-      "search_url": ""
-    },
-    "pypi": {
-      "module": "pypi",
-      "base_url": "",
-      "search_url": ""
-    },
-    "docker hub": {
-      "module": "docker_hub",
-      "base_url": "",
-      "search_url": ""
-    },
-    "arxiv": {
-      "module": "arxiv",
-      "base_url": "",
-      "search_url": ""
-    },
-    "crossref": {
-      "module": "crossref",
-      "base_url": "",
-      "search_url": ""
-    },
-    "cinii": {
-      "module": "cinii",
-      "base_url": "",
-      "search_url": ""
-    },
-    "semantic scholar": {
-      "module": "semantic_scholar",
-      "base_url": "",
-      "search_url": ""
-    },
-    "photon": {
-      "module": "photon",
-      "base_url": "",
-      "search_url": ""
-    },
-    "dailymotion": {
-      "module": "dailymotion",
-      "base_url": "",
-      "search_url": ""
-    },
-    "deezer": {
-      "module": "deezer",
-      "base_url": "",
-      "search_url": ""
-    },
-    "openverse": {
-      "module": "openverse",
-      "base_url": "",
-      "search_url": ""
-    },
-    "wikicommons": {
-      "module": "wikicommons",
-      "base_url": "",
-      "search_url": ""
+      "search_url": "https://anaconda.org/search?q={query}&page={pageno}"
     },
     "nixos wiki": {
       "module": "mediawiki",
       "base_url": "https://wiki.nixos.org/",
       "search_url": ""
     },
+    "ayo": {
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://search.ayo.de/search?q={query}"
+    },
     "bitbucket": {
       "module": "xpath",
       "base_url": "",
       "search_url": "https://bitbucket.org/repo/all/{pageno}?name={query}"
+    },
+    "crowdview": {
+      "module": "json_engine",
+      "base_url": "",
+      "search_url": "https://crowdview-next-js.onrender.com/api/search-v3?query={query}"
+    },
+    "encyclosearch": {
+      "module": "json_engine",
+      "base_url": "",
+      "search_url": "https://encyclosearch.org/encyclosphere/search?q={query}&page={pageno}&resultsPerPage=15"
+    },
+    "erowid": {
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://www.erowid.org/search.php?q={query}&s={pageno}"
     },
     "etymonline": {
       "module": "xpath",
       "base_url": "",
       "search_url": "https://etymonline.com/search?page={pageno}&q={query}"
     },
+    "fastbot": {
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://fastbot.de/search?q={query}"
+    },
     "free software directory": {
       "module": "mediawiki",
       "base_url": "https://directory.fsf.org/",
       "search_url": ""
+    },
+    "fynd": {
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://fynd.bot/?search={query}&offset={pageno}{safe_search}"
+    },
+    "gabanza": {
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://www.gabanza.com/search?query={query}"
     },
     "gentoo": {
       "module": "mediawiki",
       "base_url": "https://wiki.gentoo.org/",
       "search_url": ""
     },
+    "habrahabr": {
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://habr.com/en/search/page{pageno}/?q={query}"
+    },
     "hoogle": {
       "module": "xpath",
       "base_url": "",
       "search_url": "https://hoogle.haskell.org/?hoogle={query}"
     },
-    "mdn": {
-      "module": "json_engine",
+    "library genesis": {
+      "module": "xpath",
       "base_url": "",
-      "search_url": "https://developer.mozilla.org/api/v1/search?q={query}&page={pageno}"
+      "search_url": "https://libgen.rs/search.php?req={query}"
     },
-    "packagist": {
+    "lobste.rs": {
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://lobste.rs/search?q={query}&what=stories&order=relevance"
+    },
+    "mankier": {
       "module": "json_engine",
       "base_url": "",
-      "search_url": "https://packagist.org/search.json?q={query}&page={pageno}"
+      "search_url": "https://www.mankier.com/api/v2/mans/?q={query}"
+    },
+    "openairedatasets": {
+      "module": "json_engine",
+      "base_url": "",
+      "search_url": "https://api.openaire.eu/search/datasets?format=json&page={pageno}&size=10&title={query}"
+    },
+    "openairepublications": {
+      "module": "json_engine",
+      "base_url": "",
+      "search_url": "https://api.openaire.eu/search/publications?format=json&page={pageno}&size=10&title={query}"
+    },
+    "openrepos": {
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://openrepos.net/search/node/{query}?page={pageno}"
     },
     "pub.dev": {
       "module": "xpath",
       "base_url": "",
       "search_url": "https://pub.dev/packages?q={query}&page={pageno}"
     },
-    "wiby": {
-      "module": "json_engine",
+    "searchmysite": {
+      "module": "xpath",
       "base_url": "",
-      "search_url": "https://wiby.me/json/?q={query}&p={pageno}"
+      "search_url": "https://searchmysite.net/search/?q={query}&page={pageno}"
     },
-    "wikibooks": {
-      "module": "mediawiki",
-      "base_url": "https://{language}.wikibooks.org/",
-      "search_url": ""
+    "tmdb": {
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://www.themoviedb.org/search?page={pageno}&query={query}"
     },
-    "wikinews": {
-      "module": "mediawiki",
-      "base_url": "https://{language}.wikinews.org/",
-      "search_url": ""
-    },
-    "wikiquote": {
-      "module": "mediawiki",
-      "base_url": "https://{language}.wikiquote.org/",
-      "search_url": ""
-    },
-    "wikisource": {
-      "module": "mediawiki",
-      "base_url": "https://{language}.wikisource.org/",
-      "search_url": ""
-    },
-    "wikispecies": {
-      "module": "mediawiki",
-      "base_url": "https://species.wikimedia.org/",
-      "search_url": ""
-    },
-    "wiktionary": {
-      "module": "mediawiki",
-      "base_url": "https://{language}.wiktionary.org/",
-      "search_url": ""
-    },
-    "wikiversity": {
-      "module": "mediawiki",
-      "base_url": "https://{language}.wikiversity.org/",
-      "search_url": ""
-    },
-    "wikivoyage": {
-      "module": "mediawiki",
-      "base_url": "https://{language}.wikivoyage.org/",
-      "search_url": ""
+    "torch": {
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "http://xmh57jrknzkhv6y3ls3ubitzfqnkrwxhopf5aygthi7d6rplyvk3noyd.onion/cgi-bin/omega/omega?P={query}&DEFAULTOP=and"
     },
     "rubygems": {
       "module": "xpath",
       "base_url": "",
       "search_url": "https://rubygems.org/search?page={pageno}&query={query}"
     },
+    "reloado": {
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://reloado.com/search?q={query}&page={pageno}"
+    },
+    "searchch": {
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://search.ch/web/api/loadmore.html?path=/web/&q={query}&page={pageno}"
+    },
     "woxikon.de synonyme": {
       "module": "xpath",
       "base_url": "",
       "search_url": "https://synonyme.woxikon.de/synonyme/{query}.php"
+    },
+    "wikimini": {
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://fr.wikimini.org/w/index.php?search={query}&title=Sp%C3%A9cial%3ASearch&fulltext=Search"
+    },
+    "zapmeta": {
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://www.zapmeta.com/search?q={query}&pg={pageno}"
     },
     "minecraft wiki": {
       "module": "mediawiki",
       "base_url": "https://minecraft.wiki/",
       "search_url": ""
     },
-    "apple_app_store": {
-      "module": "apple_app_store",
+    "dogpile": {
+      "module": "dogpile",
       "base_url": "",
       "search_url": ""
     },
@@ -217,8 +197,23 @@
       "base_url": "",
       "search_url": ""
     },
+    "luxxle": {
+      "module": "luxxle",
+      "base_url": "",
+      "search_url": ""
+    },
+    "findborg": {
+      "module": "findborg",
+      "base_url": "",
+      "search_url": ""
+    },
     "mastodon": {
       "module": "mastodon",
+      "base_url": "",
+      "search_url": ""
+    },
+    "pixabay": {
+      "module": "pixabay",
       "base_url": "",
       "search_url": ""
     },
@@ -227,13 +222,18 @@
       "base_url": "",
       "search_url": ""
     },
-    "genius": {
-      "module": "genius",
+    "bandcamp": {
+      "module": "bandcamp",
       "base_url": "",
       "search_url": ""
     },
-    "mixcloud": {
-      "module": "mixcloud",
+    "goodreads": {
+      "module": "goodreads",
+      "base_url": "",
+      "search_url": ""
+    },
+    "soundcloud": {
+      "module": "soundcloud",
       "base_url": "",
       "search_url": ""
     },
@@ -252,8 +252,28 @@
       "base_url": "",
       "search_url": ""
     },
+    "andisearch": {
+      "module": "andisearch",
+      "base_url": "",
+      "search_url": ""
+    },
+    "baidu": {
+      "module": "baidu",
+      "base_url": "",
+      "search_url": ""
+    },
     "findfiles": {
       "module": "findfiles",
+      "base_url": "",
+      "search_url": ""
+    },
+    "fireball": {
+      "module": "fireball",
+      "base_url": "",
+      "search_url": ""
+    },
+    "naver": {
+      "module": "naver",
       "base_url": "",
       "search_url": ""
     },
@@ -262,8 +282,8 @@
       "base_url": "",
       "search_url": ""
     },
-    "pexels": {
-      "module": "pexels",
+    "qwant": {
+      "module": "qwant",
       "base_url": "",
       "search_url": ""
     },
@@ -277,8 +297,23 @@
       "base_url": "",
       "search_url": ""
     },
+    "tusksearch": {
+      "module": "tusksearch",
+      "base_url": "",
+      "search_url": ""
+    },
+    "artstation": {
+      "module": "artstation",
+      "base_url": "",
+      "search_url": ""
+    },
     "deviantart": {
       "module": "deviantart",
+      "base_url": "",
+      "search_url": ""
+    },
+    "giphy": {
+      "module": "giphy",
       "base_url": "",
       "search_url": ""
     },
@@ -292,13 +327,33 @@
       "base_url": "",
       "search_url": ""
     },
+    "annas_archive": {
+      "module": "annas_archive",
+      "base_url": "",
+      "search_url": ""
+    },
+    "discourse": {
+      "module": "discourse",
+      "base_url": "",
+      "search_url": ""
+    },
+    "duckduckgo_extra": {
+      "module": "duckduckgo_extra",
+      "base_url": "",
+      "search_url": ""
+    },
+    "duckduckgo_web": {
+      "module": "duckduckgo_web",
+      "base_url": "",
+      "search_url": ""
+    },
     "r1337x": {
       "module": "1337x",
       "base_url": "",
       "search_url": ""
     },
-    "artic": {
-      "module": "artic",
+    "r360search": {
+      "module": "360search",
       "base_url": "",
       "search_url": ""
     },
@@ -312,6 +367,11 @@
       "base_url": "",
       "search_url": ""
     },
+    "braveapi": {
+      "module": "braveapi",
+      "base_url": "",
+      "search_url": ""
+    },
     "cachy_os": {
       "module": "cachy_os",
       "base_url": "",
@@ -322,18 +382,18 @@
       "base_url": "",
       "search_url": ""
     },
-    "core": {
-      "module": "core",
+    "chinaso": {
+      "module": "chinaso",
+      "base_url": "",
+      "search_url": ""
+    },
+    "cloudflareai": {
+      "module": "cloudflareai",
       "base_url": "",
       "search_url": ""
     },
     "r360search_videos": {
       "module": "360search_videos",
-      "base_url": "",
-      "search_url": ""
-    },
-    "iqiyi": {
-      "module": "iqiyi",
       "base_url": "",
       "search_url": ""
     },
@@ -352,18 +412,23 @@
       "base_url": "",
       "search_url": ""
     },
-    "vimeo": {
-      "module": "vimeo",
-      "base_url": "",
-      "search_url": ""
-    },
-    "github_code": {
-      "module": "github_code",
-      "base_url": "",
-      "search_url": ""
-    },
     "gitlab": {
       "module": "gitlab",
+      "base_url": "",
+      "search_url": ""
+    },
+    "marginalia": {
+      "module": "marginalia",
+      "base_url": "",
+      "search_url": ""
+    },
+    "yahoo": {
+      "module": "yahoo",
+      "base_url": "",
+      "search_url": ""
+    },
+    "yandex": {
+      "module": "yandex",
       "base_url": "",
       "search_url": ""
     },
@@ -372,23 +437,18 @@
       "base_url": "",
       "search_url": ""
     },
-    "gitea": {
-      "module": "gitea",
-      "base_url": "",
-      "search_url": ""
-    },
-    "hex": {
-      "module": "hex",
-      "base_url": "",
-      "search_url": ""
-    },
-    "openalex": {
-      "module": "openalex",
+    "neosearch": {
+      "module": "neosearch",
       "base_url": "",
       "search_url": ""
     },
     "pkg_go_dev": {
       "module": "pkg_go_dev",
+      "base_url": "",
+      "search_url": ""
+    },
+    "sogou": {
+      "module": "sogou",
       "base_url": "",
       "search_url": ""
     },
@@ -407,13 +467,28 @@
       "base_url": "",
       "search_url": ""
     },
+    "springer": {
+      "module": "springer",
+      "base_url": "",
+      "search_url": ""
+    },
     "steam": {
       "module": "steam",
       "base_url": "",
       "search_url": ""
     },
+    "swisscows": {
+      "module": "swisscows",
+      "base_url": "",
+      "search_url": ""
+    },
     "www1x": {
       "module": "www1x",
+      "base_url": "",
+      "search_url": ""
+    },
+    "yep": {
+      "module": "yep",
       "base_url": "",
       "search_url": ""
     },
@@ -432,28 +507,13 @@
       "base_url": "",
       "search_url": ""
     },
-    "iconify": {
-      "module": "iconify",
-      "base_url": "",
-      "search_url": ""
-    },
     "jisho": {
       "module": "jisho",
       "base_url": "",
       "search_url": ""
     },
-    "pixiv": {
-      "module": "pixiv",
-      "base_url": "",
-      "search_url": ""
-    },
-    "pubmed": {
-      "module": "pubmed",
-      "base_url": "",
-      "search_url": ""
-    },
-    "repology": {
-      "module": "repology",
+    "quark": {
+      "module": "quark",
       "base_url": "",
       "search_url": ""
     },
@@ -472,8 +532,8 @@
       "base_url": "",
       "search_url": ""
     },
-    "currency_convert": {
-      "module": "currency_convert",
+    "wolframalpha_api": {
+      "module": "wolframalpha_api",
       "base_url": "",
       "search_url": ""
     },
@@ -492,11 +552,6 @@
       "base_url": "",
       "search_url": ""
     },
-    "open_meteo": {
-      "module": "open_meteo",
-      "base_url": "",
-      "search_url": ""
-    },
     "piratebay": {
       "module": "piratebay",
       "base_url": "",
@@ -512,13 +567,443 @@
       "base_url": "",
       "search_url": ""
     },
+    "wolframalpha_noapi": {
+      "module": "wolframalpha_noapi",
+      "base_url": "",
+      "search_url": ""
+    },
+    "flickr api": {
+      "module": "flickr",
+      "base_url": "",
+      "search_url": ""
+    },
+    "acfun": {
+      "module": "acfun",
+      "base_url": "",
+      "search_url": ""
+    },
+    "ahmia": {
+      "module": "ahmia",
+      "base_url": "",
+      "search_url": ""
+    },
+    "bilibili": {
+      "module": "bilibili",
+      "base_url": "",
+      "search_url": ""
+    },
+    "bt4g": {
+      "module": "bt4g",
+      "base_url": "",
+      "search_url": ""
+    },
+    "btdigg": {
+      "module": "btdigg",
+      "base_url": "",
+      "search_url": ""
+    },
+    "chefkoch": {
+      "module": "chefkoch",
+      "base_url": "",
+      "search_url": ""
+    },
+    "destatis": {
+      "module": "destatis",
+      "base_url": "",
+      "search_url": ""
+    },
+    "huggingface": {
+      "module": "huggingface",
+      "base_url": "",
+      "search_url": ""
+    },
+    "jina": {
+      "module": "jina",
+      "base_url": "",
+      "search_url": ""
+    },
     "lib_rs": {
       "module": "lib_rs",
       "base_url": "",
       "search_url": ""
     },
-    "microsoft_learn": {
-      "module": "microsoft_learn",
+    "metacpan": {
+      "module": "metacpan",
+      "base_url": "",
+      "search_url": ""
+    },
+    "nvd": {
+      "module": "nvd",
+      "base_url": "",
+      "search_url": ""
+    },
+    "pdbe": {
+      "module": "pdbe",
+      "base_url": "",
+      "search_url": ""
+    },
+    "torznab": {
+      "module": "torznab",
+      "base_url": "",
+      "search_url": ""
+    },
+    "ansa": {
+      "module": "ansa",
+      "base_url": "",
+      "search_url": ""
+    },
+    "apple_maps": {
+      "module": "apple_maps",
+      "base_url": "",
+      "search_url": ""
+    },
+    "archlinux": {
+      "module": "archlinux",
+      "base_url": "",
+      "search_url": ""
+    },
+    "boardreader": {
+      "module": "boardreader",
+      "base_url": "",
+      "search_url": ""
+    },
+    "devicons": {
+      "module": "devicons",
+      "base_url": "",
+      "search_url": ""
+    },
+    "duckduckgo_definitions": {
+      "module": "duckduckgo_definitions",
+      "base_url": "",
+      "search_url": ""
+    },
+    "grokipedia": {
+      "module": "grokipedia",
+      "base_url": "",
+      "search_url": ""
+    },
+    "il_post": {
+      "module": "il_post",
+      "base_url": "",
+      "search_url": ""
+    },
+    "ipernity": {
+      "module": "ipernity",
+      "base_url": "",
+      "search_url": ""
+    },
+    "magnific": {
+      "module": "magnific",
+      "base_url": "",
+      "search_url": ""
+    },
+    "mediathekviewweb": {
+      "module": "mediathekviewweb",
+      "base_url": "",
+      "search_url": ""
+    },
+    "moviepilot": {
+      "module": "moviepilot",
+      "base_url": "",
+      "search_url": ""
+    },
+    "neocities": {
+      "module": "neocities",
+      "base_url": "",
+      "search_url": ""
+    },
+    "picjumbo": {
+      "module": "picjumbo",
+      "base_url": "",
+      "search_url": ""
+    },
+    "podchaser": {
+      "module": "podchaser",
+      "base_url": "",
+      "search_url": ""
+    },
+    "reuters": {
+      "module": "reuters",
+      "base_url": "",
+      "search_url": ""
+    },
+    "s1search_rampjs": {
+      "module": "s1search_rampjs",
+      "base_url": "",
+      "search_url": ""
+    },
+    "scanr_structures": {
+      "module": "scanr_structures",
+      "base_url": "",
+      "search_url": ""
+    },
+    "iseek": {
+      "module": "iseek",
+      "base_url": "",
+      "search_url": ""
+    },
+    "keenable": {
+      "module": "keenable",
+      "base_url": "",
+      "search_url": ""
+    },
+    "libretranslate": {
+      "module": "libretranslate",
+      "base_url": "",
+      "search_url": ""
+    },
+    "privacywall": {
+      "module": "privacywall",
+      "base_url": "",
+      "search_url": ""
+    },
+    "public_domain_image_archive": {
+      "module": "public_domain_image_archive",
+      "base_url": "",
+      "search_url": ""
+    },
+    "radio_browser": {
+      "module": "radio_browser",
+      "base_url": "",
+      "search_url": ""
+    },
+    "astrophysics_data_system": {
+      "module": "astrophysics_data_system",
+      "base_url": "",
+      "search_url": ""
+    },
+    "chatnoir": {
+      "module": "chatnoir",
+      "base_url": "",
+      "search_url": ""
+    },
+    "findthatmeme": {
+      "module": "findthatmeme",
+      "base_url": "",
+      "search_url": ""
+    },
+    "frinkiac": {
+      "module": "frinkiac",
+      "base_url": "",
+      "search_url": ""
+    },
+    "fyyd": {
+      "module": "fyyd",
+      "base_url": "",
+      "search_url": ""
+    },
+    "gmx": {
+      "module": "gmx",
+      "base_url": "",
+      "search_url": ""
+    },
+    "ina": {
+      "module": "ina",
+      "base_url": "",
+      "search_url": ""
+    },
+    "lucide": {
+      "module": "lucide",
+      "base_url": "",
+      "search_url": ""
+    },
+    "tiger": {
+      "module": "tiger",
+      "base_url": "",
+      "search_url": ""
+    },
+    "tineye": {
+      "module": "tineye",
+      "base_url": "",
+      "search_url": ""
+    },
+    "uxwing": {
+      "module": "uxwing",
+      "base_url": "",
+      "search_url": ""
+    },
+    "deepl": {
+      "module": "deepl",
+      "base_url": "",
+      "search_url": ""
+    },
+    "resulthunter": {
+      "module": "resulthunter",
+      "base_url": "",
+      "search_url": ""
+    },
+    "searchzee": {
+      "module": "searchzee",
+      "base_url": "",
+      "search_url": ""
+    },
+    "seekninja": {
+      "module": "seekninja",
+      "base_url": "",
+      "search_url": ""
+    },
+    "selfhst": {
+      "module": "selfhst",
+      "base_url": "",
+      "search_url": ""
+    },
+    "senscritique": {
+      "module": "senscritique",
+      "base_url": "",
+      "search_url": ""
+    },
+    "sogou_wechat": {
+      "module": "sogou_wechat",
+      "base_url": "",
+      "search_url": ""
+    },
+    "spotify": {
+      "module": "spotify",
+      "base_url": "",
+      "search_url": ""
+    },
+    "stocksnap": {
+      "module": "stocksnap",
+      "base_url": "",
+      "search_url": ""
+    },
+    "swisscows_news": {
+      "module": "swisscows_news",
+      "base_url": "",
+      "search_url": ""
+    },
+    "tagesschau": {
+      "module": "tagesschau",
+      "base_url": "",
+      "search_url": ""
+    },
+    "voidlinux": {
+      "module": "voidlinux",
+      "base_url": "",
+      "search_url": ""
+    },
+    "vuhuv": {
+      "module": "vuhuv",
+      "base_url": "",
+      "search_url": ""
+    },
+    "xprivo": {
+      "module": "xprivo",
+      "base_url": "",
+      "search_url": ""
+    },
+    "freesound": {
+      "module": "freesound",
+      "base_url": "",
+      "search_url": ""
+    },
+    "kagi": {
+      "module": "kagi",
+      "base_url": "",
+      "search_url": ""
+    },
+    "ollama": {
+      "module": "ollama",
+      "base_url": "",
+      "search_url": ""
+    },
+    "translated": {
+      "module": "translated",
+      "base_url": "",
+      "search_url": ""
+    },
+    "wttr": {
+      "module": "wttr",
+      "base_url": "",
+      "search_url": ""
+    },
+    "yacy": {
+      "module": "yacy",
+      "base_url": "",
+      "search_url": ""
+    },
+    "yahoo_news": {
+      "module": "yahoo_news",
+      "base_url": "",
+      "search_url": ""
+    },
+    "azure": {
+      "module": "azure",
+      "base_url": "",
+      "search_url": ""
+    },
+    "meilisearch": {
+      "module": "meilisearch",
+      "base_url": "",
+      "search_url": ""
+    },
+    "solr": {
+      "module": "solr",
+      "base_url": "",
+      "search_url": ""
+    },
+    "elasticsearch": {
+      "module": "elasticsearch",
+      "base_url": "",
+      "search_url": ""
+    },
+    "yandex_api": {
+      "module": "yandex_api",
+      "base_url": "",
+      "search_url": ""
+    },
+    "duckduckgo_weather": {
+      "module": "duckduckgo_weather",
+      "base_url": "",
+      "search_url": ""
+    },
+    "yandex_music": {
+      "module": "yandex_music",
+      "base_url": "",
+      "search_url": ""
+    },
+    "zlibrary": {
+      "module": "zlibrary",
+      "base_url": "",
+      "search_url": ""
+    },
+    "mariadb_server": {
+      "module": "mariadb_server",
+      "base_url": "",
+      "search_url": ""
+    },
+    "mongodb": {
+      "module": "mongodb",
+      "base_url": "",
+      "search_url": ""
+    },
+    "mysql_server": {
+      "module": "mysql_server",
+      "base_url": "",
+      "search_url": ""
+    },
+    "opensemantic": {
+      "module": "opensemantic",
+      "base_url": "",
+      "search_url": ""
+    },
+    "postgresql": {
+      "module": "postgresql",
+      "base_url": "",
+      "search_url": ""
+    },
+    "recoll": {
+      "module": "recoll",
+      "base_url": "",
+      "search_url": ""
+    },
+    "sqlite": {
+      "module": "sqlite",
+      "base_url": "",
+      "search_url": ""
+    },
+    "valkey_server": {
+      "module": "valkey_server",
       "base_url": "",
       "search_url": ""
     }

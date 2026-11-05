@@ -24,9 +24,9 @@ engine_allowlist = [
   "wikipedia", "wikipedia any words", "wikidata", "wikibooks", "wikinews", "wikiquote", "wikisource",
   "wikispecies", "wikiversity", "wikivoyage", "wiktionary", "wikicommons",
   # Developer registries and code hosting with documented public APIs
-  "github", "stack overflow", "crates.io", "npm", "pypi",
+  "github", "stack overflow", "crates.io", "npm",
   # Scholarly APIs
-  "arxiv", "crossref", "semantic scholar", "openalex",
+  "arxiv", "crossref", "semantic scholar",
   # Open data
   "openstreetmap", "openverse",
 ]

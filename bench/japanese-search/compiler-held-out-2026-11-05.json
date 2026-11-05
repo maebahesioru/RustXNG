@@ -1,0 +1,883 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-11-05T14:19:31.839365+00:00",
+  "dataset_license": "CC0-1.0 for original snippets; compiler diagnostic text Apache-2.0",
+  "compiler": {
+    "version": "Version 5.9.3",
+    "distribution": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+    "tsc_js_sha256": "2cffde0b8c6760dfb0b5b0382bbb7e00ba6a8b2d981b9205b256a700a481d983",
+    "flags": [
+      "--pretty",
+      "false",
+      "--locale",
+      "ja",
+      "--strict",
+      "--noEmit",
+      "--target",
+      "ES2022",
+      "--module",
+      "commonjs"
+    ]
+  },
+  "compiler_transcript": [
+    "case-01.ts(2,15): error TS2304: 名前 'missingInvoiceTotal' が見つかりません。",
+    "case-02.ts(2,7): error TS2322: 型 'number' を型 'string' に割り当てることはできません。",
+    "case-03.ts(2,38): error TS2339: プロパティ 'currency' は型 '{ sum: number; }' に存在しません。",
+    "case-04.ts(2,60): error TS2540: 読み取り専用プロパティであるため、'sum' に代入することはできません。",
+    "case-05.ts(2,17): error TS2588: 定数であるため、'tax' に代入することはできません。",
+    "case-06.ts(2,18): error TS7006: パラメーター 'item' の型は暗黙的に 'any' になります。",
+    "case-07.ts(2,35): error TS2345: 型 'string' の引数を型 'number' のパラメーターに割り当てることはできません。",
+    "case-08.ts(2,44): error TS2554: 2 個の引数が必要ですが、1 個指定されました。",
+    "case-09.ts(2,7): error TS2741: プロパティ 'currency' は型 '{ sum: number; }' にありませんが、型 '{ sum: number; currency: string; }' では必須です。",
+    "case-10.ts(2,55): error TS7053: 型 'string' の式を使用して型 '{ sum: number; }' にインデックスを付けることはできないため、要素は暗黙的に 'any' 型になります。",
+    "  型 'string' のパラメーターを持つインデックス シグネチャが型 '{ sum: number; }' に見つかりませんでした。",
+    "case-11.ts(2,42): error TS2353: オブジェクト リテラルは既知のプロパティのみ指定できます。'rebate' は型 '{ sum: number; }' に存在しません。",
+    "case-12.ts(2,5): error TS2451: ブロック スコープの変数 'parcel' を再宣言することはできません。",
+    "case-12.ts(2,21): error TS2451: ブロック スコープの変数 'parcel' を再宣言することはできません。",
+    "case-13.ts(2,22): error TS1308: 'await' 式は、非同期関数内と、モジュールのトップ レベルでのみ許可されます。",
+    "case-14.ts(2,50): error TS2511: 抽象クラスのインスタンスは作成できません。",
+    "case-15.ts(2,53): error TS2341: プロパティ 'tracking' はプライベートで、クラス 'Parcel' 内でのみアクセスできます。",
+    "case-16.ts(2,55): error TS2445: プロパティ 'tracking' は保護されているため、クラス 'Parcel' とそのサブクラス内でのみアクセスできます。",
+    "case-17.ts(2,47): error TS18048: 'parcel' は 'undefined' の可能性があります。",
+    "case-18.ts(2,53): error TS18047: 'parcel' は 'null' の可能性があります。",
+    "case-19.ts(2,41): error TS18046: 'parcel''は 'unknown' 型です。",
+    "case-20.ts(2,22): error TS2349: この式は呼び出し可能ではありません。",
+    "  型 'Number' には呼び出しシグネチャがありません。",
+    "case-21.ts(2,26): error TS2351: この式はコンストラクト可能ではありません。",
+    "  型 'Number' にはコンストラクト シグネチャがありません。",
+    "case-22.ts(2,32): error TS2366: 関数に終了の return ステートメントがないため、戻り値の型には 'undefined' が含まれません。",
+    "case-23.ts(2,38): error TS2367: '\"small\"' 型と '\"large\"' 型が重複していないため、この比較は意図したとおりに表示されない可能性があります。",
+    "case-24.ts(2,7): error TS2488: 型 '12' には、反復子を返す '[Symbol.iterator]()' メソッドが必要です。",
+    "case-25.ts(2,33): error TS2464: 計算されたプロパティ名は 'string' 型、'number' 型、'symbol' 型、または 'any' 型のいずれかでなければなりません。",
+    "case-26.ts(2,58): error TS2312: インターフェイスが拡張できるのは、オブジェクト型または静的な既知のメンバーを持つオブジェクト型の積集合のみです。",
+    "case-27.ts(2,18): error TS2355: 宣言された型が 'undefined'、'void'、または 'any' でない関数は、値を返す必要があります。",
+    "case-28.ts(2,10): error TS2394: このオーバーロード シグネチャには、実装シグネチャとの互換性はありません。",
+    "case-29.ts(2,20): error TS2307: モジュール 'missing-parcel-package-unique' またはそれに対応する型宣言が見つかりません。",
+    "case-30.ts(2,76): error TS2556: spread 引数には、組の種類を指定するか、rest パラメーターに渡す必要があります。"
+  ],
+  "cases": [
+    {
+      "id": "compiler-ja-01",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nconst total = missingInvoiceTotal;\n",
+      "diagnostic_code": "2304",
+      "exact_error": "TS2304: 名前 'missingInvoiceTotal' が見つかりません。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 15,
+          "code": "2304",
+          "message": "名前 'missingInvoiceTotal' が見つかりません。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "名前",
+        "missingInvoiceTotal"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-02",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nconst label: string = 42;\n",
+      "diagnostic_code": "2322",
+      "exact_error": "TS2322: 型 'number' を型 'string' に割り当てることはできません。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 7,
+          "code": "2322",
+          "message": "型 'number' を型 'string' に割り当てることはできません。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "string",
+        "number",
+        "割り当て"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-03",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nconst receipt = { sum: 12 }; receipt.currency;\n",
+      "diagnostic_code": "2339",
+      "exact_error": "TS2339: プロパティ 'currency' は型 '{ sum: number; }' に存在しません。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 38,
+          "code": "2339",
+          "message": "プロパティ 'currency' は型 '{ sum: number; }' に存在しません。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/objects.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "プロパティ",
+        "currency"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-04",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nconst receipt: {readonly sum: number} = {sum: 12}; receipt.sum = 13;\n",
+      "diagnostic_code": "2540",
+      "exact_error": "TS2540: 読み取り専用プロパティであるため、'sum' に代入することはできません。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 60,
+          "code": "2540",
+          "message": "読み取り専用プロパティであるため、'sum' に代入することはできません。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/objects.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "読み取り専用",
+        "sum"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-05",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nconst tax = 10; tax = 11;\n",
+      "diagnostic_code": "2588",
+      "exact_error": "TS2588: 定数であるため、'tax' に代入することはできません。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 17,
+          "code": "2588",
+          "message": "定数であるため、'tax' に代入することはできません。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "定数",
+        "割り当て"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-06",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nfunction invoice(item) { return item; }\n",
+      "diagnostic_code": "7006",
+      "exact_error": "TS7006: パラメーター 'item' の型は暗黙的に 'any' になります。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 18,
+          "code": "7006",
+          "message": "パラメーター 'item' の型は暗黙的に 'any' になります。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/functions.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "パラメーター",
+        "any"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-07",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nfunction ship(id: number) {} ship(\"parcel\");\n",
+      "diagnostic_code": "2345",
+      "exact_error": "TS2345: 型 'string' の引数を型 'number' のパラメーターに割り当てることはできません。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 35,
+          "code": "2345",
+          "message": "型 'string' の引数を型 'number' のパラメーターに割り当てることはできません。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/functions.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "引数",
+        "number",
+        "string"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-08",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nfunction ship(id: number, city: string) {} ship(12);\n",
+      "diagnostic_code": "2554",
+      "exact_error": "TS2554: 2 個の引数が必要ですが、1 個指定されました。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 44,
+          "code": "2554",
+          "message": "2 個の引数が必要ですが、1 個指定されました。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/functions.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "引数",
+        "必要"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-09",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nconst receipt: {sum: number; currency: string} = {sum: 12};\n",
+      "diagnostic_code": "2741",
+      "exact_error": "TS2741: プロパティ 'currency' は型 '{ sum: number; }' にありませんが、型 '{ sum: number; currency: string; }' では必須です。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 7,
+          "code": "2741",
+          "message": "プロパティ 'currency' は型 '{ sum: number; }' にありませんが、型 '{ sum: number; currency: string; }' では必須です。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/objects.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "プロパティ",
+        "currency",
+        "ありません"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-10",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nconst receipt = {sum: 12}; const key: string = \"sum\"; receipt[key];\n",
+      "diagnostic_code": "7053",
+      "exact_error": "TS7053: 型 'string' の式を使用して型 '{ sum: number; }' にインデックスを付けることはできないため、要素は暗黙的に 'any' 型になります。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 55,
+          "code": "7053",
+          "message": "型 'string' の式を使用して型 '{ sum: number; }' にインデックスを付けることはできないため、要素は暗黙的に 'any' 型になります。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/objects.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "インデックス",
+        "string",
+        "any"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-11",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nconst receipt: {sum: number} = {sum: 12, rebate: 2};\n",
+      "diagnostic_code": "2353",
+      "exact_error": "TS2353: オブジェクト リテラルは既知のプロパティのみ指定できます。'rebate' は型 '{ sum: number; }' に存在しません。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 42,
+          "code": "2353",
+          "message": "オブジェクト リテラルは既知のプロパティのみ指定できます。'rebate' は型 '{ sum: number; }' に存在しません。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/objects.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "オブジェクト",
+        "既知",
+        "プロパティ"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-12",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nlet parcel = 1; let parcel = 2;\n",
+      "diagnostic_code": "2451",
+      "exact_error": "TS2451: ブロック スコープの変数 'parcel' を再宣言することはできません。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 5,
+          "code": "2451",
+          "message": "ブロック スコープの変数 'parcel' を再宣言することはできません。"
+        },
+        {
+          "line": 2,
+          "column": 21,
+          "code": "2451",
+          "message": "ブロック スコープの変数 'parcel' を再宣言することはできません。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "ブロック",
+        "再宣言"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-13",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nfunction deliver() { await Promise.resolve(1); }\n",
+      "diagnostic_code": "1308",
+      "exact_error": "TS1308: 'await' 式は、非同期関数内と、モジュールのトップ レベルでのみ許可されます。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 22,
+          "code": "1308",
+          "message": "'await' 式は、非同期関数内と、モジュールのトップ レベルでのみ許可されます。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/functions.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "await",
+        "async"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-14",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nabstract class Parcel { abstract send(): void; } new Parcel();\n",
+      "diagnostic_code": "2511",
+      "exact_error": "TS2511: 抽象クラスのインスタンスは作成できません。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 50,
+          "code": "2511",
+          "message": "抽象クラスのインスタンスは作成できません。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/classes.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "抽象",
+        "インスタンス"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-15",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nclass Parcel { private tracking = 1; } new Parcel().tracking;\n",
+      "diagnostic_code": "2341",
+      "exact_error": "TS2341: プロパティ 'tracking' はプライベートで、クラス 'Parcel' 内でのみアクセスできます。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 53,
+          "code": "2341",
+          "message": "プロパティ 'tracking' はプライベートで、クラス 'Parcel' 内でのみアクセスできます。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/classes.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "private",
+        "アクセス"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-16",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nclass Parcel { protected tracking = 1; } new Parcel().tracking;\n",
+      "diagnostic_code": "2445",
+      "exact_error": "TS2445: プロパティ 'tracking' は保護されているため、クラス 'Parcel' とそのサブクラス内でのみアクセスできます。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 55,
+          "code": "2445",
+          "message": "プロパティ 'tracking' は保護されているため、クラス 'Parcel' とそのサブクラス内でのみアクセスできます。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/classes.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "protected",
+        "アクセス"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-17",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nfunction send(parcel?: {id: number}) { return parcel.id; }\n",
+      "diagnostic_code": "18048",
+      "exact_error": "TS18048: 'parcel' は 'undefined' の可能性があります。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 47,
+          "code": "18048",
+          "message": "'parcel' は 'undefined' の可能性があります。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/narrowing.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "undefined",
+        "可能性"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-18",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nfunction send(parcel: {id: number} | null) { return parcel.id; }\n",
+      "diagnostic_code": "18047",
+      "exact_error": "TS18047: 'parcel' は 'null' の可能性があります。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 53,
+          "code": "18047",
+          "message": "'parcel' は 'null' の可能性があります。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/narrowing.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "null",
+        "可能性"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-19",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nfunction send(parcel: unknown) { return parcel.id; }\n",
+      "diagnostic_code": "18046",
+      "exact_error": "TS18046: 'parcel''は 'unknown' 型です。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 41,
+          "code": "18046",
+          "message": "'parcel''は 'unknown' 型です。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/narrowing.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "unknown",
+        "型"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-20",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nconst shipment = 12; shipment();\n",
+      "diagnostic_code": "2349",
+      "exact_error": "TS2349: この式は呼び出し可能ではありません。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 22,
+          "code": "2349",
+          "message": "この式は呼び出し可能ではありません。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/functions.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "呼び出す",
+        "シグネチャ"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-21",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nconst shipment = 12; new shipment();\n",
+      "diagnostic_code": "2351",
+      "exact_error": "TS2351: この式はコンストラクト可能ではありません。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 26,
+          "code": "2351",
+          "message": "この式はコンストラクト可能ではありません。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/functions.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "構築",
+        "シグネチャ"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-22",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nfunction send(parcel: string): number { if (parcel) return 1; }\n",
+      "diagnostic_code": "2366",
+      "exact_error": "TS2366: 関数に終了の return ステートメントがないため、戻り値の型には 'undefined' が含まれません。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 32,
+          "code": "2366",
+          "message": "関数に終了の return ステートメントがないため、戻り値の型には 'undefined' が含まれません。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/functions.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "return",
+        "undefined"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-23",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nfunction send(parcel: \"small\") { if (parcel === \"large\") return 1; }\n",
+      "diagnostic_code": "2367",
+      "exact_error": "TS2367: '\"small\"' 型と '\"large\"' 型が重複していないため、この比較は意図したとおりに表示されない可能性があります。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 38,
+          "code": "2367",
+          "message": "'\"small\"' 型と '\"large\"' 型が重複していないため、この比較は意図したとおりに表示されない可能性があります。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/narrowing.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "比較",
+        "重複"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-24",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nconst [parcel] = 12;\n",
+      "diagnostic_code": "2488",
+      "exact_error": "TS2488: 型 '12' には、反復子を返す '[Symbol.iterator]()' メソッドが必要です。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 7,
+          "code": "2488",
+          "message": "型 '12' には、反復子を返す '[Symbol.iterator]()' メソッドが必要です。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/objects.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "Symbol.iterator",
+        "反復"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-25",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nconst key = {}; const parcel = {[key]: 1};\n",
+      "diagnostic_code": "2464",
+      "exact_error": "TS2464: 計算されたプロパティ名は 'string' 型、'number' 型、'symbol' 型、または 'any' 型のいずれかでなければなりません。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 33,
+          "code": "2464",
+          "message": "計算されたプロパティ名は 'string' 型、'number' 型、'symbol' 型、または 'any' 型のいずれかでなければなりません。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/objects.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "計算",
+        "プロパティ",
+        "string"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-26",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\ntype Parcel = string | number; interface Package extends Parcel {}\n",
+      "diagnostic_code": "2312",
+      "exact_error": "TS2312: インターフェイスが拡張できるのは、オブジェクト型または静的な既知のメンバーを持つオブジェクト型の積集合のみです。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 58,
+          "code": "2312",
+          "message": "インターフェイスが拡張できるのは、オブジェクト型または静的な既知のメンバーを持つオブジェクト型の積集合のみです。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/objects.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "インターフェイス",
+        "拡張"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-27",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nfunction send(): string { const parcel = 1; }\n",
+      "diagnostic_code": "2355",
+      "exact_error": "TS2355: 宣言された型が 'undefined'、'void'、または 'any' でない関数は、値を返す必要があります。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 18,
+          "code": "2355",
+          "message": "宣言された型が 'undefined'、'void'、または 'any' でない関数は、値を返す必要があります。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/functions.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "return",
+        "戻り値"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-28",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nfunction send(parcel: string): string; function send(parcel: number): number {return parcel;}\n",
+      "diagnostic_code": "2394",
+      "exact_error": "TS2394: このオーバーロード シグネチャには、実装シグネチャとの互換性はありません。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 10,
+          "code": "2394",
+          "message": "このオーバーロード シグネチャには、実装シグネチャとの互換性はありません。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/functions.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "オーバーロード",
+        "互換"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-29",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nimport parcel from \"missing-parcel-package-unique\";\n",
+      "diagnostic_code": "2307",
+      "exact_error": "TS2307: モジュール 'missing-parcel-package-unique' またはそれに対応する型宣言が見つかりません。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 20,
+          "code": "2307",
+          "message": "モジュール 'missing-parcel-package-unique' またはそれに対応する型宣言が見つかりません。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/modules.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "モジュール",
+        "型宣言",
+        "見つかりません"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    },
+    {
+      "id": "compiler-ja-30",
+      "kind": "pinpoint",
+      "typescript_version": "5.9.3",
+      "source": "export {};\nfunction send(id: number, city: string) {} const args = [1, \"Tokyo\"]; send(...args);\n",
+      "diagnostic_code": "2556",
+      "exact_error": "TS2556: spread 引数には、組の種類を指定するか、rest パラメーターに渡す必要があります。",
+      "captured_diagnostics": [
+        {
+          "line": 2,
+          "column": 76,
+          "code": "2556",
+          "message": "spread 引数には、組の種類を指定するか、rest パラメーターに渡す必要があります。"
+        }
+      ],
+      "expected_reference_urls": [
+        "https://www.typescriptlang.org/docs/handbook/2/functions.html"
+      ],
+      "keyword_terms": [
+        "TypeScript",
+        "spread",
+        "タプル"
+      ],
+      "source_url": "https://github.com/microsoft/TypeScript/tree/v5.9.3",
+      "source_license": "Apache-2.0",
+      "case_origin": "independently executed compiler snippet; topic references fixed before retrieval; no gold-page indexing or ranking tuning"
+    }
+  ]
+}

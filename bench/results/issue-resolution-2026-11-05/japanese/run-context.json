@@ -1,0 +1,21 @@
+{
+  "profile": "api + explicit Qiita opt-in for bounded additive experiment only",
+  "baseline_engines": [
+    "exaapi",
+    "wikipedia",
+    "stack overflow"
+  ],
+  "api_options": {
+    "search_type": "lite",
+    "results_per_page": 10,
+    "content_max_characters": 500
+  },
+  "cache": "fresh process at start; 600-second response cache; adjacent second repeat warm; language is part of each source request when supported; no cache bypass",
+  "index": "same existing index-docs and index-wikipedia; no corpus changes; merge on; references not added to either index",
+  "language": "default(auto) vs explicit ja; locale omitted; server ui.default_locale=en; deployment Japan",
+  "period": "pinpoint none, broad/fresh month; native publication-date filter for Exa",
+  "raw_page_fetch": false,
+  "billing": "existing EXA_API_KEY kept only in process environment; explicitly selected paid API; no DeepSeek requests",
+  "cold_warm_limitation": "Adjacent repeats measure warm-cache behavior, not independent upstream resamples. Separate coverage runs restart the process.",
+  "binary_sha256": "ad093bc27222d157a7fc0e05c020658540922046d1ec4f533ba54d2c68e8bb25"
+}

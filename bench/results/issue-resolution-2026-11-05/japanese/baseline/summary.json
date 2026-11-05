@@ -1,0 +1,199 @@
+{
+  "metadata": {
+    "started_at": "2026-11-05T14:20:28.526513+00:00",
+    "base": "http://127.0.0.1:18994",
+    "commit": "7b284c0b7819d8fffe6a2a985d707c835032ce04",
+    "settings_sha256": "f9332bf1c203fb9342baf173a7f5d6c712a95f2f0611bc82845bcad9e796000f",
+    "corpus_sha256": "9a1f7ad44707297ea3f2e0ed6a58ca09e2394275841c4f41b128019a800ac450",
+    "server_context": {
+      "operator_supplied_context": {
+        "profile": "api + explicit Qiita opt-in for bounded additive experiment only",
+        "baseline_engines": [
+          "exaapi",
+          "wikipedia",
+          "stack overflow"
+        ],
+        "api_options": {
+          "search_type": "lite",
+          "results_per_page": 10,
+          "content_max_characters": 500
+        },
+        "cache": "fresh process at start; 600-second response cache; adjacent second repeat warm; language is part of each source request when supported; no cache bypass",
+        "index": "same existing index-docs and index-wikipedia; no corpus changes; merge on; references not added to either index",
+        "language": "default(auto) vs explicit ja; locale omitted; server ui.default_locale=en; deployment Japan",
+        "period": "pinpoint none, broad/fresh month; native publication-date filter for Exa",
+        "raw_page_fetch": false,
+        "billing": "existing EXA_API_KEY kept only in process environment; explicitly selected paid API; no DeepSeek requests",
+        "cold_warm_limitation": "Adjacent repeats measure warm-cache behavior, not independent upstream resamples. Separate coverage runs restart the process.",
+        "binary_sha256": "ad093bc27222d157a7fc0e05c020658540922046d1ec4f533ba54d2c68e8bb25"
+      },
+      "missing_context": [
+        "cache_state",
+        "engines",
+        "local_index",
+        "region",
+        "server_settings"
+      ]
+    },
+    "server_snapshots": {
+      "before_stats": {
+        "status": 200,
+        "sha256": "fcb887c6e533f247c7d7daf2251d71c22e99a6188efb90333c63aaa5ba29d3f2",
+        "body_utf8": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Stats — RustXNG (API)</title>\n<link rel=\"stylesheet\" href=\"/static/style.css\">\n</head>\n<body>\n<header>\n  <h1><a href=\"/\">RustXNG (API)</a></h1>\n  <nav><a href=\"/\">Search</a><a href=\"/preferences\">Preferences</a><a href=\"/about\">About</a></nav>\n</header>\n<h2>Statistics</h2>\n<table>\n  <tr><th>Uptime</th><td>0.557057591</td></tr>\n  <tr><th>Searches</th><td>0</td></tr>\n  <tr><th>Engine requests</th><td>0</td></tr>\n  <tr><th>Engine errors</th><td>0</td></tr>\n  <tr><th>Engine timeouts</th><td>0</td></tr>\n  <tr><th>Results served</th><td>0</td></tr>\n  <tr><th>Cache hits</th><td>0</td></tr>\n  <tr><th>Cache entries</th><td>0 (0 bytes, 0 hits / 0 misses)</td></tr>\n</table>\n\n<h3>Engines</h3>\n\n<p>No engine has been used yet.</p>\n\n<footer><p>RustXNG (API) 0.28.0 — metrics are only kept in memory.</p></footer>\n</body>\n</html>"
+      },
+      "before_engine_errors": {
+        "status": 200,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "body_utf8": "[]"
+      },
+      "after_stats": {
+        "status": 200,
+        "sha256": "cfc76ce15ae63eea33420319c1434c093478c7660ac50e83bc2cb3f847fc1ada",
+        "body_utf8": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Stats — RustXNG (API)</title>\n<link rel=\"stylesheet\" href=\"/static/style.css\">\n</head>\n<body>\n<header>\n  <h1><a href=\"/\">RustXNG (API)</a></h1>\n  <nav><a href=\"/\">Search</a><a href=\"/preferences\">Preferences</a><a href=\"/about\">About</a></nav>\n</header>\n<h2>Statistics</h2>\n<table>\n  <tr><th>Uptime</th><td>151.256034195</td></tr>\n  <tr><th>Searches</th><td>384</td></tr>\n  <tr><th>Engine requests</th><td>408</td></tr>\n  <tr><th>Engine errors</th><td>0</td></tr>\n  <tr><th>Engine timeouts</th><td>0</td></tr>\n  <tr><th>Results served</th><td>3840</td></tr>\n  <tr><th>Cache hits</th><td>0</td></tr>\n  <tr><th>Cache entries</th><td>110 (1340045 bytes, 298 hits / 220 misses)</td></tr>\n</table>\n\n<h3>Engines</h3>\n\n<table>\n  <tr><th>Engine</th><th>Requests</th><th>Results</th><th>Errors</th><th>Average</th><th>Suspended</th><th>Resting</th></tr>\n\n  <tr>\n    <td>exaapi</td>\n    <td>384</td>\n    <td>3804</td>\n    <td>0</td>\n    <td>53.157102007000006</td>\n    <td>no</td>\n    <td>no</td>\n  </tr>\n\n  <tr>\n    <td>stack overflow</td>\n    <td>16</td>\n    <td>40</td>\n    <td>0</td>\n    <td>1.827860151</td>\n    <td>no</td>\n    <td>empty results (155.91182403s)</td>\n  </tr>\n\n  <tr>\n    <td>wikipedia</td>\n    <td>8</td>\n    <td>0</td>\n    <td>0</td>\n    <td>1.155241135</td>\n    <td>no</td>\n    <td>empty results (152.922978958s)</td>\n  </tr>\n\n</table>\n\n<footer><p>RustXNG (API) 0.28.0 — metrics are only kept in memory.</p></footer>\n</body>\n</html>"
+      },
+      "after_engine_errors": {
+        "status": 200,
+        "sha256": "e2043134c9a5442ef99d1779c39d7a0717d3fc9504f478ae0681e16aaab187ea",
+        "body_utf8": "[{\"engine\":\"exaapi\",\"stats\":{\"requests\":384,\"results\":3804,\"errors\":0,\"timeouts\":0,\"http_errors\":0,\"total_time\":53.157102007000006},\"consecutive_failures\":0,\"suspended\":false,\"suspended_for\":0.0,\"suspension_reason\":null,\"resting\":false,\"resting_for\":0.0},{\"engine\":\"stack overflow\",\"stats\":{\"requests\":16,\"results\":40,\"errors\":0,\"timeouts\":0,\"http_errors\":0,\"total_time\":1.827860151},\"consecutive_failures\":0,\"suspended\":false,\"suspended_for\":0.0,\"suspension_reason\":null,\"resting\":true,\"resting_for\":155.911486785},{\"engine\":\"wikipedia\",\"stats\":{\"requests\":8,\"results\":0,\"errors\":0,\"timeouts\":0,\"http_errors\":0,\"total_time\":1.155241135},\"consecutive_failures\":0,\"suspended\":false,\"suspended_for\":0.0,\"suspension_reason\":null,\"resting\":true,\"resting_for\":152.922641713}]"
+      }
+    },
+    "request_defaults": {
+      "format": "json",
+      "max_results": 10,
+      "full": 1,
+      "category": "server default",
+      "engine": "server default",
+      "region": null,
+      "locale": null,
+      "cache_bypass": false,
+      "raw_content_requested": false
+    },
+    "conditions": {
+      "variants": [
+        "raw",
+        "quoted",
+        "keywords"
+      ],
+      "languages": [
+        "default",
+        "ja"
+      ],
+      "qiita_engine": [
+        false
+      ],
+      "baseline_engines": [
+        "exaapi",
+        "wikipedia",
+        "stack overflow"
+      ]
+    },
+    "time_range": {
+      "pinpoint": null,
+      "broad_fresh": "month"
+    },
+    "repeats": 2,
+    "source_license": "TypeScript diagnostic localization: Apache-2.0; reference documentation terms remain with TypeScript website",
+    "tokenizer": null,
+    "token_count_status": "unmeasured; no tokenizer implementation/version is specified",
+    "limitations": [
+      "No live benchmark is run by this script's tests.",
+      "The Japanese messages are official localization templates with explicit placeholder instantiations, not captured compiler transcripts.",
+      "Cache, engine and local-index state require an operator-supplied --run-context to be fully attributable."
+    ]
+  },
+  "completed_at": "2026-11-05T14:22:59.229403+00:00",
+  "summaries": {
+    "pinpoint/raw/default/qiita=False": {
+      "observations": 60,
+      "reference_hit@1": 0,
+      "reference_hit@5": 0,
+      "reference_hit@10": 0,
+      "mrr": 0.0,
+      "failures": 60,
+      "request_errors": 0,
+      "p50_ms": 222.1,
+      "p95_ms": 702.6
+    },
+    "pinpoint/raw/ja/qiita=False": {
+      "observations": 60,
+      "reference_hit@1": 0,
+      "reference_hit@5": 0,
+      "reference_hit@10": 0,
+      "mrr": 0.0,
+      "failures": 60,
+      "request_errors": 0,
+      "p50_ms": 3.1,
+      "p95_ms": 5.5
+    },
+    "pinpoint/quoted/default/qiita=False": {
+      "observations": 60,
+      "reference_hit@1": 0,
+      "reference_hit@5": 0,
+      "reference_hit@10": 0,
+      "mrr": 0.0,
+      "failures": 60,
+      "request_errors": 0,
+      "p50_ms": 146.6,
+      "p95_ms": 750.5
+    },
+    "pinpoint/quoted/ja/qiita=False": {
+      "observations": 60,
+      "reference_hit@1": 0,
+      "reference_hit@5": 0,
+      "reference_hit@10": 0,
+      "mrr": 0.0,
+      "failures": 60,
+      "request_errors": 0,
+      "p50_ms": 3.0,
+      "p95_ms": 5.6
+    },
+    "pinpoint/keywords/default/qiita=False": {
+      "observations": 60,
+      "reference_hit@1": 0,
+      "reference_hit@5": 2,
+      "reference_hit@10": 2,
+      "mrr": 0.0167,
+      "failures": 58,
+      "request_errors": 0,
+      "p50_ms": 217.3,
+      "p95_ms": 526.7
+    },
+    "pinpoint/keywords/ja/qiita=False": {
+      "observations": 60,
+      "reference_hit@1": 0,
+      "reference_hit@5": 2,
+      "reference_hit@10": 2,
+      "mrr": 0.0167,
+      "failures": 58,
+      "request_errors": 0,
+      "p50_ms": 2.6,
+      "p95_ms": 6.2
+    },
+    "broad_fresh/raw/default/qiita=False": {
+      "observations": 12,
+      "mean_unique_domains": 6.167,
+      "mean_domain_independence_ratio": 0.6167,
+      "duplicate_pages": 0,
+      "missing_publication_dates": 86,
+      "invalid_publication_dates": 0,
+      "publication_date_coverage": 0.2833,
+      "within_time_window_coverage": 0.2833,
+      "mean_target_source_domain_coverage": 0.2778,
+      "p50_ms": 406.9,
+      "p95_ms": 451.5
+    },
+    "broad_fresh/raw/ja/qiita=False": {
+      "observations": 12,
+      "mean_unique_domains": 6.167,
+      "mean_domain_independence_ratio": 0.6167,
+      "duplicate_pages": 0,
+      "missing_publication_dates": 86,
+      "invalid_publication_dates": 0,
+      "publication_date_coverage": 0.2833,
+      "within_time_window_coverage": 0.2833,
+      "mean_target_source_domain_coverage": 0.2778,
+      "p50_ms": 199.8,
+      "p95_ms": 486.1
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "recorded_at": "2026-11-05",
+  "scope": "exaapiエンジンの有効化審査。Exa Labsの利用規約 (Exa_Labs_Terms_of_Service.pdf) を2026-11-05に取得・確認した。",
+  "engines": {
+    "exaapi": {
+      "request_url": "https://api.exa.ai/search",
+      "access_method": "Documented Search API with key (x-api-key header)",
+      "terms_url": "https://exa.ai/assets/Exa_Labs_Terms_of_Service.pdf",
+      "documentation_url": "https://docs.exa.ai/reference/search",
+      "review_date": "2026-11-05",
+      "status": "official_api_with_key_tos_verified",
+      "standard_allowed": true,
+      "decision": "official_api_with_key_allowed_within_usage_guidelines",
+      "minimum_spacing_ms": 1100,
+      "rate_limit_host": "api.exa.ai",
+      "conditions": [
+        "規約の禁止条項(a)は、ロボット・スクレイパー等の自動装置によるServicesへの直接アクセス (intercepts/mines/scrapes) を禁じる。文書化されたSearch API (api.exa.ai) は認可された正規経路",
+        "利用ガイドライン・呼び出し量の上限は dashboard.exa.ai 側の文書が規約の一部。課金は成功リクエストごと",
+        "キーは ~/.dsh/search-keys.env の EXA_API_KEY。設定ファイルへは平文で書かず、起動時に環境変数か設定注入で渡す運用を推奨",
+        "100問の実測では約100リクエストを消費した（Exaの有料API。ユーザーのキーを使用）"
+      ]
+    }
+  }
+}

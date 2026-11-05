@@ -1,0 +1,160 @@
+{
+  "before/stats": "unavailable: JSONDecodeError",
+  "before/stats/errors": [],
+  "after/stats": "unavailable: JSONDecodeError",
+  "after/stats/errors": [
+    {
+      "engine": "arxiv",
+      "stats": {
+        "requests": 5,
+        "results": 49,
+        "errors": 0,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 7.507907578999999
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": false,
+      "resting_for": 0.0
+    },
+    {
+      "engine": "crates.io",
+      "stats": {
+        "requests": 2,
+        "results": 20,
+        "errors": 0,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 1.601352566
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": false,
+      "resting_for": 0.0
+    },
+    {
+      "engine": "github",
+      "stats": {
+        "requests": 3,
+        "results": 75,
+        "errors": 0,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 3.28273812
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": false,
+      "resting_for": 0.0
+    },
+    {
+      "engine": "mwmbl",
+      "stats": {
+        "requests": 100,
+        "results": 3016,
+        "errors": 0,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 32.455237879
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": false,
+      "resting_for": 0.0
+    },
+    {
+      "engine": "npm",
+      "stats": {
+        "requests": 2,
+        "results": 50,
+        "errors": 0,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 0.462458602
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": false,
+      "resting_for": 0.0
+    },
+    {
+      "engine": "wiby",
+      "stats": {
+        "requests": 78,
+        "results": 461,
+        "errors": 1,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 15.513190435999997
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": true,
+      "resting_for": 260.550373536
+    },
+    {
+      "engine": "wikidata",
+      "stats": {
+        "requests": 8,
+        "results": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 3.133129778
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": true,
+      "resting_for": 131.4159169
+    },
+    {
+      "engine": "wikipedia",
+      "stats": {
+        "requests": 100,
+        "results": 875,
+        "errors": 0,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 46.773173781000004
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": false,
+      "resting_for": 0.0
+    },
+    {
+      "engine": "wikipedia any words",
+      "stats": {
+        "requests": 2,
+        "results": 20,
+        "errors": 0,
+        "timeouts": 0,
+        "http_errors": 0,
+        "total_time": 1.12454564
+      },
+      "consecutive_failures": 0,
+      "suspended": false,
+      "suspended_for": 0.0,
+      "suspension_reason": null,
+      "resting": false,
+      "resting_for": 0.0
+    }
+  ]
+}

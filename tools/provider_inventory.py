@@ -11,6 +11,7 @@ import json
 import re
 import tomllib
 from pathlib import Path
+from provider_policy import adapter_source, review_for
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -25,12 +26,12 @@ def inventory() -> str:
                      'terms_url', 'review_status', 'review_date', 'decision', 'standard_allowed', 'conditions'])
     for engine in settings['engines']:
         module = engine.get('engine', engine['name'])
-        source = ROOT / 'src/engines' / f'{module}.rs'
+        source = adapter_source(ROOT, module)
         text = source.read_text(encoding="utf-8") if source.exists() else ''
         production = text.split('#[cfg(test)]', 1)[0]
         disabled = engine.get('disabled', False)
         inactive = engine.get('inactive', False)
-        entry = policy['providers'].get(module, {})
+        entry = review_for(engine, policy)
         writer.writerow([engine['name'], module, str(disabled).lower(), str(inactive).lower(), str(not disabled and not inactive).lower(),
                          source.relative_to(ROOT).as_posix() if source.exists() else 'src/engines/mod.rs (locate registration)',
                          engine.get('base_url') or engine.get('search_url') or '',

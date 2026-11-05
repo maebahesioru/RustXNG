@@ -1,0 +1,905 @@
+{
+  "recorded_at": "2026-11-05",
+  "scope": "Standardで有効な未審査プロバイダーの残り66エンジン分（第2バッチ）。2026-11-05に一次資料から取得した審査提案であり、人間の確認を経るまで許可確定ではない。",
+  "method_notes": [
+    "第1バッチ (provider-terms-api.json) の38エンジンに続く分。エンジン名キーで66件",
+    "エンジンの実アクセス経路は src/engines/*.rs のURLリテラルから確認。検証できたものだけ standard_allowed を提案",
+    "規約頁が403/404 (JS描画) のものは到達可能性自体を記録し、人間の確認を要求",
+    "minimum_spacing_ms は確認できた明示的上限から算出した反映候補値"
+  ],
+  "proposals": {
+    "packagist": {
+      "request_url": "https://packagist.org/search.json?q={query}&page={pageno}",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://packagist.org/apidoc",
+      "documentation_url": "https://packagist.org/apidoc",
+      "review_date": "2026-11-05",
+      "status": "documented_api",
+      "standard_allowed": true,
+      "decision": "documented_api_identify_and_rate_limits",
+      "minimum_spacing_ms": 1000,
+      "rate_limit_host": "packagist.org",
+      "conditions": [
+        "Packagist APIは文書化されている (apidoc)",
+        "識別可能なUser-Agentとレート制限の遵守",
+        "大量取得はダンプの利用が推奨され得る"
+      ]
+    },
+    "wiby": {
+      "request_url": "https://wiby.me/json/?q={query}&p={pageno}",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://wiby.me/",
+      "documentation_url": "https://wiby.me/json/",
+      "review_date": "2026-11-05",
+      "status": "documented_api_best_effort",
+      "standard_allowed": true,
+      "decision": "documented_json_api_no_availability_guarantee",
+      "minimum_spacing_ms": 1000,
+      "rate_limit_host": "wiby.me",
+      "conditions": [
+        "wibyはJSON APIを公式に案内している",
+        "可用性の保証はなく、ベストエフォートの公開サービス",
+        "間隔は控えめに保つ"
+      ]
+    },
+    "repology": {
+      "request_url": "https://repology.org/api/v1/project/{query}",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://repology.org/api",
+      "documentation_url": "https://repology.org/api",
+      "review_date": "2026-11-05",
+      "status": "documented_api_with_rate_limit",
+      "standard_allowed": true,
+      "decision": "api_1rps_identification_required_bulk_discouraged",
+      "minimum_spacing_ms": 1000,
+      "rate_limit_host": "repology.org",
+      "conditions": [
+        "APIの許容レートは最大1リクエスト/秒 (公式API頁に明記)",
+        "一括 (1日1,000超) は推奨されず、データベースダンプの利用を検討",
+        "一括クライアントはUser-Agentでの自己識別が必須"
+      ]
+    },
+    "apple_app_store": {
+      "request_url": "https://itunes.apple.com/search (iTunes Search API)",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://performance-partners.apple.com/search-api",
+      "documentation_url": "https://performance-partners.apple.com/search-api",
+      "review_date": "2026-11-05",
+      "status": "documented_api_with_terms",
+      "standard_allowed": true,
+      "decision": "itunes_search_api_documented_terms_apply",
+      "minimum_spacing_ms": 3000,
+      "rate_limit_host": "itunes.apple.com",
+      "conditions": [
+        "iTunes Search APIは文書化され、規約が適用される",
+        "ストアコンテンツの検索目的の利用であり、エンターテインメント用途ではない",
+        "サンプル等のアセットはストアバッジの近接表示が必要",
+        "レート制限があり、過度な利用は制限され得る"
+      ]
+    },
+    "artic": {
+      "request_url": "https://api.artic.edu/api/v1/artworks/search",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://api.artic.edu/docs/",
+      "documentation_url": "https://api.artic.edu/docs/",
+      "review_date": "2026-11-05",
+      "status": "documented_api_cc0",
+      "standard_allowed": true,
+      "decision": "documented_api_cc0_data",
+      "conditions": [
+        "Art Institute of Chicago APIは文書化され、データはCC0",
+        "レート制限とポリシーの遵守",
+        "画像の権利は個別に確認"
+      ]
+    },
+    "iconify": {
+      "request_url": "https://api.iconify.design/search",
+      "access_method": "Documented public JSON API",
+      "terms_url": "https://iconify.design/docs/api/",
+      "documentation_url": "https://iconify.design/docs/api/",
+      "review_date": "2026-11-05",
+      "status": "documented_public_api",
+      "standard_allowed": true,
+      "decision": "documented_public_api_no_key",
+      "conditions": [
+        "Iconifyの公開APIは文書化され、キー不要",
+        "アイコンデータのライセンスは各セットに従う",
+        "適度な利用量に保つ"
+      ]
+    },
+    "mixcloud": {
+      "request_url": "https://api.mixcloud.com/search/?q={query}&type=cloudcast",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://www.mixcloud.com/developers/",
+      "documentation_url": "https://www.mixcloud.com/developers/",
+      "review_date": "2026-11-05",
+      "status": "documented_api_with_rate_limits",
+      "standard_allowed": true,
+      "decision": "documented_api_rate_limits_apply",
+      "conditions": [
+        "Mixcloud APIは文書化され、レート制限がある",
+        "音声コンテンツの権利は権利者に帰属",
+        "埋め込みプレーヤー経由の再生が想定される利用方法"
+      ]
+    },
+    "github_code": {
+      "request_url": "https://api.github.com/search/code",
+      "access_method": "Documented REST API (auth required)",
+      "terms_url": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
+      "documentation_url": "https://docs.github.com/en/rest/search",
+      "review_date": "2026-11-05",
+      "status": "code_search_api_requires_auth",
+      "standard_allowed": false,
+      "decision": "disabled_by_default_requires_api_key",
+      "conditions": [
+        "GitHubコード検索APIは認証必須 (キーなしでは常に失敗)",
+        "レート制限は検索で10リクエスト/分",
+        "キーを設定した利用者の明示的な再有効化を優先"
+      ]
+    },
+    "pexels": {
+      "request_url": "https://www.pexels.com/search/{query}/",
+      "access_method": "HTML search (documented API requires key)",
+      "terms_url": "https://www.pexels.com/api/",
+      "documentation_url": "https://www.pexels.com/api/",
+      "review_date": "2026-11-05",
+      "status": "api_key_required",
+      "standard_allowed": false,
+      "decision": "disabled_by_default_requires_api_key",
+      "conditions": [
+        "Pexels APIはキー必須で、キーなしでは応答しない",
+        "エンジンはAPIではなくサイト検索 (HTML) を使っている",
+        "移行先は公式API。帰属・ライセンス条項の確認が必要"
+      ]
+    },
+    "genius": {
+      "request_url": "https://genius.com/api/search?q={query}",
+      "access_method": "Internal JSON endpoint",
+      "terms_url": "https://docs.genius.com",
+      "documentation_url": "https://docs.genius.com",
+      "review_date": "2026-11-05",
+      "status": "restricted_internal_endpoint_and_commercial_licence",
+      "standard_allowed": false,
+      "decision": "disabled_by_default_internal_endpoint_and_commercial_licence",
+      "conditions": [
+        "genius.com/apiはサイト内部エンドポイント (公開APIドキュメントの対象外)",
+        "Genius APIの商用利用はライセンスなしでは認められない (docs.genius.com)",
+        "ライセンスの確認までStandardでは無効"
+      ]
+    },
+    "iqiyi": {
+      "request_url": "https://www.iqiyi.com (site search)",
+      "access_method": "HTML/site search",
+      "terms_url": "https://www.iqiyi.com/kszt/iQIYI_Partner_Services_Terms_of_Use.html",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "terms_prohibit_unauthorized_access",
+      "standard_allowed": false,
+      "decision": "disabled_by_default_pending_permission",
+      "conditions": [
+        "iQIYI利用規約は、事前の明示的な書面同意なしにプラットフォームのサービス・コンテンツ・データを取得することを禁止",
+        "自動取得の許諾確認までStandardでは無効"
+      ]
+    },
+    "pixiv": {
+      "request_url": "https://www.pixiv.net/search.php?s_mode=s_tag&word={query}",
+      "access_method": "HTML/site search",
+      "terms_url": "https://policies.pixiv.net/en.html",
+      "documentation_url": "https://policies.pixiv.net/en.html",
+      "review_date": "2026-11-05",
+      "status": "prohibited_conduct_clause_present_scraping_item_unverified",
+      "standard_allowed": false,
+      "decision": "disabled_by_default_pending_permission",
+      "conditions": [
+        "pixiv利用規約に禁止行為条項 (Prohibited Conduct) がある",
+        "自動収集の該当項は人間が未確認",
+        "ガイドラインが自動収集を制限している可能性",
+        "確認までStandardでは無効"
+      ]
+    },
+    "currency_convert": {
+      "request_url": "https://duckduckgo.com/js/spice/currency/{from}/{to}",
+      "access_method": "Internal endpoint (DuckDuckGo Spice)",
+      "terms_url": "https://duckduckgo.com/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "restricted_internal_endpoint",
+      "standard_allowed": false,
+      "decision": "disabled_by_default_internal_endpoint",
+      "conditions": [
+        "DuckDuckGo Spiceはサイト内部エンドポイントで、公開APIドキュメントの対象外",
+        "為替データの提供元は上流ソース",
+        "内部エンドポイントの利用許諾確認までStandardでは無効"
+      ]
+    },
+    "bitbucket": {
+      "request_url": "https://bitbucket.org/repo/all/{pageno}?name={query}",
+      "access_method": "HTML search (Atlassian site)",
+      "terms_url": "https://www.atlassian.com/legal/terms-of-use",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "エンジンはbitbucket.orgのサイト検索 (HTML) を使う",
+        "Atlassian利用規約がサービスを律する",
+        "規約の該当条項は人間が未確認"
+      ]
+    },
+    "etymonline": {
+      "request_url": "https://etymonline.com/search?page={pageno}&q={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://www.etymonline.com/legal/terms",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_page_not_machine_readable",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "利用規約頁は2026-11-05に403 (JS描画)",
+        "人間による確認が必要"
+      ]
+    },
+    "hoogle": {
+      "request_url": "https://hoogle.haskell.org/?hoogle={query}",
+      "access_method": "HTML form (JSON API unconfirmed)",
+      "terms_url": "https://hoogle.haskell.org/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_json_api_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "HoogleのJSON API (?mode=json) は未確認",
+        "HTMLフォーム経路の許諾は未確認"
+      ]
+    },
+    "pub.dev": {
+      "request_url": "https://pub.dev/packages?q={query}&page={pageno}",
+      "access_method": "HTML search (documented API exists)",
+      "terms_url": "https://pub.dev/policies",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_migration_candidate",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "pub.devのAPIは文書化されているが、エンジンはHTML検索を使う",
+        "移行候補。HTML経路の許諾は未確認"
+      ]
+    },
+    "rubygems": {
+      "request_url": "https://rubygems.org/search?page={pageno}&query={query}",
+      "access_method": "HTML search (documented API exists)",
+      "terms_url": "https://guides.rubygems.org/rubygems-org-api/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_migration_candidate",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "RubyGems.org APIは文書化されレート制限があるが、エンジンはHTML検索を使う",
+        "移行候補"
+      ]
+    },
+    "woxikon.de synonyme": {
+      "request_url": "https://synonyme.woxikon.de/synonyme/{query}.php",
+      "access_method": "HTML scrape",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unfetched",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約未取得。人間による確認が必要"
+      ]
+    },
+    "openclipart": {
+      "request_url": "https://openclipart.org/search/?query={query}",
+      "access_method": "HTML search (API link exists)",
+      "terms_url": "https://openclipart.org/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_link_exists",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "サイトにAPIへのリンク (API 3.5.6) がある",
+        "エンジンのアクセス経路とAPIの条件は未確認"
+      ]
+    },
+    "alpinelinux": {
+      "request_url": "https://pkgs.alpinelinux.org/packages?name={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://alpinelinux.org/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Alpineパッケージ検索はHTML。APIの有無と規約は未確認"
+      ]
+    },
+    "cachy_os": {
+      "request_url": "https://packages.cachyos.org/api/search",
+      "access_method": "JSON API (terms unconfirmed)",
+      "terms_url": "https://cachyos.org/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "api_terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "api/searchエンドポイントが存在",
+        "CachyOSの規約・API条件は未確認"
+      ]
+    },
+    "pkg_go_dev": {
+      "request_url": "https://pkg.go.dev/search?q={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://go.dev/policy",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "pkg.go.devの検索はHTML",
+        "go.devの規約頁は2026-11-05に404",
+        "人間による確認が必要"
+      ]
+    },
+    "lib_rs": {
+      "request_url": "https://lib.rs/search?q={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://lib.rs/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "lib.rsの検索はHTML。規約未確認"
+      ]
+    },
+    "duden": {
+      "request_url": "https://www.duden.de/suchen/dudenonline/{query}",
+      "access_method": "HTML search",
+      "terms_url": "https://www.duden.de/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Dudenの検索はHTML。規約の該当条項は未確認 (トップ頁のみ取得)"
+      ]
+    },
+    "bpb": {
+      "request_url": "https://www.bpb.de/search/?q={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://www.bpb.de/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "bpb (連邦市民教育センター) の検索はHTML。規約未確認"
+      ]
+    },
+    "niconico": {
+      "request_url": "https://www.nicovideo.jp/search/{query}",
+      "access_method": "HTML search",
+      "terms_url": "https://www.nicovideo.jp/rule",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_page_404",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "ニコニコ動画の規約頁は2026-11-05に404",
+        "人間による確認が必要"
+      ]
+    },
+    "shopify_stock": {
+      "request_url": "https://www.shopify.com/search?q={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://www.shopify.com/legal/terms",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Shopifyの検索はHTML。規約未確認"
+      ]
+    },
+    "findfiles": {
+      "request_url": "https://findfiles.net/search?q={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://findfiles.net/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unfetched",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約未取得"
+      ]
+    },
+    "www1x": {
+      "request_url": "https://1x.com/search?q={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://1x.com/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unfetched",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "1x.comの検索はHTML。規約未取得"
+      ]
+    },
+    "odysee": {
+      "request_url": "https://odysee.com/$/search?q={query}",
+      "access_method": "HTML search (LBRY API exists)",
+      "terms_url": "https://odysee.com/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_docs_js_rendered",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "OdyseeのAPIドキュメント頁はJS描画で本文未取得",
+        "LBRY APIの条件は未確認"
+      ]
+    },
+    "dictzone": {
+      "request_url": "https://dictzone.com/{query}-translator/",
+      "access_method": "HTML scrape",
+      "terms_url": "https://dictzone.com/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_page_403",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約頁は2026-11-05に403",
+        "人間による確認が必要"
+      ]
+    },
+    "emojipedia": {
+      "request_url": "https://emojipedia.org/search?q={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://emojipedia.org/legal",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_page_404",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約頁は2026-11-05に404",
+        "人間による確認が必要"
+      ]
+    },
+    "flaticon": {
+      "request_url": "https://www.flaticon.com/search?word={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://www.flaticon.com/legal/terms",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_page_403",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約頁は2026-11-05に403 (JS描画)",
+        "帰属要件の確認が必要"
+      ]
+    },
+    "apkmirror": {
+      "request_url": "https://www.apkmirror.com/?s={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://www.apkmirror.com/about/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_page_403",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約頁は2026-11-05に403",
+        "人間による確認が必要"
+      ]
+    },
+    "deviantart": {
+      "request_url": "https://www.deviantart.com/search?q={query}",
+      "access_method": "HTML search (documented API exists)",
+      "terms_url": "https://www.deviantart.com/legal/tos",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_migration_candidate",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "DeviantArt APIはOAuth文書化だが、エンジンはHTML検索",
+        "移行候補。規約頁は2026-11-05に403"
+      ]
+    },
+    "geizhals": {
+      "request_url": "https://geizhals.de/?fs={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://geizhals.de/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_page_403",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約頁は2026-11-05に403",
+        "人間による確認が必要"
+      ]
+    },
+    "9gag": {
+      "request_url": "https://9gag.com/search?query={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://9gag.com/terms",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unfetched",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約未取得"
+      ]
+    },
+    "sourcehut": {
+      "request_url": "https://sr.ht/projects?search={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://sourcehut.org/terms/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_page_404",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約頁は2026-11-05に404",
+        "人間による確認が必要"
+      ]
+    },
+    "gitlab": {
+      "request_url": "https://gitlab.com (access path unverified)",
+      "access_method": "Access path unverified",
+      "terms_url": "https://about.gitlab.com/terms/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "access_path_unverified_api_documented",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "GitLab APIは文書化されているが、エンジンの実アクセス経路を未検証",
+        "規約頁は取得済み。条項の人間確認が必要"
+      ]
+    },
+    "wordnik": {
+      "request_url": "https://www.wordnik.com/words/{query}",
+      "access_method": "HTML search (documented API with key)",
+      "terms_url": "https://developer.wordnik.com/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_migration_candidate",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Wordnik APIは文書化されキー必須だが、エンジンはHTML",
+        "移行候補"
+      ]
+    },
+    "jisho": {
+      "request_url": "https://jisho.org/api/v1/search/words?keyword={query}",
+      "access_method": "Undocumented JSON API",
+      "terms_url": "https://jisho.org/about",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "api_unofficial_terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "jisho.orgのAPIは非公式 (コミュニティ実装が存在)",
+        "規約未確認。人間による確認が必要"
+      ]
+    },
+    "mastodon": {
+      "request_url": "https://mastodon.social/api/v2/search (access path unverified)",
+      "access_method": "Access path unverified (documented API)",
+      "terms_url": "https://docs.joinmastodon.org/api/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "documented_api_per_instance_terms_unverified",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Mastodon APIは文書化",
+        "インスタンスごとの規約・レート制限が異なる",
+        "エンジンの実アクセス経路を未検証"
+      ]
+    },
+    "lemmy": {
+      "request_url": "https://lemmy.ml/api/v3/search (access path unverified)",
+      "access_method": "Access path unverified (documented API)",
+      "terms_url": "https://join-lemmy.org/docs/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "documented_api_per_instance_terms_unverified",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Lemmy APIは文書化",
+        "インスタンスごとの規約が異なる",
+        "エンジンの実アクセス経路を未検証"
+      ]
+    },
+    "peertube": {
+      "request_url": "https://sepiasearch.org/api/v1/search/videos (access path unverified)",
+      "access_method": "Access path unverified (documented API)",
+      "terms_url": "https://docs.joinpeertube.org/api-rest-reference.html",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "documented_api_per_instance_terms_unverified",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "PeerTube REST APIは文書化",
+        "インスタンスごとの規約が異なる",
+        "エンジンの実アクセス経路を未検証"
+      ]
+    },
+    "sepiasearch": {
+      "request_url": "https://sepiasearch.org/api/v1/search/videos",
+      "access_method": "PeerTube instance API",
+      "terms_url": "https://sepiasearch.org/about",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "peertube_instance_terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "SepiaSearchはPeerTubeインスタンス",
+        "インスタンスの規約・レート制限は未確認"
+      ]
+    },
+    "tootfinder": {
+      "request_url": "https://tootfinder.ch/search.php?q={query} (access path unverified)",
+      "access_method": "Access path unverified",
+      "terms_url": "https://tootfinder.ch/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "opt_in_crawler_access_path_unverified",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Tootfinderはオプトイン型のMastodon検索 (取得済み)",
+        "エンジンの実アクセス経路を未検証"
+      ]
+    },
+    "ccc_media": {
+      "request_url": "https://api.media.ccc.de/public/events (access path unverified)",
+      "access_method": "Access path unverified",
+      "terms_url": "https://media.ccc.de/about",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "cc_by_content_access_path_unverified",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "media.ccc.deのコンテンツはCC BY (帰属必須)",
+        "APIの存在を確認済みだが、エンジンの実アクセス経路を未検証"
+      ]
+    },
+    "wallhaven": {
+      "request_url": "https://wallhaven.cc/search?q={query}",
+      "access_method": "HTML search (documented API exists)",
+      "terms_url": "https://wallhaven.cc/help/api",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_migration_candidate",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Wallhaven APIは文書化 (45リクエスト/分、NSFWはキー必須) だが、エンジンはサイト検索 (HTML)",
+        "移行候補"
+      ]
+    },
+    "imgur": {
+      "request_url": "https://imgur.com/search?q={query}",
+      "access_method": "HTML search (documented API exists)",
+      "terms_url": "https://apidocs.imgur.com/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_migration_candidate",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Imgur APIは文書化されキー必須だが、エンジンはHTML検索",
+        "移行候補。API規約の確認が必要"
+      ]
+    },
+    "steam": {
+      "request_url": "https://store.steampowered.com/search/?term={query}",
+      "access_method": "HTML search (Web API documented with key)",
+      "terms_url": "https://steamcommunity.com/dev",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_migration_candidate",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Steam Web APIは文書化されキー必須だが、エンジンはストア検索 (HTML)",
+        "移行候補。Steam API利用規約の確認が必要"
+      ]
+    },
+    "fdroid": {
+      "request_url": "https://search.f-droid.org/?q={query}",
+      "access_method": "HTML search (index.json documented)",
+      "terms_url": "https://f-droid.org/docs/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_migration_candidate",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "F-Droidのindex.jsonは文書化だが、エンジンはサイト検索 (HTML)",
+        "移行候補"
+      ]
+    },
+    "kickass": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape (torrent index)",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "torrent_index_terms_and_legality_unreviewed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "トレント索引サイトの規約は一般に自動取得を制限し、権利面のリスクも別",
+        "規約頁は未取得。人間による確認が必要"
+      ]
+    },
+    "nyaa": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape (torrent index)",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "torrent_index_terms_and_legality_unreviewed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "トレント索引サイトの規約は一般に自動取得を制限し、権利面のリスクも別",
+        "規約頁は未取得。人間による確認が必要"
+      ]
+    },
+    "piratebay": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape (torrent index)",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "torrent_index_terms_and_legality_unreviewed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "トレント索引サイトの規約は一般に自動取得を制限し、権利面のリスクも別",
+        "規約頁は未取得。人間による確認が必要"
+      ]
+    },
+    "solidtorrents": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape (torrent index)",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "torrent_index_terms_and_legality_unreviewed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "トレント索引サイトの規約は一般に自動取得を制限し、権利面のリスクも別",
+        "規約頁は未取得。人間による確認が必要"
+      ]
+    },
+    "tokyotoshokan": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape (torrent index)",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "torrent_index_terms_and_legality_unreviewed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "トレント索引サイトの規約は一般に自動取得を制限し、権利面のリスクも別",
+        "規約頁は未取得。人間による確認が必要"
+      ]
+    },
+    "r1337x": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape (torrent index)",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "torrent_index_terms_and_legality_unreviewed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "トレント索引サイトの規約は一般に自動取得を制限し、権利面のリスクも別",
+        "規約頁は未取得。人間による確認が必要"
+      ]
+    },
+    "bitchute": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape (torrent index)",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "torrent_index_terms_and_legality_unreviewed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "トレント索引サイトの規約は一般に自動取得を制限し、権利面のリスクも別",
+        "規約頁は未取得。人間による確認が必要"
+      ]
+    },
+    "sogou_images": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約未確認"
+      ]
+    },
+    "sogou_videos": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約未確認"
+      ]
+    },
+    "r360search_videos": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "360検索の規約は事前同意なしのデータ取得を制限する可能性",
+        "未確認"
+      ]
+    },
+    "hex": {
+      "request_url": "https://hex.pm/api/packages?search={query}",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://hex.pm/docs/api",
+      "documentation_url": "https://hexdocs.pm/hex_api/",
+      "review_date": "2026-11-05",
+      "status": "documented_api_docs_page_404",
+      "standard_allowed": true,
+      "decision": "documented_api_identify_and_rate_limits",
+      "minimum_spacing_ms": 1000,
+      "rate_limit_host": "hex.pm",
+      "conditions": [
+        "hex.pm APIはCargo index標準のAPIで広く使われる",
+        "hex.pm/docs/api は2026-11-05に404。公式ドキュメントの所在は要再確認",
+        "識別可能なUser-Agentとレート制限の遵守"
+      ]
+    },
+    "gitea": {
+      "request_url": "https://gitea.com/api/v1/repos/search?q={query}",
+      "access_method": "Documented JSON API (Gitea standard)",
+      "terms_url": "https://gitea.com/terms-of-use",
+      "documentation_url": "https://docs.gitea.com/usage/api-usage",
+      "review_date": "2026-11-05",
+      "status": "documented_api_per_instance_terms",
+      "standard_allowed": true,
+      "decision": "gitea_api_documented_instance_terms_vary",
+      "minimum_spacing_ms": 1000,
+      "rate_limit_host": "gitea.com",
+      "conditions": [
+        "Gitea APIは各インスタンスのswagger (/api/swagger) で文書化される",
+        "docs.gitea.comのAPI利用頁は2026-11-05に404。所在は要再確認",
+        "インスタンスごとの利用規約・レート制限の確認が必要"
+      ]
+    },
+    "rumble": {
+      "request_url": "https://rumble.com/search/video?q={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://rumble.com/s/terms.html",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unfetched",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約頁は未取得。人間による確認が必要"
+      ]
+    },
+    "500px": {
+      "request_url": "https://500px.com/search?q={query}",
+      "access_method": "Access path unverified (documented API with key)",
+      "terms_url": "https://500px.com/terms",
+      "documentation_url": "https://github.com/500px/api-documentation",
+      "review_date": "2026-11-05",
+      "status": "module_not_located_api_documented_with_key",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "500px APIは文書化されキー必須 (モジュールファイルが見つからず、アクセス経路を未検証)",
+        "API規約の確認が必要"
+      ]
+    }
+  }
+}
