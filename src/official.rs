@@ -238,12 +238,49 @@ pub fn parse(
 
 /// Look up the wanted links of `articles` (best first). Any failure or a
 /// slow endpoint yields nothing: this only ever adds results.
+///
 pub async fn lookup(
     network: &Network,
     articles: &[Article],
     kinds: &[Kind],
     timeout: Duration,
 ) -> Vec<SearchResult> {
+    lookup_inner(network, None, None, articles, kinds, timeout, "").await
+}
+
+/// Reuse the search cache and validate optional localized entry points through
+/// the public-page reader (including DNS, redirects and robots.txt).
+pub(crate) async fn lookup_cached(
+    network: &Network,
+    cache: &crate::cache::Cache,
+    reader: &crate::fetch::PageReader,
+    articles: &[Article],
+    kinds: &[Kind],
+    timeout: Duration,
+    locale: &str,
+) -> Vec<SearchResult> {
+    lookup_inner(
+        network,
+        Some(cache),
+        Some(reader),
+        articles,
+        kinds,
+        timeout,
+        locale,
+    )
+    .await
+}
+
+async fn lookup_inner(
+    network: &Network,
+    cache: Option<&crate::cache::Cache>,
+    reader: Option<&crate::fetch::PageReader>,
+    articles: &[Article],
+    kinds: &[Kind],
+    timeout: Duration,
+    locale: &str,
+) -> Vec<SearchResult> {
+    let started = std::time::Instant::now();
     if articles.is_empty() || kinds.is_empty() || timeout.is_zero() {
         return Vec::new();
     }
@@ -253,7 +290,7 @@ pub async fn lookup(
         crate::engine::util::encode(&query)
     );
     let request = EngineRequest::get(url).header("Accept", "application/sparql-results+json");
-    let response = match network.fetch(request, timeout, None, None).await {
+    let response = match network.fetch(request, timeout, cache, None).await {
         Ok(response) if response.status == 200 => response,
         Ok(response) => {
             tracing::debug!(status = response.status, "official site lookup refused");
@@ -267,20 +304,108 @@ pub async fn lookup(
     let Ok(json) = response.json() else {
         return Vec::new();
     };
-    parse(&json, articles, kinds)
-        .into_iter()
-        .map(|(article, kind, url)| {
+    let language = locale
+        .split(['-', '_'])
+        .next()
+        .unwrap_or_default()
+        .to_string();
+    let found = parse(&json, articles, kinds);
+    let mut results = Vec::new();
+    // Probe only the first (most relevant) official site, and only a bare
+    // root: a deep path has its own language routing.
+    let mut probe: Option<(usize, String)> = None;
+    for (index, (article, kind, url)) in found.iter().enumerate() {
+        let (title, content) = kind.label(&article.title);
+        let mut result = SearchResult::new(url.clone(), title);
+        result.content = content;
+        results.push(result);
+        if probe.is_none()
+            && *kind == Kind::Site
+            && (2..=3).contains(&language.len())
+            && language.bytes().all(|c| c.is_ascii_alphabetic())
+            && language != "en"
+            && path_is_root(url)
+        {
+            probe = Some((index, format!("{}/{}", url.trim_end_matches("/"), language)));
+        }
+    }
+    if let Some((index, variant)) = probe {
+        let remaining = timeout.saturating_sub(started.elapsed());
+        if let Some(reader) = reader.filter(|reader| reader.is_direct())
+            && reachable(reader, &variant, &language, remaining.min(PROBE_TIMEOUT)).await
+        {
+            let (article, kind, _) = &found[index];
             let (title, content) = kind.label(&article.title);
-            let mut result = SearchResult::new(url, title);
-            result.content = content;
-            result
+            let mut result = SearchResult::new(variant, title);
+            result.content = format!("{content} ({language} entry point)");
+            results.push(result);
+        }
+    }
+    results
+}
+
+/// The largest time one language-variant probe may take.
+const PROBE_TIMEOUT: Duration = Duration::from_millis(600);
+
+/// Whether the URL points at the site root (empty or `/` path).
+fn path_is_root(url: &str) -> bool {
+    url::Url::parse(url)
+        .ok()
+        .map(|parsed| {
+            let path = parsed.path();
+            (path.is_empty() || path == "/")
+                && parsed.query().is_none()
+                && parsed.fragment().is_none()
+                && parsed.username().is_empty()
+                && parsed.password().is_none()
         })
-        .collect()
+        .unwrap_or(false)
+}
+
+/// Whether the URL answers 200 within the timeout.
+async fn reachable(
+    reader: &crate::fetch::PageReader,
+    url: &str,
+    language: &str,
+    timeout: Duration,
+) -> bool {
+    if timeout.is_zero() {
+        return false;
+    }
+    matches!(
+        tokio::time::timeout(timeout, reader.read_with_language(url, 512, language)).await,
+        Ok(Ok(_))
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn localized_probe_refuses_private_destinations_and_zero_budget() {
+        let reader =
+            crate::fetch::PageReader::new(&crate::settings::Outgoing::default(), &[]).unwrap();
+        assert!(
+            !reachable(
+                &reader,
+                "http://127.0.0.1:9/ja",
+                "ja",
+                Duration::from_millis(50)
+            )
+            .await
+        );
+        assert!(!reachable(&reader, "https://example.org/ja", "ja", Duration::ZERO).await);
+    }
+
+    #[test]
+    fn language_probe_only_uses_unambiguous_roots() {
+        assert!(path_is_root("https://example.org/"));
+        assert!(!path_is_root("https://example.org/?redirect=1"));
+        assert!(!path_is_root("https://example.org/#fragment"));
+        assert!(!path_is_root("https://user@example.org/"));
+        assert!(!path_is_root("https://example.org/docs"));
+    }
 
     #[test]
     fn articles_are_read_from_wikipedia_urls() {

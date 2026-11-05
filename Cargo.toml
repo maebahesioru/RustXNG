@@ -20,6 +20,7 @@ toml = "0.8"
 yaml_serde = "0.10.7"
 askama = { version = "0.16", default-features = false, features = ["derive", "std", "urlencode"] }
 scraper = "0.29"
+tiktoken = { version = "4.1.2", default-features = false, features = ["vocab-cl100k_base", "vocab-o200k_base"] }
 url = "2"
 percent-encoding = "2"
 futures = "0.3"

@@ -1,6 +1,6 @@
 {
   "checked_at": "2026-11-05",
-  "scope": "Shipped Standard defaults. Pending entries are not permission approvals; new enablements require a recorded review.",
+  "scope": "Every enabled shipped Standard endpoint requires an affirmative conditional review. Unknown endpoints are disabled. API access and returned-content rights remain distinct.",
   "providers": {
     "yahoo_japan": {
       "review_date": "2026-11-03",
@@ -134,12 +134,21 @@
       "access_method": "Documented JSON API",
       "terms_url": "https://operations.osmfoundation.org/policies/nominatim/",
       "review_date": "2026-11-05",
-      "status": "conditional_api",
+      "status": "reviewed_allowed_for_scope",
       "standard_allowed": true,
       "decision": "low_volume_user_search_only_no_autocomplete_or_bulk_geocoding",
       "minimum_spacing_ms": 1000,
       "rate_limit_host": "nominatim.openstreetmap.org",
-      "conditions": ["Identifying User-Agent and cache", "Display OpenStreetMap attribution; ODbL applies", "Operator must deliberately choose this service and comply with its usage policy", "Multiple processes or machines must coordinate their aggregate traffic", "Use base_url to select a self-hosted or contracted search endpoint"]
+      "conditions": [
+        "Identifying User-Agent and cache",
+        "Display OpenStreetMap attribution; ODbL applies",
+        "Operator must deliberately choose this service and comply with its usage policy",
+        "Multiple processes or machines must coordinate their aggregate traffic",
+        "Use base_url to select a self-hosted or contracted search endpoint"
+      ],
+      "access_scope": "conditional_api",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "d078a307a957475c1ab665076b866824c17718a47ea19de335ad4a2354c7533c"
     },
     "mwmbl": {
       "request_url": "https://api.mwmbl.org/api/v2/search/",
@@ -147,12 +156,19 @@
       "terms_url": "https://developer.mwmbl.org/terms/",
       "documentation_url": "https://developer.mwmbl.org/",
       "review_date": "2026-11-05",
-      "status": "conditional_api",
+      "status": "reviewed_allowed_for_scope",
       "standard_allowed": true,
       "decision": "anonymous_quota_1000_per_month_1_per_second_results_license_separate",
       "minimum_spacing_ms": 1000,
       "rate_limit_host": "api.mwmbl.org",
-      "conditions": ["Anonymous quota: 1000 requests per calendar month; upstream enforces the quota", "API access permits commercial applications, but returned data has separate CC BY-NC-SA 4.0 and third-party rights", "Review attribution, sharing and commercial reuse of returned content separately"]
+      "conditions": [
+        "Anonymous quota: 1000 requests per calendar month; upstream enforces the quota",
+        "API access permits commercial applications, but returned data has separate CC BY-NC-SA 4.0 and third-party rights",
+        "Review attribution, sharing and commercial reuse of returned content separately"
+      ],
+      "access_scope": "conditional_api",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "53b686f07874c3bc3491656ea044af5da3cc1625df39a4df7e8bb7f129a9e88a"
     },
     "hackernews": {
       "request_url": "https://hn.algolia.com/api/v1/search",
@@ -160,10 +176,16 @@
       "terms_url": "https://hn.algolia.com/api",
       "documentation_url": "https://github.com/algolia/hn-search",
       "review_date": "2026-11-05",
-      "status": "api_documented_reuse_review_pending",
+      "status": "reviewed_allowed_for_scope",
       "standard_allowed": true,
       "decision": "documented_search_interface_does_not_grant_unlimited_content_reuse",
-      "conditions": ["Content rights remain with the original authors", "Check deployment volume and caching/republication rights; no unlimited quota is asserted"]
+      "conditions": [
+        "Content rights remain with the original authors",
+        "Check deployment volume and caching/republication rights; no unlimited quota is asserted"
+      ],
+      "access_scope": "api_documented_reuse_review_pending",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "88f987059a798db2d41fab9755c6281678de11d0e6c2b424fe1aa1fa99d7c0d5"
     },
     "europepmc": {
       "request_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
@@ -171,10 +193,1628 @@
       "terms_url": "https://www.ebi.ac.uk/about/terms-of-use/",
       "documentation_url": "https://europepmc.org/RestfulWebService",
       "review_date": "2026-11-05",
-      "status": "conditional_api",
+      "status": "reviewed_allowed_for_scope",
       "standard_allowed": true,
       "decision": "use_service_interfaces_respect_capacity_and_original_content_rights",
-      "conditions": ["EMBL-EBI terms revised 2026-10-14", "Service access grants no additional rights in third-party abstracts/full text", "Check the specific source license before storing or redistributing; do not degrade service for others"]
+      "conditions": [
+        "EMBL-EBI terms revised 2026-10-14",
+        "Service access grants no additional rights in third-party abstracts/full text",
+        "Check the specific source license before storing or redistributing; do not degrade service for others"
+      ],
+      "access_scope": "conditional_api",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "acb831988e162ff7a8010a96f18058c66fda48f672e3184daee496dea48da4d3"
+    },
+    "wikipedia": {
+      "request_url": "https://{language}.wikipedia.org/w/api.php",
+      "access_method": "MediaWiki Action API",
+      "terms_url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Etiquette",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "free_licenses_api_access_expected_identification_required",
+      "conditions": [
+        "Wikimedia利用規約: 本文はCC BY-SA 4.0等の自由ライセンスで提供され、再利用時の帰属が必要",
+        "MediaWiki API etiquette: 読み取り専用リクエストにもレート制限がある。連絡先付きの識別可能なUser-Agentが必須で、ブラウザUAの偽装は禁止",
+        "Wikimedia User-Agentポリシー: 識別できないクライアントは予告なくブロックされ得る",
+        "RustXNGはWikimedia系宛てに識別可能なUser-Agent (rustxng/<版> (+URL[; 連絡先])) を既に送信している (docs/PROVIDERS.md 2026-11-03)"
+      ],
+      "access_scope": "documented_api_with_conditions",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "4e09e115e53da2211a524d0286da9ea4e6e2e84ebd1983545b052201309248d7"
+    },
+    "wikipedia_entities": {
+      "request_url": "https://{language}.wikipedia.org/w/api.php (entity search variant)",
+      "access_method": "MediaWiki Action API",
+      "terms_url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Etiquette",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "free_licenses_api_access_expected_identification_required",
+      "conditions": [
+        "Wikimedia利用規約: 本文はCC BY-SA 4.0等の自由ライセンスで提供され、再利用時の帰属が必要",
+        "MediaWiki API etiquette: 読み取り専用リクエストにもレート制限がある。連絡先付きの識別可能なUser-Agentが必須で、ブラウザUAの偽装は禁止",
+        "Wikimedia User-Agentポリシー: 識別できないクライアントは予告なくブロックされ得る",
+        "RustXNGはWikimedia系宛てに識別可能なUser-Agent (rustxng/<版> (+URL[; 連絡先])) を既に送信している (docs/PROVIDERS.md 2026-11-03)"
+      ],
+      "access_scope": "documented_api_with_conditions",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "4e09e115e53da2211a524d0286da9ea4e6e2e84ebd1983545b052201309248d7"
+    },
+    "wikipedia_any": {
+      "request_url": "https://{language}.wikipedia.org/w/api.php (any-words variant)",
+      "access_method": "MediaWiki Action API",
+      "terms_url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Etiquette",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "free_licenses_api_access_expected_identification_required",
+      "conditions": [
+        "Wikimedia利用規約: 本文はCC BY-SA 4.0等の自由ライセンスで提供され、再利用時の帰属が必要",
+        "MediaWiki API etiquette: 読み取り専用リクエストにもレート制限がある。連絡先付きの識別可能なUser-Agentが必須で、ブラウザUAの偽装は禁止",
+        "Wikimedia User-Agentポリシー: 識別できないクライアントは予告なくブロックされ得る",
+        "RustXNGはWikimedia系宛てに識別可能なUser-Agent (rustxng/<版> (+URL[; 連絡先])) を既に送信している (docs/PROVIDERS.md 2026-11-03)"
+      ],
+      "access_scope": "documented_api_with_conditions",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "4e09e115e53da2211a524d0286da9ea4e6e2e84ebd1983545b052201309248d7"
+    },
+    "wikidata": {
+      "request_url": "https://www.wikidata.org/w/api.php",
+      "access_method": "MediaWiki Action API",
+      "terms_url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Etiquette",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "free_licenses_api_access_expected_identification_required",
+      "conditions": [
+        "Wikimedia利用規約: 本文はCC BY-SA 4.0等の自由ライセンスで提供され、再利用時の帰属が必要",
+        "MediaWiki API etiquette: 読み取り専用リクエストにもレート制限がある。連絡先付きの識別可能なUser-Agentが必須で、ブラウザUAの偽装は禁止",
+        "Wikimedia User-Agentポリシー: 識別できないクライアントは予告なくブロックされ得る",
+        "RustXNGはWikimedia系宛てに識別可能なUser-Agent (rustxng/<版> (+URL[; 連絡先])) を既に送信している (docs/PROVIDERS.md 2026-11-03)"
+      ],
+      "access_scope": "documented_api_with_conditions",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "07c9b2a176634b360fff98da89b87ac479d7725b68822878784c556c33305a51"
+    },
+    "wikicommons": {
+      "request_url": "https://commons.wikimedia.org/w/api.php",
+      "access_method": "MediaWiki Action API",
+      "terms_url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Etiquette",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "free_licenses_api_access_expected_identification_required",
+      "conditions": [
+        "Wikimedia利用規約: 本文はCC BY-SA 4.0等の自由ライセンスで提供され、再利用時の帰属が必要",
+        "MediaWiki API etiquette: 読み取り専用リクエストにもレート制限がある。連絡先付きの識別可能なUser-Agentが必須で、ブラウザUAの偽装は禁止",
+        "Wikimedia User-Agentポリシー: 識別できないクライアントは予告なくブロックされ得る",
+        "RustXNGはWikimedia系宛てに識別可能なUser-Agent (rustxng/<版> (+URL[; 連絡先])) を既に送信している (docs/PROVIDERS.md 2026-11-03)"
+      ],
+      "access_scope": "documented_api_with_conditions",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "17035ec44c5483cad32fcea974a396f5aef5ac1f5a70189a441a6c58fc3aec1d"
+    },
+    "github": {
+      "request_url": "https://api.github.com/search/repositories",
+      "access_method": "Documented REST API (unauthenticated)",
+      "terms_url": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
+      "documentation_url": "https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "api_terms_allow_data_collection_within_rate_limits",
+      "conditions": [
+        "GitHub ToSにはAPI専用の条項があり、開発・データ収集のためのAPI利用を定める",
+        "未認証リクエストは60回/時 (コア)。検索エンドポイントはさらに低い別枠 (10回/分)",
+        "Acceptable Useポリシーは同意なきWebサイトのスクレイピングを禁止。エンジンはHTMLではなく文書化されたAPIを使う",
+        "結果メタデータの再利用はGitHub ToSと各リポジトリのライセンスに従う"
+      ],
+      "access_scope": "documented_api_with_rate_limits",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "505d890d038a8335c502f0e6a3001de2bd7dd6decc7ba18fd3b898eaba40d258"
+    },
+    "stackexchange": {
+      "request_url": "https://api.stackexchange.com/2.3/search/advanced",
+      "access_method": "Documented REST API",
+      "terms_url": "https://stackoverflow.com/legal/api-terms-of-use",
+      "documentation_url": "https://api.stackexchange.com/docs",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "api_terms_require_attribution",
+      "conditions": [
+        "API利用規約: アプリはStack Exchange Networkを情報源として明示しなければならない",
+        "検索エンジンに索引されるアプリはStack Exchange ToSの帰属規則に従う必要がある",
+        "APIはクォータ/スロットリング対象。本番利用ではAPIキーを推奨",
+        "投稿本文はCC BY-SA。全文再利用はライセンスの帰属要件に従う"
+      ],
+      "access_scope": "documented_api_with_attribution",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "fcb5bc7d0a862667437be7c824f4479bbe7c4597718ee1d2156f9bdee950d51b"
+    },
+    "crates": {
+      "request_url": "https://crates.io/api/v1/crates",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://crates.io/data-access",
+      "documentation_url": "https://crates.io/data-access",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "minimum_spacing_ms": 1000,
+      "rate_limit_host": "crates.io",
+      "decision": "api_allowed_with_user_agent_and_1rps_limit",
+      "conditions": [
+        "crates.ioデータアクセス方針: sparse indexとダンプを優先し、APIは公表された制限内で利用してよい",
+        "API利用には連絡先付きのUser-Agent識別と最大1リクエスト/秒が要求される",
+        "制限超過時は429を返すため、429時はバックオフする"
+      ],
+      "access_scope": "documented_api_with_rate_limit",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "bf7cc4c4b3ccf0d1cea19b16d0d4644da7486df6201c4b15b3284d5f7e71fb9c"
+    },
+    "pypi": {
+      "request_url": "https://pypi.org/search/?{query}",
+      "access_method": "HTML search endpoint (not the documented JSON API)",
+      "terms_url": "https://policies.python.org/pypi.org/Terms-of-Service/",
+      "documentation_url": "https://pypi.org/user-guide/",
+      "review_date": "2026-11-05",
+      "status": "html_search_permission_unconfirmed",
+      "standard_allowed": false,
+      "decision": "disabled_by_default_pending_permission_html_search",
+      "conditions": [
+        "エンジンはPyPIのHTML検索頁 (https://pypi.org/search/) を使う。PyPI ToSのAPI条項はAPI利用を律するもので、HTML経路はその対象外",
+        "PyPI ToS: API経由の乱用・過度に頻繁なリクエストはAPIアクセス停止になり得る。アカウントのbot登録は禁止",
+        "Webサイト検索頁への自動アクセスについて明示的な許可は2026-11-05時点で確認できていない",
+        "PyPIに公式のJSON検索APIはなく (XMLRPC APIは非推奨)、移行先が無いため、許諾確認までStandardでは無効を提案"
+      ]
+    },
+    "arxiv": {
+      "request_url": "https://export.arxiv.org/api/query",
+      "access_method": "Documented Atom API",
+      "terms_url": "https://info.arxiv.org/help/api/tou.html",
+      "documentation_url": "https://info.arxiv.org/help/api/",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "minimum_spacing_ms": 3000,
+      "rate_limit_host": "export.arxiv.org",
+      "decision": "api_tou_one_request_per_3_seconds",
+      "conditions": [
+        "arXiv API利用規約: 3秒に1回以内、同時1接続 (管理下の全マシン合算)",
+        "電子プリント (PDF/ソース) は著作権者の許可なく保存・配信しない。検索用メタデータは対象外",
+        "arXiv行動規範に従う。違反時はAPI利用を禁止され得る"
+      ],
+      "access_scope": "documented_api_with_rate_limit",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "a5812f8032e12b219a9be9522d7de64f8c22bf44b22c9910d6e3ea38e8d1a559"
+    },
+    "crossref": {
+      "request_url": "https://api.crossref.org/works",
+      "access_method": "Documented REST API (polite pool)",
+      "terms_url": "https://www.crossref.org/documentation/retrieve-metadata/rest-api/",
+      "documentation_url": "https://www.crossref.org/documentation/retrieve-metadata/rest-api/",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "polite_pool_contact_requested",
+      "conditions": [
+        "Crossref REST API: mailtoパラメータ (連絡先) を付けてpolite poolに入れることが推奨",
+        "書誌メタデータは事実データ。APIガイドラインとレート制限ヘッダに従う",
+        "大量・商用利用にはPlus登録が必要になり得る"
+      ],
+      "access_scope": "documented_api_polite_pool",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "ae4fb658a6b0efdf1ec3fcf2c17a629661935ca67f74059caa14a10378dc09e2"
+    },
+    "cinii": {
+      "request_url": "https://cir.nii.ac.jp/opensearch/all",
+      "access_method": "OpenSearch API",
+      "terms_url": "https://support.nii.ac.jp/en/cinii/api/developer",
+      "documentation_url": "https://support.nii.ac.jp/en/cinii/api/api_outline",
+      "review_date": "2026-11-05",
+      "status": "api_registration_required",
+      "standard_allowed": false,
+      "decision": "api_user_registration_and_regulations_required",
+      "conditions": [
+        "NIIはOpenSearch/RDF等のAPI利用に、利用登録 (アプリケーションID取得) を求める",
+        "「学術コンテンツサービス利用規約」「CiNii Research利用細則」「ウェブAPI利用細則」への同意が必要",
+        "CiNii Booksの書誌データはCC BY 4.0オープンデータ。その他のコンテンツの権利は個別",
+        "登録と細則確認が済むまでStandardでは無効にする"
+      ]
+    },
+    "semantic_scholar": {
+      "request_url": "https://api.semanticscholar.org/graph/v1/paper/search",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://www.semanticscholar.org/product/api",
+      "documentation_url": "https://api.semanticscholar.org/api-docs/",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "api_free_with_rate_limits_key_recommended",
+      "conditions": [
+        "Semantic Scholar APIは無料。未認証リクエストは共有プールでスロットリングされ得る",
+        "APIキーを推奨 (入門枠 1 RPS)。キーの共有は禁止",
+        "データ出典をSemantic Scholarに帰属 (S2論文の引用) し、全文の権利は元論文のライセンスに従う",
+        "大量取得はAPIではなくS2AGデータセット配布を使う"
+      ],
+      "access_scope": "documented_api_with_rate_limits",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "a120029ef6873d1cf1d9f40ae32ae9f0d0b5c655716a4c3fe8528009a15546c1"
+    },
+    "core": {
+      "request_url": "https://api.core.ac.uk/v3/search/works/",
+      "access_method": "Documented JSON API (licence required)",
+      "terms_url": "https://core.ac.uk/terms",
+      "documentation_url": "https://core.ac.uk/services/api",
+      "review_date": "2026-11-05",
+      "status": "licence_required_for_api_and_products",
+      "standard_allowed": false,
+      "decision": "core_api_licence_and_contact_required_for_search_products",
+      "conditions": [
+        "CORE利用条件: CORE APIの利用にはライセンスが必要。無料ライセンスもあるが適格性の確認が要る",
+        "収益化の可能性や、CORE自身のサービス (API・推薦・検索・発見システム等) に類似する機能を持つ製品は、COREへの連絡が求められる",
+        "COREはrobots.txtとアクセス制御を尊重して収集しているが、個別コンテンツのライセンスは別途確認が必要",
+        "Standardではライセンス適格性の確認まで無効にする"
+      ]
+    },
+    "openalex": {
+      "request_url": "https://api.openalex.org/works",
+      "access_method": "Documented REST API",
+      "terms_url": "https://docs.openalex.org/",
+      "documentation_url": "https://github.com/ourresearch/openalex-docs/blob/main/how-to-use-the-api/rate-limits-and-authentication.md",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "free_api_100k_credits_per_day_cc0",
+      "conditions": [
+        "OpenAlexは無料: 無料ユーザーは最大100,000クレジット/日、100リクエスト/秒。list系エンドポイント (/works?filter= 等) は1リクエスト10クレジット",
+        "mailtoを付けるとpolite poolに入り、安定した応答になる",
+        "OpenAlexのデータはCC0。帰属は義務ではないが推奨される",
+        "検索トラフィックには100,000クレジット/日は十分な枠"
+      ],
+      "access_scope": "documented_api_with_credits",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "dd7b8efc1983aff3fb714ef4770976a31234496553db158b76bccd4015e9f551"
+    },
+    "pubmed": {
+      "request_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils",
+      "access_method": "Documented E-utilities API",
+      "terms_url": "https://www.ncbi.nlm.nih.gov/books/NBK25497/",
+      "documentation_url": "https://eutilities.github.io/site/API_Key/usageandkey/",
+      "review_date": "2026-11-05",
+      "status": "reviewed_disabled_unshared_transport",
+      "standard_allowed": false,
+      "decision": "two_request_offline_adapter_bypasses_shared_pacing_and_retry_policy",
+      "conditions": [
+        "NCBI E-utilities利用指針: 3 URLリクエスト/秒以内",
+        "大きなジョブ (100リクエスト超) は週末または米東部時間 21:00–05:00 に。APIキーで上限引き上げ可",
+        "抄録・索引データが中心。全文の著作権は出版者に帰属",
+        "NBK25497は2026-11-05時点で自動取得を拒否したため、NCBI公式のE-utilities文書サイト (eutilities.github.io) で指針を確認した",
+        "Implementation review: search_offline builds its own reqwest client, so host_spacing_overrides do not cover either E-utilities request. Keep disabled until migrated to shared transport and tool/email identification is configured."
+      ],
+      "access_scope": "documented_api_with_usage_guidelines",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "765fad53ce362df7195cb359b6f2c63900853f161693b708fcd77b44fca88ec0"
+    },
+    "open_meteo": {
+      "request_url": "https://api.open-meteo.com/v1/forecast",
+      "access_method": "Documented JSON API (keyless)",
+      "terms_url": "https://open-meteo.com/en/terms/",
+      "documentation_url": "https://open-meteo.com/en/docs/",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "free_api_non_commercial_only_cc_by_4_0",
+      "conditions": [
+        "Open-Meteo利用規約: 無料APIは非商用目的のみ。商用利用はサブスクリプションが必要",
+        "無料枠: 10,000呼び出し/日未満、5,000/時、600/分 (IPおよびアプリケーション単位)",
+        "CC BY 4.0の帰属 (Open-Meteoへのクレジット) が必要",
+        "乱用は予告なくブロックされ得る。サーバーレス環境では早期に制限がかかる場合がある"
+      ],
+      "access_scope": "conditional_api_non_commercial",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "4c920f4023894a9faf32eb1a0076e36ab0c234e5e8486fe657a80254d81a3af5"
+    },
+    "photon": {
+      "request_url": "https://photon.komoot.io/api/",
+      "access_method": "Public geocoding API (open-source instance)",
+      "terms_url": "https://photon.komoot.io/",
+      "documentation_url": "https://github.com/komoot/photon",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "public_instance_throttles_misuse_osm_attribution",
+      "conditions": [
+        "photonの公開インスタンス: 大量利用はスロットリングまたは全面禁止になり得る。可用性の保証はなく、予告なく変更され得る",
+        "大量リクエストには自前インスタンスの運用が推奨されている",
+        "データは © OpenStreetMap contributors (ODbL)。結果表示時の帰属が必要",
+        "リクエスト量は控えめに保つ"
+      ],
+      "access_scope": "public_instance_best_effort",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "17189d344eabbe54df020336d8d715c973cad4aa8e53210333efa51ccd784577"
+    },
+    "openverse": {
+      "request_url": "https://api.openverse.org/v1/images/",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://docs.openverse.org/api/reference/authentication_and_throttling.html",
+      "documentation_url": "https://api.openverse.org/v1/",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "minimum_spacing_ms": 3000,
+      "rate_limit_host": "api.openverse.org",
+      "decision": "anonymous_tier_20_per_min_200_per_day_register_for_more",
+      "conditions": [
+        "Openverse APIの匿名 (未登録) ティア: バースト20リクエスト/分、持続200リクエスト/日 (APIのレート制限ヘッダで確認。ドキュメント頁はJS描画のため本文取得は不可だった)",
+        "上限引き上げにはアプリケーション登録 (standardティア) が必要",
+        "検索結果は各コンテンツのライセンス (CC等) に従い帰属が必要",
+        "共有インスタンスでは200/日は少ないため、429を監視する"
+      ],
+      "access_scope": "documented_api_low_anonymous_tier",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "cf197a3e67e4b7f0970e1a4e4286b25a884329b8c09ac77390a73f435ff6862a"
+    },
+    "dailymotion": {
+      "request_url": "https://api.dailymotion.com/videos",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://legal.dailymotion.com/en/terms-of-use/",
+      "documentation_url": "https://developers.dailymotion.com/api/",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "api_documented_tou_applies",
+      "conditions": [
+        "Dailymotion APIは文書化されており、プラットフォームの安定と公平な利用のためレート制限を実施する",
+        "Dailymotion利用規約がサービスを律する。動画コンテンツの権利は権利者に帰属",
+        "検索結果はメタデータであり、視聴はDailymotionプレーヤー経由が想定される利用方法"
+      ],
+      "access_scope": "documented_api_with_rate_limits",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "2847ab7a0266d60dc6779811c9fc7cdf52951b3bd56c7efb8cd33ea5fbf9782f"
+    },
+    "deezer": {
+      "request_url": "https://api.deezer.com/search",
+      "access_method": "Public JSON API (simple API)",
+      "terms_url": "https://developers.deezer.com/api/terms",
+      "documentation_url": "https://developers.deezer.com/api",
+      "review_date": "2026-11-05",
+      "status": "api_terms_behind_login",
+      "standard_allowed": false,
+      "decision": "api_terms_require_login_acceptance_not_publicly_reviewable",
+      "conditions": [
+        "DeezerのAPI利用規約は開発者ログインの先で呈示される (「simple APIの利用規約に同意するにはログインが必要」)",
+        "2026-11-05時点で規約本文を公開状態で確認できなかった。有効化前に規約の確認と記録が必要",
+        "返却されるトラックメタデータは統合目的。コンテンツの権利は権利者に帰属"
+      ]
+    },
+    "vimeo": {
+      "request_url": "https://api.vimeo.com (guest JWT from https://vimeo.com/_next/jwt)",
+      "access_method": "API with internal JWT bootstrap",
+      "terms_url": "https://vimeo.com/terms",
+      "documentation_url": "https://developer.vimeo.com/api/guides/start",
+      "review_date": "2026-11-05",
+      "status": "internal_endpoint_and_auth_unclear",
+      "standard_allowed": false,
+      "decision": "internal_jwt_endpoint_and_authentication_pending_review",
+      "conditions": [
+        "エンジンは検索前に vimeo.com/_next/jwt (サイト内部エンドポイント) からゲストJWTを取得している",
+        "Vimeo APIは通常アクセストークン認証が必要で、未認証利用は文書化されたAPIの一部ではない",
+        "Vimeo利用規約がサービスを律する。内部エンドポイントの利用は公開API規約でカバーされない",
+        "アクセス経路の確認または資格情報の設定までStandardでは無効にする"
+      ]
+    },
+    "docker_hub": {
+      "request_url": "https://hub.docker.com (website search endpoint)",
+      "access_method": "Undocumented website search endpoint",
+      "terms_url": "https://www.docker.com/legal/docker-terms-use",
+      "documentation_url": "https://docs.docker.com/docker-hub/api/",
+      "review_date": "2026-11-05",
+      "status": "terms_page_not_machine_readable",
+      "standard_allowed": false,
+      "decision": "undocumented_endpoint_terms_pending_review",
+      "conditions": [
+        "エンジンはhub.docker.comのサイト検索を叩くが、これはDockerの文書化された公開APIではない",
+        "Docker利用規約ページはJavaScript描画で、2026-11-05には条項本文を自動取得できなかった。人間による確認が必要",
+        "Docker Hubにはレジストリ操作の認証付きAPIがあるが、検索の匿名利用は許可として文書化されていない",
+        "利用規約の確認が済むまでStandardでは無効にする"
+      ]
+    },
+    "microsoft_learn": {
+      "request_url": "https://learn.microsoft.com/api/search",
+      "access_method": "Internal JSON endpoint (undocumented)",
+      "terms_url": "https://learn.microsoft.com/en-us/legal/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "restricted_internal_endpoint",
+      "standard_allowed": false,
+      "decision": "internal_search_endpoint_undocumented_microsoft_terms_apply",
+      "conditions": [
+        "learn.microsoft.com/api/search はMicrosoft Learnサイト自身の検索用で、公開APIドキュメントが見つからない",
+        "Microsoftの利用規約がサービスを律する。内部エンドポイント利用は許可として文書化されていない",
+        "Microsoft Learnのコンテンツは個別の著作権表示・ライセンス (一部CC BY) に従う",
+        "文書化されたアクセス経路への移行までStandardでは無効にする"
+      ]
+    },
+    "npm": {
+      "request_url": "https://registry.npmjs.org/-/v1/search",
+      "access_method": "Documented public registry JSON API",
+      "terms_url": "https://docs.npmjs.com/policies/open-source-terms/",
+      "documentation_url": "https://github.com/npm/registry/blob/main/docs/REGISTRY-API.md",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "use_official_registry_search_not_the_npms_website_endpoint",
+      "conditions": [
+        "Use the public registry API and respect rate limits and replication policy",
+        "Package metadata does not grant additional rights in package contents",
+        "Identify the client; follow package-specific license and attribution requirements"
+      ],
+      "access_scope": "documented_registry_api_with_conditions",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "2688601ee6d656f3acbd89f3b1bed845e8aa9efe05949f32f08b60246d8f7234"
+    },
+    "repology": {
+      "request_url": "https://repology.org/api/v1/project/{query}",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://repology.org/api",
+      "documentation_url": "https://repology.org/api",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "api_1rps_identification_required_bulk_discouraged",
+      "minimum_spacing_ms": 1000,
+      "rate_limit_host": "repology.org",
+      "conditions": [
+        "At most one request per second; bulk clients MUST identify themselves with an accessible source repository/issue tracker in User-Agent",
+        "Over 1000 daily requests should use the database dump; API access is not an unrestricted licence to third-party package content"
+      ],
+      "access_scope": "documented_api_with_rate_limit",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "cffbb3eade3e0d1880407686f0d78557543d09b004bdcf7a7ac94bf04d44b3f7"
+    },
+    "apple_app_store": {
+      "request_url": "https://itunes.apple.com/search (iTunes Search API)",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://performance-partners.apple.com/search-api",
+      "documentation_url": "https://performance-partners.apple.com/search-api",
+      "review_date": "2026-11-05",
+      "status": "documented_api_with_terms",
+      "standard_allowed": false,
+      "decision": "disabled_pending_endpoint_or_display_condition_review",
+      "minimum_spacing_ms": 3000,
+      "rate_limit_host": "itunes.apple.com",
+      "conditions": [
+        "iTunes Search APIは文書化され、規約が適用される",
+        "ストアコンテンツの検索目的の利用であり、エンターテインメント用途ではない",
+        "サンプル等のアセットはストアバッジの近接表示が必要",
+        "レート制限があり、過度な利用は制限され得る"
+      ]
+    },
+    "artic": {
+      "request_url": "https://api.artic.edu/api/v1/artworks/search",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://api.artic.edu/docs/",
+      "documentation_url": "https://api.artic.edu/docs/",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "documented_api_cc0_data",
+      "conditions": [
+        "Documented artworks search API; most structured metadata CC0; description fields CC BY 4.0 and website terms",
+        "Respect upstream throttling and retain source credit; review individual image copyright before reuse"
+      ],
+      "access_scope": "documented_api_cc0",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "4149a1b371773ab042f0b713bae18d7973c68cfd162e4035c48f066abc010337"
+    },
+    "iconify": {
+      "request_url": "https://api.iconify.design/search",
+      "access_method": "Documented public JSON API",
+      "terms_url": "https://iconify.design/docs/api/",
+      "documentation_url": "https://iconify.design/docs/api/",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "documented_public_api_no_key",
+      "conditions": [
+        "Iconifyの公開APIは文書化され、キー不要",
+        "アイコンデータのライセンスは各セットに従う",
+        "適度な利用量に保つ"
+      ],
+      "access_scope": "documented_public_api",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "c88df3c04ce98f8c0c121d020a9de59fd615307fe5131be993b33556e7176790"
+    },
+    "mixcloud": {
+      "request_url": "https://api.mixcloud.com/search/?q={query}&type=cloudcast",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://www.mixcloud.com/developers/",
+      "documentation_url": "https://www.mixcloud.com/developers/",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "documented_api_rate_limits_apply",
+      "conditions": [
+        "Mixcloud APIは文書化され、レート制限がある",
+        "音声コンテンツの権利は権利者に帰属",
+        "埋め込みプレーヤー経由の再生が想定される利用方法"
+      ],
+      "access_scope": "documented_api_with_rate_limits",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "fc3a8e6e652a33512b25f2d3d705a0007527b0c7b3ab883474cb9a1c38648f69"
+    },
+    "github_code": {
+      "request_url": "https://api.github.com/search/code",
+      "access_method": "Documented REST API (auth required)",
+      "terms_url": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
+      "documentation_url": "https://docs.github.com/en/rest/search",
+      "review_date": "2026-11-05",
+      "status": "code_search_api_requires_auth",
+      "standard_allowed": false,
+      "decision": "disabled_by_default_requires_api_key",
+      "conditions": [
+        "GitHubコード検索APIは認証必須 (キーなしでは常に失敗)",
+        "レート制限は検索で10リクエスト/分",
+        "キーを設定した利用者の明示的な再有効化を優先"
+      ]
+    },
+    "pexels": {
+      "request_url": "https://www.pexels.com/search/{query}/",
+      "access_method": "HTML search (documented API requires key)",
+      "terms_url": "https://www.pexels.com/api/",
+      "documentation_url": "https://www.pexels.com/api/",
+      "review_date": "2026-11-05",
+      "status": "api_key_required",
+      "standard_allowed": false,
+      "decision": "disabled_by_default_requires_api_key",
+      "conditions": [
+        "Pexels APIはキー必須で、キーなしでは応答しない",
+        "エンジンはAPIではなくサイト検索 (HTML) を使っている",
+        "移行先は公式API。帰属・ライセンス条項の確認が必要"
+      ]
+    },
+    "genius": {
+      "request_url": "https://genius.com/api/search?q={query}",
+      "access_method": "Internal JSON endpoint",
+      "terms_url": "https://docs.genius.com",
+      "documentation_url": "https://docs.genius.com",
+      "review_date": "2026-11-05",
+      "status": "restricted_internal_endpoint_and_commercial_licence",
+      "standard_allowed": false,
+      "decision": "disabled_by_default_internal_endpoint_and_commercial_licence",
+      "conditions": [
+        "genius.com/apiはサイト内部エンドポイント (公開APIドキュメントの対象外)",
+        "Genius APIの商用利用はライセンスなしでは認められない (docs.genius.com)",
+        "ライセンスの確認までStandardでは無効"
+      ]
+    },
+    "iqiyi": {
+      "request_url": "https://www.iqiyi.com (site search)",
+      "access_method": "HTML/site search",
+      "terms_url": "https://www.iqiyi.com/kszt/iQIYI_Partner_Services_Terms_of_Use.html",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "terms_prohibit_unauthorized_access",
+      "standard_allowed": false,
+      "decision": "disabled_by_default_pending_permission",
+      "conditions": [
+        "iQIYI利用規約は、事前の明示的な書面同意なしにプラットフォームのサービス・コンテンツ・データを取得することを禁止",
+        "自動取得の許諾確認までStandardでは無効"
+      ]
+    },
+    "pixiv": {
+      "request_url": "https://www.pixiv.net/search.php?s_mode=s_tag&word={query}",
+      "access_method": "HTML/site search",
+      "terms_url": "https://policies.pixiv.net/en.html",
+      "documentation_url": "https://policies.pixiv.net/en.html",
+      "review_date": "2026-11-05",
+      "status": "prohibited_conduct_clause_present_scraping_item_unverified",
+      "standard_allowed": false,
+      "decision": "disabled_by_default_pending_permission",
+      "conditions": [
+        "pixiv利用規約に禁止行為条項 (Prohibited Conduct) がある",
+        "自動収集の該当項は人間が未確認",
+        "ガイドラインが自動収集を制限している可能性",
+        "確認までStandardでは無効"
+      ]
+    },
+    "currency_convert": {
+      "request_url": "https://duckduckgo.com/js/spice/currency/{from}/{to}",
+      "access_method": "Internal endpoint (DuckDuckGo Spice)",
+      "terms_url": "https://duckduckgo.com/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "restricted_internal_endpoint",
+      "standard_allowed": false,
+      "decision": "disabled_by_default_internal_endpoint",
+      "conditions": [
+        "DuckDuckGo Spiceはサイト内部エンドポイントで、公開APIドキュメントの対象外",
+        "為替データの提供元は上流ソース",
+        "内部エンドポイントの利用許諾確認までStandardでは無効"
+      ]
+    },
+    "openclipart": {
+      "request_url": "https://openclipart.org/search/?query={query}",
+      "access_method": "HTML search (API link exists)",
+      "terms_url": "https://openclipart.org/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_link_exists",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "サイトにAPIへのリンク (API 3.5.6) がある",
+        "エンジンのアクセス経路とAPIの条件は未確認"
+      ]
+    },
+    "alpinelinux": {
+      "request_url": "https://pkgs.alpinelinux.org/packages?name={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://alpinelinux.org/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Alpineパッケージ検索はHTML。APIの有無と規約は未確認"
+      ]
+    },
+    "cachy_os": {
+      "request_url": "https://packages.cachyos.org/api/search",
+      "access_method": "JSON API (terms unconfirmed)",
+      "terms_url": "https://cachyos.org/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "api_terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "api/searchエンドポイントが存在",
+        "CachyOSの規約・API条件は未確認"
+      ]
+    },
+    "pkg_go_dev": {
+      "request_url": "https://pkg.go.dev/search?q={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://go.dev/policy",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "pkg.go.devの検索はHTML",
+        "go.devの規約頁は2026-11-05に404",
+        "人間による確認が必要"
+      ]
+    },
+    "lib_rs": {
+      "request_url": "https://lib.rs/search?q={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://lib.rs/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "lib.rsの検索はHTML。規約未確認"
+      ]
+    },
+    "duden": {
+      "request_url": "https://www.duden.de/suchen/dudenonline/{query}",
+      "access_method": "HTML search",
+      "terms_url": "https://www.duden.de/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Dudenの検索はHTML。規約の該当条項は未確認 (トップ頁のみ取得)"
+      ]
+    },
+    "bpb": {
+      "request_url": "https://www.bpb.de/search/?q={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://www.bpb.de/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "bpb (連邦市民教育センター) の検索はHTML。規約未確認"
+      ]
+    },
+    "niconico": {
+      "request_url": "https://www.nicovideo.jp/search/{query}",
+      "access_method": "HTML search",
+      "terms_url": "https://www.nicovideo.jp/rule",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_page_404",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "ニコニコ動画の規約頁は2026-11-05に404",
+        "人間による確認が必要"
+      ]
+    },
+    "shopify_stock": {
+      "request_url": "https://www.shopify.com/search?q={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://www.shopify.com/legal/terms",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Shopifyの検索はHTML。規約未確認"
+      ]
+    },
+    "findfiles": {
+      "request_url": "https://findfiles.net/search?q={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://findfiles.net/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unfetched",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約未取得"
+      ]
+    },
+    "www1x": {
+      "request_url": "https://1x.com/search?q={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://1x.com/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unfetched",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "1x.comの検索はHTML。規約未取得"
+      ]
+    },
+    "odysee": {
+      "request_url": "https://odysee.com/$/search?q={query}",
+      "access_method": "HTML search (LBRY API exists)",
+      "terms_url": "https://odysee.com/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_docs_js_rendered",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "OdyseeのAPIドキュメント頁はJS描画で本文未取得",
+        "LBRY APIの条件は未確認"
+      ]
+    },
+    "dictzone": {
+      "request_url": "https://dictzone.com/{query}-translator/",
+      "access_method": "HTML scrape",
+      "terms_url": "https://dictzone.com/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_page_403",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約頁は2026-11-05に403",
+        "人間による確認が必要"
+      ]
+    },
+    "emojipedia": {
+      "request_url": "https://emojipedia.org/search?q={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://emojipedia.org/legal",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_page_404",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約頁は2026-11-05に404",
+        "人間による確認が必要"
+      ]
+    },
+    "flaticon": {
+      "request_url": "https://www.flaticon.com/search?word={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://www.flaticon.com/legal/terms",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_page_403",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約頁は2026-11-05に403 (JS描画)",
+        "帰属要件の確認が必要"
+      ]
+    },
+    "apkmirror": {
+      "request_url": "https://www.apkmirror.com/?s={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://www.apkmirror.com/about/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_page_403",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約頁は2026-11-05に403",
+        "人間による確認が必要"
+      ]
+    },
+    "deviantart": {
+      "request_url": "https://www.deviantart.com/search?q={query}",
+      "access_method": "HTML search (documented API exists)",
+      "terms_url": "https://www.deviantart.com/legal/tos",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_migration_candidate",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "DeviantArt APIはOAuth文書化だが、エンジンはHTML検索",
+        "移行候補。規約頁は2026-11-05に403"
+      ]
+    },
+    "geizhals": {
+      "request_url": "https://geizhals.de/?fs={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://geizhals.de/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_page_403",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約頁は2026-11-05に403",
+        "人間による確認が必要"
+      ]
+    },
+    "9gag": {
+      "request_url": "https://9gag.com/search?query={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://9gag.com/terms",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unfetched",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約未取得"
+      ]
+    },
+    "sourcehut": {
+      "request_url": "https://sr.ht/projects?search={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://sourcehut.org/terms/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_page_404",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約頁は2026-11-05に404",
+        "人間による確認が必要"
+      ]
+    },
+    "gitlab": {
+      "request_url": "https://gitlab.com (access path unverified)",
+      "access_method": "Access path unverified",
+      "terms_url": "https://about.gitlab.com/terms/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "access_path_unverified_api_documented",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "GitLab APIは文書化されているが、エンジンの実アクセス経路を未検証",
+        "規約頁は取得済み。条項の人間確認が必要"
+      ]
+    },
+    "wordnik": {
+      "request_url": "https://www.wordnik.com/words/{query}",
+      "access_method": "HTML search (documented API with key)",
+      "terms_url": "https://developer.wordnik.com/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_migration_candidate",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Wordnik APIは文書化されキー必須だが、エンジンはHTML",
+        "移行候補"
+      ]
+    },
+    "jisho": {
+      "request_url": "https://jisho.org/api/v1/search/words?keyword={query}",
+      "access_method": "Undocumented JSON API",
+      "terms_url": "https://jisho.org/about",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "api_unofficial_terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "jisho.orgのAPIは非公式 (コミュニティ実装が存在)",
+        "規約未確認。人間による確認が必要"
+      ]
+    },
+    "mastodon": {
+      "request_url": "https://mastodon.social/api/v2/search (access path unverified)",
+      "access_method": "Access path unverified (documented API)",
+      "terms_url": "https://docs.joinmastodon.org/api/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "documented_api_per_instance_terms_unverified",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Mastodon APIは文書化",
+        "インスタンスごとの規約・レート制限が異なる",
+        "エンジンの実アクセス経路を未検証"
+      ]
+    },
+    "lemmy": {
+      "request_url": "https://lemmy.ml/api/v3/search (access path unverified)",
+      "access_method": "Access path unverified (documented API)",
+      "terms_url": "https://join-lemmy.org/docs/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "documented_api_per_instance_terms_unverified",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Lemmy APIは文書化",
+        "インスタンスごとの規約が異なる",
+        "エンジンの実アクセス経路を未検証"
+      ]
+    },
+    "peertube": {
+      "request_url": "https://sepiasearch.org/api/v1/search/videos (access path unverified)",
+      "access_method": "Access path unverified (documented API)",
+      "terms_url": "https://docs.joinpeertube.org/api-rest-reference.html",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "documented_api_per_instance_terms_unverified",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "PeerTube REST APIは文書化",
+        "インスタンスごとの規約が異なる",
+        "エンジンの実アクセス経路を未検証"
+      ]
+    },
+    "sepiasearch": {
+      "request_url": "https://sepiasearch.org/api/v1/search/videos",
+      "access_method": "PeerTube instance API",
+      "terms_url": "https://sepiasearch.org/about",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "peertube_instance_terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "SepiaSearchはPeerTubeインスタンス",
+        "インスタンスの規約・レート制限は未確認"
+      ]
+    },
+    "tootfinder": {
+      "request_url": "https://tootfinder.ch/search.php?q={query} (access path unverified)",
+      "access_method": "Access path unverified",
+      "terms_url": "https://tootfinder.ch/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "opt_in_crawler_access_path_unverified",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Tootfinderはオプトイン型のMastodon検索 (取得済み)",
+        "エンジンの実アクセス経路を未検証"
+      ]
+    },
+    "ccc_media": {
+      "request_url": "https://api.media.ccc.de/public/events (access path unverified)",
+      "access_method": "Access path unverified",
+      "terms_url": "https://media.ccc.de/about",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "cc_by_content_access_path_unverified",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "media.ccc.deのコンテンツはCC BY (帰属必須)",
+        "APIの存在を確認済みだが、エンジンの実アクセス経路を未検証"
+      ]
+    },
+    "wallhaven": {
+      "request_url": "https://wallhaven.cc/search?q={query}",
+      "access_method": "HTML search (documented API exists)",
+      "terms_url": "https://wallhaven.cc/help/api",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_migration_candidate",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Wallhaven APIは文書化 (45リクエスト/分、NSFWはキー必須) だが、エンジンはサイト検索 (HTML)",
+        "移行候補"
+      ]
+    },
+    "imgur": {
+      "request_url": "https://imgur.com/search?q={query}",
+      "access_method": "HTML search (documented API exists)",
+      "terms_url": "https://apidocs.imgur.com/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_migration_candidate",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Imgur APIは文書化されキー必須だが、エンジンはHTML検索",
+        "移行候補。API規約の確認が必要"
+      ]
+    },
+    "steam": {
+      "request_url": "https://store.steampowered.com/search/?term={query}",
+      "access_method": "HTML search (Web API documented with key)",
+      "terms_url": "https://steamcommunity.com/dev",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_migration_candidate",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "Steam Web APIは文書化されキー必須だが、エンジンはストア検索 (HTML)",
+        "移行候補。Steam API利用規約の確認が必要"
+      ]
+    },
+    "fdroid": {
+      "request_url": "https://search.f-droid.org/?q={query}",
+      "access_method": "HTML search (index.json documented)",
+      "terms_url": "https://f-droid.org/docs/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_migration_candidate",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "F-Droidのindex.jsonは文書化だが、エンジンはサイト検索 (HTML)",
+        "移行候補"
+      ]
+    },
+    "kickass": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape (torrent index)",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "torrent_index_terms_and_legality_unreviewed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "トレント索引サイトの規約は一般に自動取得を制限し、権利面のリスクも別",
+        "規約頁は未取得。人間による確認が必要"
+      ]
+    },
+    "nyaa": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape (torrent index)",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "torrent_index_terms_and_legality_unreviewed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "トレント索引サイトの規約は一般に自動取得を制限し、権利面のリスクも別",
+        "規約頁は未取得。人間による確認が必要"
+      ]
+    },
+    "piratebay": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape (torrent index)",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "torrent_index_terms_and_legality_unreviewed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "トレント索引サイトの規約は一般に自動取得を制限し、権利面のリスクも別",
+        "規約頁は未取得。人間による確認が必要"
+      ]
+    },
+    "solidtorrents": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape (torrent index)",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "torrent_index_terms_and_legality_unreviewed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "トレント索引サイトの規約は一般に自動取得を制限し、権利面のリスクも別",
+        "規約頁は未取得。人間による確認が必要"
+      ]
+    },
+    "tokyotoshokan": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape (torrent index)",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "torrent_index_terms_and_legality_unreviewed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "トレント索引サイトの規約は一般に自動取得を制限し、権利面のリスクも別",
+        "規約頁は未取得。人間による確認が必要"
+      ]
+    },
+    "1337x": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape (torrent index)",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "torrent_index_terms_and_legality_unreviewed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "トレント索引サイトの規約は一般に自動取得を制限し、権利面のリスクも別",
+        "規約頁は未取得。人間による確認が必要"
+      ]
+    },
+    "bitchute": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape (torrent index)",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "torrent_index_terms_and_legality_unreviewed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "トレント索引サイトの規約は一般に自動取得を制限し、権利面のリスクも別",
+        "規約頁は未取得。人間による確認が必要"
+      ]
+    },
+    "sogou_images": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約未確認"
+      ]
+    },
+    "sogou_videos": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約未確認"
+      ]
+    },
+    "360search_videos": {
+      "request_url": "(engine source)",
+      "access_method": "HTML scrape",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "360検索の規約は事前同意なしのデータ取得を制限する可能性",
+        "未確認"
+      ]
+    },
+    "hex": {
+      "request_url": "https://hex.pm/api/packages?search={query}",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://hex.pm/docs/api",
+      "documentation_url": "https://hexdocs.pm/hex_api/",
+      "review_date": "2026-11-05",
+      "status": "documented_api_docs_page_404",
+      "standard_allowed": false,
+      "decision": "disabled_pending_endpoint_or_display_condition_review",
+      "minimum_spacing_ms": 1000,
+      "rate_limit_host": "hex.pm",
+      "conditions": [
+        "hex.pm APIはCargo index標準のAPIで広く使われる",
+        "hex.pm/docs/api は2026-11-05に404。公式ドキュメントの所在は要再確認",
+        "識別可能なUser-Agentとレート制限の遵守"
+      ]
+    },
+    "gitea": {
+      "request_url": "https://gitea.com/api/v1/repos/search?q={query}",
+      "access_method": "Documented JSON API (Gitea standard)",
+      "terms_url": "https://gitea.com/terms-of-use",
+      "documentation_url": "https://docs.gitea.com/usage/api-usage",
+      "review_date": "2026-11-05",
+      "status": "documented_api_per_instance_terms",
+      "standard_allowed": false,
+      "decision": "disabled_pending_endpoint_or_display_condition_review",
+      "minimum_spacing_ms": 1000,
+      "rate_limit_host": "gitea.com",
+      "conditions": [
+        "Gitea APIは各インスタンスのswagger (/api/swagger) で文書化される",
+        "docs.gitea.comのAPI利用頁は2026-11-05に404。所在は要再確認",
+        "インスタンスごとの利用規約・レート制限の確認が必要"
+      ]
+    },
+    "rumble": {
+      "request_url": "https://rumble.com/search/video?q={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://rumble.com/s/terms.html",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unfetched",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約頁は未取得。人間による確認が必要"
+      ]
+    },
+    "500px": {
+      "request_url": "https://500px.com/search?q={query}",
+      "access_method": "Access path unverified (documented API with key)",
+      "terms_url": "https://500px.com/terms",
+      "documentation_url": "https://github.com/500px/api-documentation",
+      "review_date": "2026-11-05",
+      "status": "module_not_located_api_documented_with_key",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "500px APIは文書化されキー必須 (モジュールファイルが見つからず、アクセス経路を未検証)",
+        "API規約の確認が必要"
+      ]
+    },
+    "exaapi": {
+      "request_url": "https://api.exa.ai/search",
+      "access_method": "Documented Search API with key (x-api-key header)",
+      "terms_url": "https://exa.ai/assets/Exa_Labs_Terms_of_Service.pdf",
+      "documentation_url": "https://docs.exa.ai/reference/search",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "official_api_with_key_allowed_within_usage_guidelines",
+      "conditions": [
+        "Requires an explicitly enabled API profile and an operator-provided EXA_API_KEY",
+        "Paid account usage, rate limits and current provider pricing apply",
+        "API access and rights in the original returned pages remain separate"
+      ],
+      "access_scope": "official_api_with_key_tos_verified",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "78bf204a4127be14c857c3fd0d400d4f7f7e73f6f28c005017e12c0d6477fab3"
+    },
+    "qiita": {
+      "request_url": "https://qiita.com/api/v2/items?query={query}",
+      "access_method": "Documented read-only JSON API, explicitly configured only",
+      "terms_url": "https://qiita.com/terms",
+      "documentation_url": "https://qiita.com/api/v2/docs",
+      "review_date": "2026-11-05",
+      "status": "reviewed_opt_in_quota",
+      "standard_allowed": false,
+      "decision": "operator_must_budget_shared_IP_quota_before_opt_in",
+      "conditions": [
+        "Anonymous limit: 60 requests/hour per IP; authenticated limit: 1000/hour; inspect Rate-Remaining/Rate-Reset and stop at quota",
+        "Only the documented items API, not HTML/internal endpoints; retain article URL and author attribution",
+        "Article copyright remains with authors; API access does not authorize bulk republishing or model training",
+        "The bounded additive benchmark checks remaining quota and sends at most 30 distinct item-search queries plus one quota probe"
+      ]
+    }
+  },
+  "engines": {
+    "mdn": {
+      "request_url": "https://developer.mozilla.org/api/v1/search?q={query}&page={pageno}",
+      "access_method": "Internal JSON endpoint (undocumented)",
+      "terms_url": "https://www.mozilla.org/en-US/about/legal/terms/mozilla/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "restricted_internal_endpoint",
+      "standard_allowed": false,
+      "decision": "internal_search_endpoint_undocumented",
+      "conditions": [
+        "MDNの /api/v1/search はMDNサイト自身の検索用で、公開APIドキュメントが見つからない",
+        "MDNコンテンツはCC BY-SAだが、アクセス経路そのものが内部エンドポイント",
+        "Mozillaの利用規約がサイトを律する。内部エンドポイント利用は許可として文書化されていない",
+        "文書化されたアクセス経路への移行までStandardでは無効にする"
+      ],
+      "module": "json_engine",
+      "base_url": "",
+      "search_url": "https://developer.mozilla.org/api/v1/search?q={query}&page={pageno}"
+    },
+    "packagist": {
+      "request_url": "https://packagist.org/search.json?q={query}&page={pageno}",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://packagist.org/apidoc",
+      "documentation_url": "https://packagist.org/apidoc",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "documented_api_identify_and_rate_limits",
+      "minimum_spacing_ms": 1000,
+      "rate_limit_host": "packagist.org",
+      "conditions": [
+        "Packagist APIは文書化されている (apidoc)",
+        "識別可能なUser-Agentとレート制限の遵守",
+        "大量取得はダンプの利用が推奨され得る"
+      ],
+      "module": "json_engine",
+      "base_url": "",
+      "search_url": "https://packagist.org/search.json?q={query}&page={pageno}",
+      "access_scope": "documented_api",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "60a763864d82003e3db011ff239eb4bf5b5f1423278cb9885a85cea976c4bbd9"
+    },
+    "wiby": {
+      "request_url": "https://wiby.me/json/?q={query}&p={pageno}",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://wiby.me/",
+      "documentation_url": "https://wiby.me/json/",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "documented_json_api_no_availability_guarantee",
+      "minimum_spacing_ms": 1000,
+      "rate_limit_host": "wiby.me",
+      "conditions": [
+        "wibyはJSON APIを公式に案内している",
+        "可用性の保証はなく、ベストエフォートの公開サービス",
+        "間隔は控えめに保つ"
+      ],
+      "module": "json_engine",
+      "base_url": "",
+      "search_url": "https://wiby.me/json/?q={query}&p={pageno}",
+      "access_scope": "documented_api_best_effort",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "60a763864d82003e3db011ff239eb4bf5b5f1423278cb9885a85cea976c4bbd9"
+    },
+    "bitbucket": {
+      "request_url": "https://bitbucket.org/repo/all/{pageno}?name={query}",
+      "access_method": "HTML search (Atlassian site)",
+      "terms_url": "https://www.atlassian.com/legal/terms-of-use",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "エンジンはbitbucket.orgのサイト検索 (HTML) を使う",
+        "Atlassian利用規約がサービスを律する",
+        "規約の該当条項は人間が未確認"
+      ],
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://bitbucket.org/repo/all/{pageno}?name={query}"
+    },
+    "etymonline": {
+      "request_url": "https://etymonline.com/search?page={pageno}&q={query}",
+      "access_method": "HTML search",
+      "terms_url": "https://www.etymonline.com/legal/terms",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_page_not_machine_readable",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "利用規約頁は2026-11-05に403 (JS描画)",
+        "人間による確認が必要"
+      ],
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://etymonline.com/search?page={pageno}&q={query}"
+    },
+    "hoogle": {
+      "request_url": "https://hoogle.haskell.org/?hoogle={query}",
+      "access_method": "HTML form (JSON API unconfirmed)",
+      "terms_url": "https://hoogle.haskell.org/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_json_api_unconfirmed",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "HoogleのJSON API (?mode=json) は未確認",
+        "HTMLフォーム経路の許諾は未確認"
+      ],
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://hoogle.haskell.org/?hoogle={query}"
+    },
+    "pub.dev": {
+      "request_url": "https://pub.dev/packages?q={query}&page={pageno}",
+      "access_method": "HTML search (documented API exists)",
+      "terms_url": "https://pub.dev/policies",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_migration_candidate",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "pub.devのAPIは文書化されているが、エンジンはHTML検索を使う",
+        "移行候補。HTML経路の許諾は未確認"
+      ],
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://pub.dev/packages?q={query}&page={pageno}"
+    },
+    "rubygems": {
+      "request_url": "https://rubygems.org/search?page={pageno}&query={query}",
+      "access_method": "HTML search (documented API exists)",
+      "terms_url": "https://guides.rubygems.org/rubygems-org-api/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_api_migration_candidate",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "RubyGems.org APIは文書化されレート制限があるが、エンジンはHTML検索を使う",
+        "移行候補"
+      ],
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://rubygems.org/search?page={pageno}&query={query}"
+    },
+    "woxikon.de synonyme": {
+      "request_url": "https://synonyme.woxikon.de/synonyme/{query}.php",
+      "access_method": "HTML scrape",
+      "terms_url": "",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "html_scrape_terms_unfetched",
+      "decision": "provider_review_needed",
+      "conditions": [
+        "規約未取得。人間による確認が必要"
+      ],
+      "module": "xpath",
+      "base_url": "",
+      "search_url": "https://synonyme.woxikon.de/synonyme/{query}.php"
+    },
+    "wikibooks": {
+      "request_url": "https://{language}.wikibooks.org/w/api.php",
+      "access_method": "MediaWiki Action API (第三者MediaWikiインスタンス)",
+      "terms_url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Main_page",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "documented_wikimedia_api_conditions_apply_to_this_named_endpoint",
+      "conditions": [
+        "This exact Wikimedia-operated endpoint only; third-party MediaWiki instances need separate review",
+        "Use an identifying User-Agent, obey API etiquette and upstream throttling",
+        "Link to source pages; text is subject to CC BY-SA and applicable exceptions, while media has per-item licences"
+      ],
+      "module": "mediawiki",
+      "base_url": "https://{language}.wikibooks.org/",
+      "search_url": "",
+      "access_scope": "documented_api_with_conditions",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "3d66181a2e7ab6b2b5af39e184bafd7ac7ba9db345529bf015fe8c3033f5da44"
+    },
+    "wikinews": {
+      "request_url": "https://{language}.wikinews.org/w/api.php",
+      "access_method": "MediaWiki Action API (第三者MediaWikiインスタンス)",
+      "terms_url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Main_page",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "documented_wikimedia_api_conditions_apply_to_this_named_endpoint",
+      "conditions": [
+        "This exact Wikimedia-operated endpoint only; third-party MediaWiki instances need separate review",
+        "Use an identifying User-Agent, obey API etiquette and upstream throttling",
+        "Link to source pages; text is subject to CC BY-SA and applicable exceptions, while media has per-item licences"
+      ],
+      "module": "mediawiki",
+      "base_url": "https://{language}.wikinews.org/",
+      "search_url": "",
+      "access_scope": "documented_api_with_conditions",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "3d66181a2e7ab6b2b5af39e184bafd7ac7ba9db345529bf015fe8c3033f5da44"
+    },
+    "wikiquote": {
+      "request_url": "https://{language}.wikiquote.org/w/api.php",
+      "access_method": "MediaWiki Action API (第三者MediaWikiインスタンス)",
+      "terms_url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Main_page",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "documented_wikimedia_api_conditions_apply_to_this_named_endpoint",
+      "conditions": [
+        "This exact Wikimedia-operated endpoint only; third-party MediaWiki instances need separate review",
+        "Use an identifying User-Agent, obey API etiquette and upstream throttling",
+        "Link to source pages; text is subject to CC BY-SA and applicable exceptions, while media has per-item licences"
+      ],
+      "module": "mediawiki",
+      "base_url": "https://{language}.wikiquote.org/",
+      "search_url": "",
+      "access_scope": "documented_api_with_conditions",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "3d66181a2e7ab6b2b5af39e184bafd7ac7ba9db345529bf015fe8c3033f5da44"
+    },
+    "wikisource": {
+      "request_url": "https://{language}.wikisource.org/w/api.php",
+      "access_method": "MediaWiki Action API (第三者MediaWikiインスタンス)",
+      "terms_url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Main_page",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "documented_wikimedia_api_conditions_apply_to_this_named_endpoint",
+      "conditions": [
+        "This exact Wikimedia-operated endpoint only; third-party MediaWiki instances need separate review",
+        "Use an identifying User-Agent, obey API etiquette and upstream throttling",
+        "Link to source pages; text is subject to CC BY-SA and applicable exceptions, while media has per-item licences"
+      ],
+      "module": "mediawiki",
+      "base_url": "https://{language}.wikisource.org/",
+      "search_url": "",
+      "access_scope": "documented_api_with_conditions",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "3d66181a2e7ab6b2b5af39e184bafd7ac7ba9db345529bf015fe8c3033f5da44"
+    },
+    "wikispecies": {
+      "request_url": "https://species.wikimedia.org/w/api.php",
+      "access_method": "MediaWiki Action API (第三者MediaWikiインスタンス)",
+      "terms_url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Main_page",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "documented_wikimedia_api_conditions_apply_to_this_named_endpoint",
+      "conditions": [
+        "This exact Wikimedia-operated endpoint only; third-party MediaWiki instances need separate review",
+        "Use an identifying User-Agent, obey API etiquette and upstream throttling",
+        "Link to source pages; text is subject to CC BY-SA and applicable exceptions, while media has per-item licences"
+      ],
+      "module": "mediawiki",
+      "base_url": "https://species.wikimedia.org/",
+      "search_url": "",
+      "access_scope": "documented_api_with_conditions",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "3d66181a2e7ab6b2b5af39e184bafd7ac7ba9db345529bf015fe8c3033f5da44"
+    },
+    "wiktionary": {
+      "request_url": "https://{language}.wiktionary.org/w/api.php",
+      "access_method": "MediaWiki Action API (第三者MediaWikiインスタンス)",
+      "terms_url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Main_page",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "documented_wikimedia_api_conditions_apply_to_this_named_endpoint",
+      "conditions": [
+        "This exact Wikimedia-operated endpoint only; third-party MediaWiki instances need separate review",
+        "Use an identifying User-Agent, obey API etiquette and upstream throttling",
+        "Link to source pages; text is subject to CC BY-SA and applicable exceptions, while media has per-item licences"
+      ],
+      "module": "mediawiki",
+      "base_url": "https://{language}.wiktionary.org/",
+      "search_url": "",
+      "access_scope": "documented_api_with_conditions",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "3d66181a2e7ab6b2b5af39e184bafd7ac7ba9db345529bf015fe8c3033f5da44"
+    },
+    "wikiversity": {
+      "request_url": "https://{language}.wikiversity.org/w/api.php",
+      "access_method": "MediaWiki Action API (第三者MediaWikiインスタンス)",
+      "terms_url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Main_page",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "documented_wikimedia_api_conditions_apply_to_this_named_endpoint",
+      "conditions": [
+        "This exact Wikimedia-operated endpoint only; third-party MediaWiki instances need separate review",
+        "Use an identifying User-Agent, obey API etiquette and upstream throttling",
+        "Link to source pages; text is subject to CC BY-SA and applicable exceptions, while media has per-item licences"
+      ],
+      "module": "mediawiki",
+      "base_url": "https://{language}.wikiversity.org/",
+      "search_url": "",
+      "access_scope": "documented_api_with_conditions",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "3d66181a2e7ab6b2b5af39e184bafd7ac7ba9db345529bf015fe8c3033f5da44"
+    },
+    "wikivoyage": {
+      "request_url": "https://{language}.wikivoyage.org/w/api.php",
+      "access_method": "MediaWiki Action API (第三者MediaWikiインスタンス)",
+      "terms_url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Main_page",
+      "review_date": "2026-11-05",
+      "status": "reviewed_allowed_for_scope",
+      "standard_allowed": true,
+      "decision": "documented_wikimedia_api_conditions_apply_to_this_named_endpoint",
+      "conditions": [
+        "This exact Wikimedia-operated endpoint only; third-party MediaWiki instances need separate review",
+        "Use an identifying User-Agent, obey API etiquette and upstream throttling",
+        "Link to source pages; text is subject to CC BY-SA and applicable exceptions, while media has per-item licences"
+      ],
+      "module": "mediawiki",
+      "base_url": "https://{language}.wikivoyage.org/",
+      "search_url": "",
+      "access_scope": "documented_api_with_conditions",
+      "review_scope": "Documented search/metadata retrieval and bounded operational caching; operator quotas, content licences and deployment-specific restrictions remain conditions. No blanket storage, commercial-reuse or training licence.",
+      "source_sha256": "3d66181a2e7ab6b2b5af39e184bafd7ac7ba9db345529bf015fe8c3033f5da44"
     }
   }
 }

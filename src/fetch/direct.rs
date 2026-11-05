@@ -209,7 +209,7 @@ pub(crate) fn test_public_client(
 }
 
 /// Extracted pages as (URL, text), oldest first.
-type Pages = VecDeque<(String, usize, std::time::Instant, PageContent)>;
+type Pages = VecDeque<(String, String, usize, std::time::Instant, PageContent)>;
 
 enum PageBody {
     Text {
@@ -243,6 +243,11 @@ pub struct PageReader {
 }
 
 impl PageReader {
+    /// Auxiliary probes must not invoke an operator's paid page backend.
+    pub(crate) fn is_direct(&self) -> bool {
+        self.source.is_none()
+    }
+
     #[cfg(test)]
     pub(crate) fn with_test_client(mut self, client: reqwest::Client) -> Self {
         self.client = client;
@@ -309,10 +314,20 @@ impl PageReader {
     /// Fetch and extract a page. `source_truncated` is set when readable text
     /// exceeded `max_chars`; callers can keep it distinct from output slicing.
     pub async fn read(&self, url: &str, max_chars: usize) -> Result<PageContent, String> {
+        self.read_with_language(url, max_chars, "en").await
+    }
+    /// Fetch using an explicit language preference. Language is part of the
+    /// page cache key because servers may vary content by this header.
+    pub async fn read_with_language(
+        &self,
+        url: &str,
+        max_chars: usize,
+        language: &str,
+    ) -> Result<PageContent, String> {
         if self.source.is_none() && self.proxy_blocked {
             return Err("page reads are unavailable with configured proxies: destination validation requires direct connections".into());
         }
-        if let Some(content) = self.remembered(url, max_chars) {
+        if let Some(content) = self.remembered(url, max_chars, language) {
             return Ok(content);
         }
         let parsed = reqwest::Url::parse(url).map_err(|_| "not a valid URL".to_string())?;
@@ -326,7 +341,7 @@ impl PageReader {
             .map_err(|error| error.to_string())?;
         if let Some(source) = &self.source {
             let content = source.fetch(&parsed, max_chars).await?;
-            self.remember(url, max_chars, content.clone());
+            self.remember(url, max_chars, language, content.clone());
             return Ok(content);
         }
         // An external provider fetches the page itself; robots.txt is checked
@@ -334,7 +349,7 @@ impl PageReader {
         if !self.robots_allow(&parsed).await {
             return Err("the site's robots.txt asks automated tools not to read this page".into());
         }
-        let body = tokio::time::timeout(FETCH_TIMEOUT, self.fetch(parsed))
+        let body = tokio::time::timeout(FETCH_TIMEOUT, self.fetch(parsed, language))
             .await
             .map_err(|_| "the page took too long to load".to_string())??;
         let text = match body {
@@ -372,7 +387,7 @@ impl PageReader {
             source_truncated: text.chars().count() > max_chars,
             text,
         };
-        self.remember(url, max_chars, content.clone());
+        self.remember(url, max_chars, language, content.clone());
         Ok(content)
     }
 
@@ -433,7 +448,7 @@ impl PageReader {
         crate::robots::Robots::from_response(status, &String::from_utf8_lossy(&body), "rustxng")
     }
 
-    async fn fetch(&self, url: reqwest::Url) -> Result<PageBody, String> {
+    async fn fetch(&self, url: reqwest::Url, language: &str) -> Result<PageBody, String> {
         let mut response = self
             .client
             .get(url)
@@ -441,6 +456,7 @@ impl PageReader {
                 "Accept",
                 "text/html,application/xhtml+xml;q=0.9,application/pdf;q=0.9,text/plain;q=0.8",
             )
+            .header(reqwest::header::ACCEPT_LANGUAGE, language)
             .send()
             .await
             .map_err(|error| format!("the page could not be fetched: {error}"))?;
@@ -492,29 +508,33 @@ impl PageReader {
         }
     }
 
-    fn remembered(&self, url: &str, max_chars: usize) -> Option<PageContent> {
+    fn remembered(&self, url: &str, max_chars: usize, language: &str) -> Option<PageContent> {
         let pages = self
             .pages
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         pages
             .iter()
-            .find(|(known, limit, saved, _)| {
+            .find(|(known, known_language, limit, saved, _)| {
                 known == url
+                    && known_language == language
                     && *limit == max_chars
                     && self.cache_ttl.is_none_or(|ttl| saved.elapsed() < ttl)
             })
-            .map(|(_, _, _, content)| content.clone())
+            .map(|(_, _, _, _, content)| content.clone())
     }
 
-    fn remember(&self, url: &str, max_chars: usize, content: PageContent) {
+    fn remember(&self, url: &str, max_chars: usize, language: &str, content: PageContent) {
         let mut pages = self
             .pages
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        pages.retain(|(known, limit, _, _)| known != url || *limit != max_chars);
+        pages.retain(|(known, known_language, limit, _, _)| {
+            known != url || known_language != language || *limit != max_chars
+        });
         pages.push_back((
             url.to_string(),
+            language.to_string(),
             max_chars,
             std::time::Instant::now(),
             content,
@@ -546,6 +566,62 @@ fn environment_proxy_configured() -> bool {
 
 #[cfg(test)]
 mod tests {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[tokio::test]
+    async fn direct_page_request_sends_accept_language() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+        let server = tokio::spawn(async move {
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = Vec::new();
+                let mut buffer = [0u8; 1024];
+                loop {
+                    let count = stream.read(&mut buffer).await.unwrap();
+                    if count == 0 {
+                        break;
+                    }
+                    request.extend_from_slice(&buffer[..count]);
+                    if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                let request = String::from_utf8_lossy(&request).into_owned();
+                let is_robots = request.starts_with("GET /robots.txt ");
+                tx.send(request).unwrap();
+                let body = if is_robots {
+                    ""
+                } else {
+                    "<html><body>fixture page text</body></html>"
+                };
+                let status = if is_robots { "404 Not Found" } else { "200 OK" };
+                let response = format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        let reader = PageReader::new(
+            &crate::settings::Outgoing::default(),
+            &[("example.org".into(), address)],
+        )
+        .unwrap();
+        reader
+            .read_with_language("http://example.org/page", 100, "ja-JP")
+            .await
+            .unwrap();
+        let _robots = rx.recv().await.unwrap();
+        let page = rx.recv().await.unwrap();
+        assert!(
+            page.to_ascii_lowercase().contains("accept-language: ja-jp"),
+            "{page}"
+        );
+        server.await.unwrap();
+    }
+
     use super::*;
 
     #[test]
@@ -555,10 +631,19 @@ mod tests {
             source_truncated: false,
         };
         let session = PageReader::new(&crate::settings::Outgoing::default(), &[]).unwrap();
-        session.remember("https://example.org/", 100, content.clone());
-        assert!(session.remembered("https://example.org/", 100).is_some());
+        session.remember("https://example.org/", 100, "en", content.clone());
+        assert!(
+            session
+                .remembered("https://example.org/", 100, "en")
+                .is_some()
+        );
+        assert!(
+            session
+                .remembered("https://example.org/", 100, "ja")
+                .is_none()
+        );
         let http = session.with_cache_ttl(Duration::ZERO);
-        assert!(http.remembered("https://example.org/", 100).is_none());
+        assert!(http.remembered("https://example.org/", 100, "en").is_none());
     }
 
     #[test]

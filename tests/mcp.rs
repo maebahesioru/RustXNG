@@ -78,9 +78,13 @@ async fn connect_with_page(page: String) -> Fixture {
             )
             .route(
                 "/rust",
-                get(move || {
+                get(move |headers: axum::http::HeaderMap| {
                     counter.fetch_add(1, Ordering::SeqCst);
-                    let page = page.clone();
+                    let language = headers
+                        .get(header::ACCEPT_LANGUAGE)
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or("missing");
+                    let page = page.replace("{{accept-language}}", language);
                     async move { ([(header::CONTENT_TYPE, "text/html")], page) }
                 }),
             )
@@ -207,6 +211,96 @@ async fn tools_are_listed_read_only_with_schemas() {
             tool.name
         );
     }
+    client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn actual_structured_payloads_obey_explicit_token_budgets() {
+    let article = format!(
+        "<article>{}</article>",
+        "所有権😀とメモリ安全性。\"quoted\" \\".repeat(500)
+    );
+    let Fixture {
+        client,
+        page_fetches,
+        ..
+    } = connect_with_page(article).await;
+    for encoding in ["cl100k_base", "o200k_base"] {
+        let search = call(
+            &client,
+            "search",
+            json!({
+                "query":"rust", "limit":5,
+                "tokenizer":encoding, "max_payload_tokens":512
+            }),
+        )
+        .await;
+        let payload = structured(&search);
+        let tokenizer = tiktoken::get_encoding(encoding).unwrap();
+        assert!(tokenizer.count(&payload.to_string()) <= 512);
+        assert_eq!(payload["token_budget"]["tokenizer"], encoding);
+        let url = payload["results"][0]["url"].as_str().unwrap().to_owned();
+        let page = call(
+            &client,
+            "read_page",
+            json!({
+                "url":url, "max_chars":20000,
+                "tokenizer":encoding, "max_payload_tokens":256
+            }),
+        )
+        .await;
+        let payload = structured(&page);
+        assert!(tokenizer.count(&payload.to_string()) <= 256);
+        assert_eq!(payload["url"], url);
+        assert!(payload["truncated"].as_bool().unwrap());
+        assert!(!payload["text"].as_str().unwrap().is_empty());
+        assert!(payload["next_offset"].as_u64().unwrap() > 0);
+    }
+    assert_eq!(page_fetches.load(Ordering::Relaxed), 1);
+    for args in [
+        json!({"query":"rust", "max_payload_tokens":100}),
+        json!({"query":"rust", "tokenizer":"guess", "max_payload_tokens":100}),
+        json!({"query":"rust", "tokenizer":"o200k_base"}),
+    ] {
+        assert_eq!(call(&client, "search", args).await.is_error, Some(true));
+    }
+    client.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn page_language_inherits_search_and_separates_cached_variants() {
+    let Fixture {
+        client,
+        page_fetches,
+        origin,
+        ..
+    } = connect_with_page("<article>language={{accept-language}}</article>".into()).await;
+    let results = call(
+        &client,
+        "search",
+        json!({"query":"rust", "language":"ja", "limit":1}),
+    )
+    .await;
+    let url = structured(&results)["results"][0]["url"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let ja = call(&client, "read_page", json!({"url":url})).await;
+    assert_eq!(structured(&ja)["text"], "language=ja");
+    let en = call(&client, "read_page", json!({"url":url, "language":"en"})).await;
+    assert_eq!(structured(&en)["text"], "language=en");
+    let again = call(&client, "read_page", json!({"url":url})).await;
+    assert_eq!(structured(&again)["text"], "language=ja");
+    assert_eq!(page_fetches.load(Ordering::Relaxed), 2);
+    // A result beyond the returned limit must not become authorized simply
+    // because the backend collected it while ranking the search.
+    let unreturned = call(
+        &client,
+        "read_page",
+        json!({"url":format!("{origin}/rust-book")}),
+    )
+    .await;
+    assert!(error_text(&unreturned).contains("only reads URLs that search returned"));
     client.cancel().await.unwrap();
 }
 

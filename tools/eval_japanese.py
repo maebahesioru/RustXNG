@@ -227,6 +227,7 @@ def main() -> None:
     parser.add_argument("--engines", help="Comma-separated explicit baseline engine list; Qiita is added in the on condition")
     parser.add_argument("--run-context", type=Path, help="JSON describing cache, engines, local index, region and server settings")
     parser.add_argument("--broad-fresh-json", type=Path, default=BROAD_FRESH)
+    parser.add_argument("--diagnostics-json", type=Path, default=DIAGNOSTICS, help="Pinned diagnostic corpus, including independently captured compiler cases")
     args = parser.parse_args()
     if args.repeats < 2:
         parser.error("--repeats must be at least 2")
@@ -236,7 +237,7 @@ def main() -> None:
     languages = args.languages.split(",")
     qiita_values = [value == "on" for value in args.qiita.split(",")]
     baseline_engines = [value for value in (args.engines or "").split(",") if value]
-    diagnostics = json.loads(DIAGNOSTICS.read_text())["cases"]
+    diagnostics = json.loads(args.diagnostics_json.read_text())["cases"]
     broad = json.loads(args.broad_fresh_json.read_text()).get("cases", []) if "broad_fresh" in groups else []
     started = datetime.now(timezone.utc).isoformat()
     settings_path = HERE / "settings.toml"
@@ -244,7 +245,7 @@ def main() -> None:
         "started_at": started, "base": args.base,
         "commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=HERE, text=True).strip(),
         "settings_sha256": hashlib.sha256(settings_path.read_bytes()).hexdigest(),
-        "corpus_sha256": hashlib.sha256(DIAGNOSTICS.read_bytes()).hexdigest(),
+        "corpus_sha256": hashlib.sha256(args.diagnostics_json.read_bytes()).hexdigest(),
         "server_context": load_context(args.run_context),
         "server_snapshots": {"before_stats": server_snapshot(args.base, "/stats", args.timeout),
                              "before_engine_errors": server_snapshot(args.base, "/stats/errors", args.timeout)},

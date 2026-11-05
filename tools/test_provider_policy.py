@@ -25,9 +25,34 @@ class ProviderPolicyTests(unittest.TestCase):
         self.settings["engines"].append({"name": "new wiki", "engine": "mediawiki"})
         self.assertIn("permission review", " ".join(validate(self.settings, self.policy, self.pending)))
 
+    def test_allowlist_reenablement_cannot_bypass_permission_gate(self) -> None:
+        self.settings["search"]["engine_allowlist"] = ["bing"]
+        self.assertIn("must be disabled", " ".join(validate(self.settings, self.policy, self.pending)))
+
+    def test_unchanged_pending_snapshot_does_not_authorize_enablement(self) -> None:
+        name = next(iter(self.pending))
+        engine = next(e for e in self.settings["engines"] if e["name"] == name)
+        engine["disabled"] = False
+        self.assertIn("permission review", " ".join(validate(self.settings, self.policy, self.pending)))
+
+    def test_generic_module_cannot_inherit_another_sites_permission(self) -> None:
+        self.policy["providers"]["mediawiki"] = copy.deepcopy(self.policy["engines"]["wikibooks"])
+        self.settings["engines"].append({"name":"another wiki", "engine":"mediawiki"})
+        self.assertIn("exact named endpoint", " ".join(validate(self.settings, self.policy, self.pending)))
+
+    def test_named_review_cannot_be_reused_for_another_adapter(self) -> None:
+        engine = next(e for e in self.settings["engines"] if e["name"] == "wikibooks")
+        engine["engine"] = "json_engine"
+        self.assertIn("does not match the configured module", " ".join(validate(self.settings, self.policy, self.pending)))
+
+    def test_adapter_changes_require_review(self) -> None:
+        self.policy["providers"]["mwmbl"]["source_sha256"] = "0" * 64
+        self.assertIn("adapter changed", " ".join(validate(self.settings, self.policy, self.pending)))
+
     def test_pending_endpoint_cannot_change_without_review(self) -> None:
         name = next(iter(self.pending))
         engine = next(e for e in self.settings["engines"] if e["name"] == name)
+        engine["disabled"] = False
         engine["base_url"] = "https://different.example.org"
         self.assertNotEqual(identity(engine), self.pending[name])
         self.assertTrue(validate(self.settings, self.policy, self.pending))

@@ -1,6 +1,6 @@
 {
   "expires": "2026-12-03",
   "tracking_issue": "https://github.com/sahenjp/RustXNG/issues/79",
-  "reason": "All tracked maintenance findings have been removed; no audit warnings are excepted.",
+  "reason": "No vulnerability, unsoundness, or unmaintained dependency findings are accepted.",
   "findings": []
 }

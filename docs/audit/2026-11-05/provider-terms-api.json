@@ -1,0 +1,446 @@
+{
+  "recorded_at": "2026-11-05",
+  "scope": "Standardで有効な未審査プロバイダーのうち、API系37エンジン (28モジュール/名前キー) 分。2026-11-05に一次資料から取得した審査提案であり、人間の確認を経るまで許可確定ではない。docs/provider-policy.json へのマージは確認後に行う。",
+  "method_notes": [
+    "一次資料は2026-11-05に取得。JavaScript描画のみのページ (crates.io data-access, npms.io, Docker利用規約, Openverse数値) は、同一一次URLの検索スニペットまたは公式ドキュメントリポジトリ (GitHub raw) で本文を確認した",
+    "自動取得を拒否したページ (PyPI policies頁の403/リダイレクト, NCBI NBK25497, npmjs.com 403) は、公式の別一次経路 (policies.python.org, eutilities.github.io) または到達可能性自体を記録した",
+    "minimum_spacing_ms は確認できた明示的な上限から算出。docs/provider-policy.json の該当エントリと settings.toml host_spacing_overrides へ反映する際の候補値"
+  ],
+  "keying_notes": "mdn はエンジン名キー (モジュールは汎用 json_engine で、packagist/wibyと共有)。provider-policy.json はモジュールキーで照合するため、汎用モジュール (json_engine, xpath, mediawiki) のエントリは名前単位の扱いが必要。",
+  "proposals": {
+    "wikipedia": {
+      "request_url": "https://{language}.wikipedia.org/w/api.php",
+      "access_method": "MediaWiki Action API",
+      "terms_url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Etiquette",
+      "review_date": "2026-11-05",
+      "status": "documented_api_with_conditions",
+      "standard_allowed": true,
+      "decision": "free_licenses_api_access_expected_identification_required",
+      "conditions": [
+        "Wikimedia利用規約: 本文はCC BY-SA 4.0等の自由ライセンスで提供され、再利用時の帰属が必要",
+        "MediaWiki API etiquette: 読み取り専用リクエストにもレート制限がある。連絡先付きの識別可能なUser-Agentが必須で、ブラウザUAの偽装は禁止",
+        "Wikimedia User-Agentポリシー: 識別できないクライアントは予告なくブロックされ得る",
+        "RustXNGはWikimedia系宛てに識別可能なUser-Agent (rustxng/<版> (+URL[; 連絡先])) を既に送信している (docs/PROVIDERS.md 2026-11-03)"
+      ]
+    },
+    "wikipedia_entities": {
+      "request_url": "https://{language}.wikipedia.org/w/api.php (entity search variant)",
+      "access_method": "MediaWiki Action API",
+      "terms_url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Etiquette",
+      "review_date": "2026-11-05",
+      "status": "documented_api_with_conditions",
+      "standard_allowed": true,
+      "decision": "free_licenses_api_access_expected_identification_required",
+      "conditions": [
+        "Wikimedia利用規約: 本文はCC BY-SA 4.0等の自由ライセンスで提供され、再利用時の帰属が必要",
+        "MediaWiki API etiquette: 読み取り専用リクエストにもレート制限がある。連絡先付きの識別可能なUser-Agentが必須で、ブラウザUAの偽装は禁止",
+        "Wikimedia User-Agentポリシー: 識別できないクライアントは予告なくブロックされ得る",
+        "RustXNGはWikimedia系宛てに識別可能なUser-Agent (rustxng/<版> (+URL[; 連絡先])) を既に送信している (docs/PROVIDERS.md 2026-11-03)"
+      ]
+    },
+    "wikipedia_any": {
+      "request_url": "https://{language}.wikipedia.org/w/api.php (any-words variant)",
+      "access_method": "MediaWiki Action API",
+      "terms_url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Etiquette",
+      "review_date": "2026-11-05",
+      "status": "documented_api_with_conditions",
+      "standard_allowed": true,
+      "decision": "free_licenses_api_access_expected_identification_required",
+      "conditions": [
+        "Wikimedia利用規約: 本文はCC BY-SA 4.0等の自由ライセンスで提供され、再利用時の帰属が必要",
+        "MediaWiki API etiquette: 読み取り専用リクエストにもレート制限がある。連絡先付きの識別可能なUser-Agentが必須で、ブラウザUAの偽装は禁止",
+        "Wikimedia User-Agentポリシー: 識別できないクライアントは予告なくブロックされ得る",
+        "RustXNGはWikimedia系宛てに識別可能なUser-Agent (rustxng/<版> (+URL[; 連絡先])) を既に送信している (docs/PROVIDERS.md 2026-11-03)"
+      ]
+    },
+    "wikidata": {
+      "request_url": "https://www.wikidata.org/w/api.php",
+      "access_method": "MediaWiki Action API",
+      "terms_url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Etiquette",
+      "review_date": "2026-11-05",
+      "status": "documented_api_with_conditions",
+      "standard_allowed": true,
+      "decision": "free_licenses_api_access_expected_identification_required",
+      "conditions": [
+        "Wikimedia利用規約: 本文はCC BY-SA 4.0等の自由ライセンスで提供され、再利用時の帰属が必要",
+        "MediaWiki API etiquette: 読み取り専用リクエストにもレート制限がある。連絡先付きの識別可能なUser-Agentが必須で、ブラウザUAの偽装は禁止",
+        "Wikimedia User-Agentポリシー: 識別できないクライアントは予告なくブロックされ得る",
+        "RustXNGはWikimedia系宛てに識別可能なUser-Agent (rustxng/<版> (+URL[; 連絡先])) を既に送信している (docs/PROVIDERS.md 2026-11-03)"
+      ]
+    },
+    "wikicommons": {
+      "request_url": "https://commons.wikimedia.org/w/api.php",
+      "access_method": "MediaWiki Action API",
+      "terms_url": "https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Etiquette",
+      "review_date": "2026-11-05",
+      "status": "documented_api_with_conditions",
+      "standard_allowed": true,
+      "decision": "free_licenses_api_access_expected_identification_required",
+      "conditions": [
+        "Wikimedia利用規約: 本文はCC BY-SA 4.0等の自由ライセンスで提供され、再利用時の帰属が必要",
+        "MediaWiki API etiquette: 読み取り専用リクエストにもレート制限がある。連絡先付きの識別可能なUser-Agentが必須で、ブラウザUAの偽装は禁止",
+        "Wikimedia User-Agentポリシー: 識別できないクライアントは予告なくブロックされ得る",
+        "RustXNGはWikimedia系宛てに識別可能なUser-Agent (rustxng/<版> (+URL[; 連絡先])) を既に送信している (docs/PROVIDERS.md 2026-11-03)"
+      ]
+    },
+    "mediawiki": {
+      "request_url": "per-engine base_url (wiki.nixos.org, wiki.gentoo.org, minecraft.wiki, directory.fsf.org, {language}.wikibooks.org ほか)",
+      "access_method": "MediaWiki Action API (第三者MediaWikiインスタンス)",
+      "terms_url": "https://www.mediawiki.org/wiki/API:Etiquette",
+      "documentation_url": "https://www.mediawiki.org/wiki/API:Main_page",
+      "review_date": "2026-11-05",
+      "status": "documented_api_with_conditions",
+      "standard_allowed": true,
+      "decision": "mediawiki_api_standard_but_per_site_terms_vary",
+      "conditions": [
+        "MediaWiki API etiquette: 読み取り専用リクエストにもレート制限がある。連絡先付きの識別可能なUser-Agentが必須で、ブラウザUAの偽装は禁止",
+        "Wikimedia User-Agentポリシー: 識別できないクライアントは予告なくブロックされ得る",
+        "RustXNGはWikimedia系宛てに識別可能なUser-Agent (rustxng/<版> (+URL[; 連絡先])) を既に送信している (docs/PROVIDERS.md 2026-11-03)",
+        "第三者MediaWiki (NixOS/Gentoo/Minecraft wiki, FSF directory等) は各サイトの利用規約が別途ある。APIはMediaWiki標準機能だが、サイトごとの確認を推奨"
+      ]
+    },
+    "github": {
+      "request_url": "https://api.github.com/search/repositories",
+      "access_method": "Documented REST API (unauthenticated)",
+      "terms_url": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
+      "documentation_url": "https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api",
+      "review_date": "2026-11-05",
+      "status": "documented_api_with_rate_limits",
+      "standard_allowed": true,
+      "decision": "api_terms_allow_data_collection_within_rate_limits",
+      "conditions": [
+        "GitHub ToSにはAPI専用の条項があり、開発・データ収集のためのAPI利用を定める",
+        "未認証リクエストは60回/時 (コア)。検索エンドポイントはさらに低い別枠 (10回/分)",
+        "Acceptable Useポリシーは同意なきWebサイトのスクレイピングを禁止。エンジンはHTMLではなく文書化されたAPIを使う",
+        "結果メタデータの再利用はGitHub ToSと各リポジトリのライセンスに従う"
+      ]
+    },
+    "stackexchange": {
+      "request_url": "https://api.stackexchange.com/2.3/search/advanced",
+      "access_method": "Documented REST API",
+      "terms_url": "https://stackoverflow.com/legal/api-terms-of-use",
+      "documentation_url": "https://api.stackexchange.com/docs",
+      "review_date": "2026-11-05",
+      "status": "documented_api_with_attribution",
+      "standard_allowed": true,
+      "decision": "api_terms_require_attribution",
+      "conditions": [
+        "API利用規約: アプリはStack Exchange Networkを情報源として明示しなければならない",
+        "検索エンジンに索引されるアプリはStack Exchange ToSの帰属規則に従う必要がある",
+        "APIはクォータ/スロットリング対象。本番利用ではAPIキーを推奨",
+        "投稿本文はCC BY-SA。全文再利用はライセンスの帰属要件に従う"
+      ]
+    },
+    "crates": {
+      "request_url": "https://crates.io/api/v1/crates",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://crates.io/data-access",
+      "documentation_url": "https://crates.io/data-access",
+      "review_date": "2026-11-05",
+      "status": "documented_api_with_rate_limit",
+      "standard_allowed": true,
+      "minimum_spacing_ms": 1000,
+      "rate_limit_host": "crates.io",
+      "decision": "api_allowed_with_user_agent_and_1rps_limit",
+      "conditions": [
+        "crates.ioデータアクセス方針: sparse indexとダンプを優先し、APIは公表された制限内で利用してよい",
+        "API利用には連絡先付きのUser-Agent識別と最大1リクエスト/秒が要求される",
+        "制限超過時は429を返すため、429時はバックオフする"
+      ]
+    },
+    "pypi": {
+      "request_url": "https://pypi.org/search/?{query}",
+      "access_method": "HTML search endpoint (not the documented JSON API)",
+      "terms_url": "https://policies.python.org/pypi.org/Terms-of-Service/",
+      "documentation_url": "https://pypi.org/user-guide/",
+      "review_date": "2026-11-05",
+      "status": "html_search_permission_unconfirmed",
+      "standard_allowed": false,
+      "decision": "disabled_by_default_pending_permission_html_search",
+      "conditions": [
+        "エンジンはPyPIのHTML検索頁 (https://pypi.org/search/) を使う。PyPI ToSのAPI条項はAPI利用を律するもので、HTML経路はその対象外",
+        "PyPI ToS: API経由の乱用・過度に頻繁なリクエストはAPIアクセス停止になり得る。アカウントのbot登録は禁止",
+        "Webサイト検索頁への自動アクセスについて明示的な許可は2026-11-05時点で確認できていない",
+        "PyPIに公式のJSON検索APIはなく (XMLRPC APIは非推奨)、移行先が無いため、許諾確認までStandardでは無効を提案"
+      ]
+    },
+    "arxiv": {
+      "request_url": "https://export.arxiv.org/api/query",
+      "access_method": "Documented Atom API",
+      "terms_url": "https://info.arxiv.org/help/api/tou.html",
+      "documentation_url": "https://info.arxiv.org/help/api/",
+      "review_date": "2026-11-05",
+      "status": "documented_api_with_rate_limit",
+      "standard_allowed": true,
+      "minimum_spacing_ms": 3000,
+      "rate_limit_host": "export.arxiv.org",
+      "decision": "api_tou_one_request_per_3_seconds",
+      "conditions": [
+        "arXiv API利用規約: 3秒に1回以内、同時1接続 (管理下の全マシン合算)",
+        "電子プリント (PDF/ソース) は著作権者の許可なく保存・配信しない。検索用メタデータは対象外",
+        "arXiv行動規範に従う。違反時はAPI利用を禁止され得る"
+      ]
+    },
+    "crossref": {
+      "request_url": "https://api.crossref.org/works",
+      "access_method": "Documented REST API (polite pool)",
+      "terms_url": "https://www.crossref.org/documentation/retrieve-metadata/rest-api/",
+      "documentation_url": "https://www.crossref.org/documentation/retrieve-metadata/rest-api/",
+      "review_date": "2026-11-05",
+      "status": "documented_api_polite_pool",
+      "standard_allowed": true,
+      "decision": "polite_pool_contact_requested",
+      "conditions": [
+        "Crossref REST API: mailtoパラメータ (連絡先) を付けてpolite poolに入れることが推奨",
+        "書誌メタデータは事実データ。APIガイドラインとレート制限ヘッダに従う",
+        "大量・商用利用にはPlus登録が必要になり得る"
+      ]
+    },
+    "cinii": {
+      "request_url": "https://cir.nii.ac.jp/opensearch/all",
+      "access_method": "OpenSearch API",
+      "terms_url": "https://support.nii.ac.jp/en/cinii/api/developer",
+      "documentation_url": "https://support.nii.ac.jp/en/cinii/api/api_outline",
+      "review_date": "2026-11-05",
+      "status": "api_registration_required",
+      "standard_allowed": false,
+      "decision": "api_user_registration_and_regulations_required",
+      "conditions": [
+        "NIIはOpenSearch/RDF等のAPI利用に、利用登録 (アプリケーションID取得) を求める",
+        "「学術コンテンツサービス利用規約」「CiNii Research利用細則」「ウェブAPI利用細則」への同意が必要",
+        "CiNii Booksの書誌データはCC BY 4.0オープンデータ。その他のコンテンツの権利は個別",
+        "登録と細則確認が済むまでStandardでは無効にする"
+      ]
+    },
+    "semantic_scholar": {
+      "request_url": "https://api.semanticscholar.org/graph/v1/paper/search",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://www.semanticscholar.org/product/api",
+      "documentation_url": "https://api.semanticscholar.org/api-docs/",
+      "review_date": "2026-11-05",
+      "status": "documented_api_with_rate_limits",
+      "standard_allowed": true,
+      "decision": "api_free_with_rate_limits_key_recommended",
+      "conditions": [
+        "Semantic Scholar APIは無料。未認証リクエストは共有プールでスロットリングされ得る",
+        "APIキーを推奨 (入門枠 1 RPS)。キーの共有は禁止",
+        "データ出典をSemantic Scholarに帰属 (S2論文の引用) し、全文の権利は元論文のライセンスに従う",
+        "大量取得はAPIではなくS2AGデータセット配布を使う"
+      ]
+    },
+    "core": {
+      "request_url": "https://api.core.ac.uk/v3/search/works/",
+      "access_method": "Documented JSON API (licence required)",
+      "terms_url": "https://core.ac.uk/terms",
+      "documentation_url": "https://core.ac.uk/services/api",
+      "review_date": "2026-11-05",
+      "status": "licence_required_for_api_and_products",
+      "standard_allowed": false,
+      "decision": "core_api_licence_and_contact_required_for_search_products",
+      "conditions": [
+        "CORE利用条件: CORE APIの利用にはライセンスが必要。無料ライセンスもあるが適格性の確認が要る",
+        "収益化の可能性や、CORE自身のサービス (API・推薦・検索・発見システム等) に類似する機能を持つ製品は、COREへの連絡が求められる",
+        "COREはrobots.txtとアクセス制御を尊重して収集しているが、個別コンテンツのライセンスは別途確認が必要",
+        "Standardではライセンス適格性の確認まで無効にする"
+      ]
+    },
+    "openalex": {
+      "request_url": "https://api.openalex.org/works",
+      "access_method": "Documented REST API",
+      "terms_url": "https://docs.openalex.org/",
+      "documentation_url": "https://github.com/ourresearch/openalex-docs/blob/main/how-to-use-the-api/rate-limits-and-authentication.md",
+      "review_date": "2026-11-05",
+      "status": "documented_api_with_credits",
+      "standard_allowed": true,
+      "decision": "free_api_100k_credits_per_day_cc0",
+      "conditions": [
+        "OpenAlexは無料: 無料ユーザーは最大100,000クレジット/日、100リクエスト/秒。list系エンドポイント (/works?filter= 等) は1リクエスト10クレジット",
+        "mailtoを付けるとpolite poolに入り、安定した応答になる",
+        "OpenAlexのデータはCC0。帰属は義務ではないが推奨される",
+        "検索トラフィックには100,000クレジット/日は十分な枠"
+      ]
+    },
+    "pubmed": {
+      "request_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils",
+      "access_method": "Documented E-utilities API",
+      "terms_url": "https://www.ncbi.nlm.nih.gov/books/NBK25497/",
+      "documentation_url": "https://eutilities.github.io/site/API_Key/usageandkey/",
+      "review_date": "2026-11-05",
+      "status": "documented_api_with_usage_guidelines",
+      "standard_allowed": true,
+      "minimum_spacing_ms": 334,
+      "rate_limit_host": "eutils.ncbi.nlm.nih.gov",
+      "decision": "eutils_three_requests_per_second_guideline",
+      "conditions": [
+        "NCBI E-utilities利用指針: 3 URLリクエスト/秒以内",
+        "大きなジョブ (100リクエスト超) は週末または米東部時間 21:00–05:00 に。APIキーで上限引き上げ可",
+        "抄録・索引データが中心。全文の著作権は出版者に帰属",
+        "NBK25497は2026-11-05時点で自動取得を拒否したため、NCBI公式のE-utilities文書サイト (eutilities.github.io) で指針を確認した"
+      ]
+    },
+    "open_meteo": {
+      "request_url": "https://api.open-meteo.com/v1/forecast",
+      "access_method": "Documented JSON API (keyless)",
+      "terms_url": "https://open-meteo.com/en/terms/",
+      "documentation_url": "https://open-meteo.com/en/docs/",
+      "review_date": "2026-11-05",
+      "status": "conditional_api_non_commercial",
+      "standard_allowed": true,
+      "decision": "free_api_non_commercial_only_cc_by_4_0",
+      "conditions": [
+        "Open-Meteo利用規約: 無料APIは非商用目的のみ。商用利用はサブスクリプションが必要",
+        "無料枠: 10,000呼び出し/日未満、5,000/時、600/分 (IPおよびアプリケーション単位)",
+        "CC BY 4.0の帰属 (Open-Meteoへのクレジット) が必要",
+        "乱用は予告なくブロックされ得る。サーバーレス環境では早期に制限がかかる場合がある"
+      ]
+    },
+    "photon": {
+      "request_url": "https://photon.komoot.io/api/",
+      "access_method": "Public geocoding API (open-source instance)",
+      "terms_url": "https://photon.komoot.io/",
+      "documentation_url": "https://github.com/komoot/photon",
+      "review_date": "2026-11-05",
+      "status": "public_instance_best_effort",
+      "standard_allowed": true,
+      "decision": "public_instance_throttles_misuse_osm_attribution",
+      "conditions": [
+        "photonの公開インスタンス: 大量利用はスロットリングまたは全面禁止になり得る。可用性の保証はなく、予告なく変更され得る",
+        "大量リクエストには自前インスタンスの運用が推奨されている",
+        "データは © OpenStreetMap contributors (ODbL)。結果表示時の帰属が必要",
+        "リクエスト量は控えめに保つ"
+      ]
+    },
+    "openverse": {
+      "request_url": "https://api.openverse.org/v1/images/",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://docs.openverse.org/api/reference/authentication_and_throttling.html",
+      "documentation_url": "https://api.openverse.org/v1/",
+      "review_date": "2026-11-05",
+      "status": "documented_api_low_anonymous_tier",
+      "standard_allowed": true,
+      "minimum_spacing_ms": 3000,
+      "rate_limit_host": "api.openverse.org",
+      "decision": "anonymous_tier_20_per_min_200_per_day_register_for_more",
+      "conditions": [
+        "Openverse APIの匿名 (未登録) ティア: バースト20リクエスト/分、持続200リクエスト/日 (APIのレート制限ヘッダで確認。ドキュメント頁はJS描画のため本文取得は不可だった)",
+        "上限引き上げにはアプリケーション登録 (standardティア) が必要",
+        "検索結果は各コンテンツのライセンス (CC等) に従い帰属が必要",
+        "共有インスタンスでは200/日は少ないため、429を監視する"
+      ]
+    },
+    "dailymotion": {
+      "request_url": "https://api.dailymotion.com/videos",
+      "access_method": "Documented JSON API",
+      "terms_url": "https://legal.dailymotion.com/en/terms-of-use/",
+      "documentation_url": "https://developers.dailymotion.com/api/",
+      "review_date": "2026-11-05",
+      "status": "documented_api_with_rate_limits",
+      "standard_allowed": true,
+      "decision": "api_documented_tou_applies",
+      "conditions": [
+        "Dailymotion APIは文書化されており、プラットフォームの安定と公平な利用のためレート制限を実施する",
+        "Dailymotion利用規約がサービスを律する。動画コンテンツの権利は権利者に帰属",
+        "検索結果はメタデータであり、視聴はDailymotionプレーヤー経由が想定される利用方法"
+      ]
+    },
+    "deezer": {
+      "request_url": "https://api.deezer.com/search",
+      "access_method": "Public JSON API (simple API)",
+      "terms_url": "https://developers.deezer.com/api/terms",
+      "documentation_url": "https://developers.deezer.com/api",
+      "review_date": "2026-11-05",
+      "status": "api_terms_behind_login",
+      "standard_allowed": false,
+      "decision": "api_terms_require_login_acceptance_not_publicly_reviewable",
+      "conditions": [
+        "DeezerのAPI利用規約は開発者ログインの先で呈示される (「simple APIの利用規約に同意するにはログインが必要」)",
+        "2026-11-05時点で規約本文を公開状態で確認できなかった。有効化前に規約の確認と記録が必要",
+        "返却されるトラックメタデータは統合目的。コンテンツの権利は権利者に帰属"
+      ]
+    },
+    "vimeo": {
+      "request_url": "https://api.vimeo.com (guest JWT from https://vimeo.com/_next/jwt)",
+      "access_method": "API with internal JWT bootstrap",
+      "terms_url": "https://vimeo.com/terms",
+      "documentation_url": "https://developer.vimeo.com/api/guides/start",
+      "review_date": "2026-11-05",
+      "status": "internal_endpoint_and_auth_unclear",
+      "standard_allowed": false,
+      "decision": "internal_jwt_endpoint_and_authentication_pending_review",
+      "conditions": [
+        "エンジンは検索前に vimeo.com/_next/jwt (サイト内部エンドポイント) からゲストJWTを取得している",
+        "Vimeo APIは通常アクセストークン認証が必要で、未認証利用は文書化されたAPIの一部ではない",
+        "Vimeo利用規約がサービスを律する。内部エンドポイントの利用は公開API規約でカバーされない",
+        "アクセス経路の確認または資格情報の設定までStandardでは無効にする"
+      ]
+    },
+    "docker_hub": {
+      "request_url": "https://hub.docker.com (website search endpoint)",
+      "access_method": "Undocumented website search endpoint",
+      "terms_url": "https://www.docker.com/legal/docker-terms-use",
+      "documentation_url": "https://docs.docker.com/docker-hub/api/",
+      "review_date": "2026-11-05",
+      "status": "terms_page_not_machine_readable",
+      "standard_allowed": false,
+      "decision": "undocumented_endpoint_terms_pending_review",
+      "conditions": [
+        "エンジンはhub.docker.comのサイト検索を叩くが、これはDockerの文書化された公開APIではない",
+        "Docker利用規約ページはJavaScript描画で、2026-11-05には条項本文を自動取得できなかった。人間による確認が必要",
+        "Docker Hubにはレジストリ操作の認証付きAPIがあるが、検索の匿名利用は許可として文書化されていない",
+        "利用規約の確認が済むまでStandardでは無効にする"
+      ]
+    },
+    "mdn": {
+      "request_url": "https://developer.mozilla.org/api/v1/search?q={query}&page={pageno}",
+      "access_method": "Internal JSON endpoint (undocumented)",
+      "terms_url": "https://www.mozilla.org/en-US/about/legal/terms/mozilla/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "restricted_internal_endpoint",
+      "standard_allowed": false,
+      "decision": "internal_search_endpoint_undocumented",
+      "conditions": [
+        "MDNの /api/v1/search はMDNサイト自身の検索用で、公開APIドキュメントが見つからない",
+        "MDNコンテンツはCC BY-SAだが、アクセス経路そのものが内部エンドポイント",
+        "Mozillaの利用規約がサイトを律する。内部エンドポイント利用は許可として文書化されていない",
+        "文書化されたアクセス経路への移行までStandardでは無効にする"
+      ]
+    },
+    "microsoft_learn": {
+      "request_url": "https://learn.microsoft.com/api/search",
+      "access_method": "Internal JSON endpoint (undocumented)",
+      "terms_url": "https://learn.microsoft.com/en-us/legal/",
+      "documentation_url": "",
+      "review_date": "2026-11-05",
+      "status": "restricted_internal_endpoint",
+      "standard_allowed": false,
+      "decision": "internal_search_endpoint_undocumented_microsoft_terms_apply",
+      "conditions": [
+        "learn.microsoft.com/api/search はMicrosoft Learnサイト自身の検索用で、公開APIドキュメントが見つからない",
+        "Microsoftの利用規約がサービスを律する。内部エンドポイント利用は許可として文書化されていない",
+        "Microsoft Learnのコンテンツは個別の著作権表示・ライセンス (一部CC BY) に従う",
+        "文書化されたアクセス経路への移行までStandardでは無効にする"
+      ]
+    },
+    "npm": {
+      "request_url": "https://api.npms.io/v2/search",
+      "access_method": "Third-party JSON API (npms.io)",
+      "terms_url": "https://npms.io/",
+      "documentation_url": "https://github.com/npms-io/npms-analyzer",
+      "review_date": "2026-11-05",
+      "status": "review_incomplete_terms_not_located",
+      "decision": "terms_not_located_npms_third_party",
+      "conditions": [
+        "npms.ioはnpmjs.comではなく第三者のnpm検索。サイトはJavaScript描画で、2026-11-05には公開API規約が見つからなかった",
+        "npms.ioはオープンソース (npms-analyzer) だが、明示的な許可も禁止も確認できていない",
+        "審査未完了のため standard_allowed は意図的に空にする (pendingとして維持)",
+        "npmjs.com自体のレジストリ規約は第三者npms.io APIを自動的にはカバーしない"
+      ]
+    }
+  }
+}

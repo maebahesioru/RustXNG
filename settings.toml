@@ -103,8 +103,9 @@ search_on_category_select = true
 hotkeys = "default"
 
 [outgoing]
+identified_ua = true
 # Public services with published per-host limits. Other hosts remain parallel.
-host_spacing_overrides = { "nominatim.openstreetmap.org" = 1100, "api.mwmbl.org" = 1100 }
+host_spacing_overrides = { "api.mwmbl.org" = 1100, "api.openverse.org" = 3100, "crates.io" = 1100, "eutils.ncbi.nlm.nih.gov" = 434, "export.arxiv.org" = 3100, "nominatim.openstreetmap.org" = 1100, "packagist.org" = 1100, "repology.org" = 1100, "wiby.me" = 1100 }
 # Additional trusted CA bundle for TLS-intercepting proxies (PEM).
 # ca_bundle = "/path/to/proxy-ca.pem"
 request_timeout = 4.0
@@ -269,12 +270,14 @@ categories = ["it", "packages"]
 [[engines]]
 name = "pypi"
 engine = "pypi"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "pypi"
 categories = ["it", "packages"]
 
 [[engines]]
 name = "docker hub"
 engine = "docker_hub"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "dh"
 categories = ["it", "packages"]
 
@@ -293,6 +296,7 @@ categories = ["science", "scientific publications"]
 [[engines]]
 name = "cinii"
 engine = "cinii"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "ci"
 categories = ["science", "scientific publications"]
 
@@ -331,6 +335,7 @@ categories = ["videos"]
 [[engines]]
 name = "deezer"
 engine = "deezer"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "dz"
 categories = ["music"]
 
@@ -386,6 +391,7 @@ disabled = true  # requires a self-hosted instance
 [[engines]]
 name = "nixos wiki"
 engine = "mediawiki"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "nixw"
 categories = ["it", "software wikis"]
 base_url = "https://wiki.nixos.org/"
@@ -405,6 +411,7 @@ disabled = true  # requires a base_url
 [[engines]]
 name = "bitbucket"
 engine = "xpath"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "bb"
 categories = ["it", "repos"]
 paging = true
@@ -454,6 +461,7 @@ disabled = true  # fails on every request (2026-11-04); costs each search its ti
 [[engines]]
 name = "etymonline"
 engine = "xpath"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "et"
 categories = ["dictionaries"]
 paging = true
@@ -477,6 +485,7 @@ suggestion_xpath = "//section[contains(@class, 'related-searches')]//a/span[1]"
 [[engines]]
 name = "free software directory"
 engine = "mediawiki"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "fsd"
 categories = ["it", "software wikis"]
 timeout = 5.0
@@ -512,6 +521,7 @@ content_xpath = ".//p"
 [[engines]]
 name = "gentoo"
 engine = "mediawiki"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "ge"
 categories = ["it", "software wikis"]
 timeout = 10
@@ -534,6 +544,7 @@ content_xpath = ".//div[contains(@class, \"article-formatted-body\")]"
 [[engines]]
 name = "hoogle"
 engine = "xpath"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "ho"
 categories = ["it", "packages"]
 search_url = "https://hoogle.haskell.org/?hoogle={query}"
@@ -567,6 +578,7 @@ content_xpath = ".//a[@class=\"domain\"]"
 [[engines]]
 name = "mdn"
 engine = "json_engine"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "mdn"
 categories = ["it"]
 paging = true
@@ -642,6 +654,7 @@ content_query = "description"
 [[engines]]
 name = "pub.dev"
 engine = "xpath"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "pd"
 categories = ["packages", "it"]
 paging = true
@@ -771,6 +784,7 @@ search_type = "text"
 [[engines]]
 name = "rubygems"
 engine = "xpath"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "rbg"
 categories = ["it", "packages"]
 paging = true
@@ -807,6 +821,7 @@ disabled = true  # requires a base_url
 [[engines]]
 name = "woxikon.de synonyme"
 engine = "xpath"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "woxi"
 categories = ["dictionaries"]
 timeout = 5.0
@@ -839,6 +854,7 @@ content_xpath = "./p"
 [[engines]]
 name = "minecraft wiki"
 engine = "mediawiki"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "mcw"
 categories = ["software wikis"]
 base_url = "https://minecraft.wiki/"
@@ -851,6 +867,7 @@ api_path = "api.php"
 [[engines]]
 name = "apple_app_store"
 engine = "apple_app_store"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 categories = ["it", "apps"]
 safesearch = true
 
@@ -866,6 +883,7 @@ disabled = true  # the site blocks automated queries (CAPTCHA / access denied / 
 [[engines]]
 name = "openclipart"
 engine = "openclipart"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "oca"
 categories = ["images"]
 paging = true
@@ -873,6 +891,7 @@ paging = true
 [[engines]]
 name = "lemmy"
 engine = "lemmy"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 categories = ["social media"]
 paging = true
 
@@ -895,6 +914,7 @@ disabled = true  # the site blocks automated queries (CAPTCHA / access denied / 
 [[engines]]
 name = "mastodon"
 engine = "mastodon"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 categories = ["social media"]
 
 [[engines]]
@@ -909,6 +929,7 @@ disabled = true  # needs credentials or an instance URL
 [[engines]]
 name = "apkmirror"
 engine = "apkmirror"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "apk"
 categories = ["it", "apps"]
 paging = true
@@ -923,6 +944,7 @@ categories = ["music"]
 [[engines]]
 name = "genius"
 engine = "genius"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "gen"
 categories = ["music", "lyrics"]
 
@@ -956,11 +978,13 @@ disabled = true  # needs credentials or an instance URL
 [[engines]]
 name = "wallhaven"
 engine = "wallhaven"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 categories = ["images"]
 
 [[engines]]
 name = "500px"
 engine = "500px"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "500px"
 categories = ["stock images"]
 paging = true
@@ -968,6 +992,7 @@ paging = true
 [[engines]]
 name = "9gag"
 engine = "9gag"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "9g"
 categories = ["social media"]
 paging = true
@@ -992,6 +1017,7 @@ disabled = true  # always times out and returns nothing; costs every search its 
 [[engines]]
 name = "findfiles"
 engine = "findfiles"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "ff"
 categories = ["files"]
 paging = true
@@ -1018,6 +1044,7 @@ time_range_support = true
 [[engines]]
 name = "peertube"
 engine = "peertube"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "ptb"
 categories = ["videos"]
 paging = true
@@ -1027,6 +1054,7 @@ safesearch = true
 [[engines]]
 name = "pexels"
 engine = "pexels"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "px"
 categories = ["stock images"]
 paging = true
@@ -1044,6 +1072,7 @@ disabled = true  # the site blocks automated queries (CAPTCHA / access denied / 
 [[engines]]
 name = "sepiasearch"
 engine = "sepiasearch"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "sep"
 categories = ["videos"]
 paging = true
@@ -1053,6 +1082,7 @@ safesearch = true
 [[engines]]
 name = "tootfinder"
 engine = "tootfinder"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "toot"
 categories = ["social media"]
 
@@ -1082,6 +1112,7 @@ categories = ["images"]
 [[engines]]
 name = "deviantart"
 engine = "deviantart"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 categories = ["images"]
 
 [[engines]]
@@ -1100,12 +1131,14 @@ disabled = true  # needs credentials or an instance URL
 [[engines]]
 name = "imgur"
 engine = "imgur"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "img"
 categories = ["images"]
 
 [[engines]]
 name = "alpinelinux"
 engine = "alpinelinux"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 categories = ["packages", "it"]
 paging = true
 
@@ -1140,6 +1173,7 @@ disabled = true  # the site blocks automated queries (CAPTCHA / access denied / 
 [[engines]]
 name = "r1337x"
 engine = "1337x"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 categories = ["files"]
 paging = true
 
@@ -1181,6 +1215,7 @@ time_range_support = true
 [[engines]]
 name = "bitchute"
 engine = "bitchute"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "bit"
 categories = ["videos"]
 paging = true
@@ -1188,6 +1223,7 @@ paging = true
 [[engines]]
 name = "bpb"
 engine = "bpb"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "bpb"
 categories = ["general"]
 paging = true
@@ -1203,6 +1239,7 @@ disabled = true  # needs credentials or an instance URL
 [[engines]]
 name = "cachy_os"
 engine = "cachy_os"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "cachy_os"
 categories = ["packages", "it"]
 paging = true
@@ -1210,6 +1247,7 @@ paging = true
 [[engines]]
 name = "ccc_media"
 engine = "ccc_media"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "ccc_media"
 categories = ["videos"]
 paging = true
@@ -1233,6 +1271,7 @@ disabled = true  # needs credentials or an instance URL
 [[engines]]
 name = "core"
 engine = "core"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "core"
 categories = ["science", "scientific publications"]
 paging = true
@@ -1240,6 +1279,7 @@ paging = true
 [[engines]]
 name = "r360search_videos"
 engine = "360search_videos"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "360search_videos"
 categories = ["videos"]
 paging = true
@@ -1247,6 +1287,7 @@ paging = true
 [[engines]]
 name = "iqiyi"
 engine = "iqiyi"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "iq"
 categories = ["videos"]
 paging = true
@@ -1255,6 +1296,7 @@ time_range_support = true
 [[engines]]
 name = "niconico"
 engine = "niconico"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "nico"
 categories = ["videos"]
 paging = true
@@ -1263,6 +1305,7 @@ time_range_support = true
 [[engines]]
 name = "odysee"
 engine = "odysee"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "od"
 categories = ["videos"]
 paging = true
@@ -1271,6 +1314,7 @@ time_range_support = true
 [[engines]]
 name = "rumble"
 engine = "rumble"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "ru"
 categories = ["videos"]
 paging = true
@@ -1278,6 +1322,7 @@ paging = true
 [[engines]]
 name = "vimeo"
 engine = "vimeo"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "vm"
 categories = ["videos"]
 paging = true
@@ -1285,6 +1330,7 @@ paging = true
 [[engines]]
 name = "github_code"
 engine = "github_code"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "ghc"
 categories = ["code"]
 paging = true
@@ -1292,6 +1338,7 @@ paging = true
 [[engines]]
 name = "gitlab"
 engine = "gitlab"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "gl"
 categories = ["it", "repos"]
 paging = true
@@ -1354,6 +1401,7 @@ paging = true
 [[engines]]
 name = "geizhals"
 engine = "geizhals"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "geiz"
 categories = ["shopping"]
 paging = true
@@ -1361,6 +1409,7 @@ paging = true
 [[engines]]
 name = "gitea"
 engine = "gitea"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "gitea"
 categories = ["it", "repos"]
 paging = true
@@ -1368,6 +1417,7 @@ paging = true
 [[engines]]
 name = "hex"
 engine = "hex"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "hex"
 categories = ["it", "packages"]
 paging = true
@@ -1382,6 +1432,7 @@ disabled = true  # the site blocks automated queries (CAPTCHA / access denied / 
 [[engines]]
 name = "openalex"
 engine = "openalex"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "oa"
 categories = ["science", "scientific publications"]
 paging = true
@@ -1389,6 +1440,7 @@ paging = true
 [[engines]]
 name = "pkg_go_dev"
 engine = "pkg_go_dev"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "pgo"
 categories = ["packages", "it"]
 
@@ -1404,6 +1456,7 @@ disabled = true  # fails on every request (2026-11-04); costs each search its ti
 [[engines]]
 name = "sogou_images"
 engine = "sogou_images"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "sogoui"
 categories = ["images"]
 paging = true
@@ -1411,6 +1464,7 @@ paging = true
 [[engines]]
 name = "sogou_videos"
 engine = "sogou_videos"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "sogouv"
 categories = ["videos"]
 paging = true
@@ -1418,6 +1472,7 @@ paging = true
 [[engines]]
 name = "sourcehut"
 engine = "sourcehut"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "srht"
 categories = ["it", "repos"]
 paging = true
@@ -1432,6 +1487,7 @@ disabled = true  # needs credentials or an instance URL
 [[engines]]
 name = "steam"
 engine = "steam"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "stm"
 categories = ["general"]
 
@@ -1448,6 +1504,7 @@ time_range_support = true
 [[engines]]
 name = "www1x"
 engine = "www1x"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "1x"
 categories = ["stock images"]
 
@@ -1461,6 +1518,7 @@ disabled = true  # fails on every request (2026-11-04); costs each search its ti
 [[engines]]
 name = "duden"
 engine = "duden"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "du"
 categories = ["dictionaries"]
 paging = true
@@ -1468,6 +1526,7 @@ paging = true
 [[engines]]
 name = "fdroid"
 engine = "fdroid"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "fd"
 categories = ["it", "apps"]
 paging = true
@@ -1475,6 +1534,7 @@ paging = true
 [[engines]]
 name = "flaticon"
 engine = "flaticon"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "fli"
 categories = ["images", "icons"]
 paging = true
@@ -1489,6 +1549,7 @@ paging = true
 [[engines]]
 name = "jisho"
 engine = "jisho"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "js"
 categories = ["dictionaries"]
 
@@ -1503,6 +1564,7 @@ paging = true
 [[engines]]
 name = "pixiv"
 engine = "pixiv"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "pv"
 categories = ["images"]
 paging = true
@@ -1510,6 +1572,7 @@ paging = true
 [[engines]]
 name = "pubmed"
 engine = "pubmed"
+disabled = true # Two-call adapter bypasses shared request pacing.
 shortcut = "pub"
 categories = ["science", "scientific publications"]
 paging = true
@@ -1542,6 +1605,7 @@ categories = ["packages", "it"]
 [[engines]]
 name = "shopify_stock"
 engine = "shopify_stock"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "shs"
 categories = ["stock images"]
 paging = true
@@ -1549,12 +1613,14 @@ paging = true
 [[engines]]
 name = "wordnik"
 engine = "wordnik"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "wnik"
 categories = ["dictionaries", "define"]
 
 [[engines]]
 name = "emojipedia"
 engine = "emojipedia"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 categories = []
 
 [[engines]]
@@ -1566,17 +1632,20 @@ disabled = true  # needs credentials or an instance URL
 [[engines]]
 name = "currency_convert"
 engine = "currency_convert"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "cc"
 categories = ["currency", "general"]
 
 [[engines]]
 name = "dictzone"
 engine = "dictzone"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 categories = ["general", "translate"]
 
 [[engines]]
 name = "kickass"
 engine = "kickass"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "kc"
 categories = ["files"]
 paging = true
@@ -1584,6 +1653,7 @@ paging = true
 [[engines]]
 name = "nyaa"
 engine = "nyaa"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "nt"
 categories = ["files"]
 paging = true
@@ -1597,12 +1667,14 @@ categories = ["weather"]
 [[engines]]
 name = "piratebay"
 engine = "piratebay"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "tpb"
 categories = ["files"]
 
 [[engines]]
 name = "solidtorrents"
 engine = "solidtorrents"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "solid"
 categories = ["files"]
 paging = true
@@ -1610,6 +1682,7 @@ paging = true
 [[engines]]
 name = "tokyotoshokan"
 engine = "tokyotoshokan"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "tt"
 categories = ["files"]
 paging = true
@@ -1703,6 +1776,7 @@ disabled = true  # unverified; remove when confirmed working
 [[engines]]
 name = "lib_rs"
 engine = "lib_rs"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "lrs"
 categories = ["it", "packages"]
 # verified working (returned results in the engine sweep)
@@ -1827,6 +1901,7 @@ disabled = true  # unverified; remove when confirmed working
 [[engines]]
 name = "microsoft_learn"
 engine = "microsoft_learn"
+disabled = true # Disabled until endpoint/use conditions are reviewed.
 shortcut = "msl"
 categories = ["it"]
 paging = true

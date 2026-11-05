@@ -2728,6 +2728,7 @@ dependencies = [
  "tantivy",
  "tempfile",
  "thiserror",
+ "tiktoken",
  "tokio",
  "toml",
  "tower",
@@ -2736,6 +2737,15 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "yaml_serde",
+]
+
+[[package]]
+name = "ruzstd"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69e4ce4a039f42bf25920b95667e4d789e98749ab11bbb8d2c2936f788421bb5"
+dependencies = [
+ "twox-hash",
 ]
 
 [[package]]
@@ -3423,6 +3433,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ad99c4c6d32803332c548b1af0540b357b3f5fc0be8f6c6bfe8b2e6ae784070"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "tiktoken"
+version = "4.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40ba662e4a36f3db9561d09f1ba085f719aaf393b7dbd71e23a2e16b8e4e4e19"
+dependencies = [
+ "regex",
+ "rustc-hash",
+ "ruzstd",
 ]
 
 [[package]]

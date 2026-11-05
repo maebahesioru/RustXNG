@@ -1,0 +1,129 @@
+{
+  "coverage": {
+    "api-1": {
+      "questions": 100,
+      "hit@1": 72,
+      "hit@5": 88,
+      "mrr@10": 0.791,
+      "median_ms": 699.1,
+      "errors": 0,
+      "hit@10": 92,
+      "p95_ms": 1265.024,
+      "zero_results": 0,
+      "provider_failure_reports_including_suspensions": {
+        "Unexpected error": 4,
+        "Resting: no results lately": 113
+      }
+    },
+    "api-2": {
+      "questions": 100,
+      "hit@1": 72,
+      "hit@5": 87,
+      "mrr@10": 0.786,
+      "median_ms": 852.5,
+      "errors": 0,
+      "hit@10": 91,
+      "p95_ms": 1278.82,
+      "zero_results": 0,
+      "provider_failure_reports_including_suspensions": {
+        "Unexpected error": 4,
+        "Resting: no results lately": 113
+      }
+    },
+    "standard-1": {
+      "questions": 100,
+      "hit@1": 55,
+      "hit@5": 67,
+      "mrr@10": 0.607,
+      "median_ms": 805.6,
+      "errors": 0,
+      "hit@10": 71,
+      "p95_ms": 1233.059,
+      "zero_results": 0,
+      "provider_failure_reports_including_suspensions": {
+        "Unexpected error": 1,
+        "Resting: no results lately": 113
+      }
+    },
+    "standard-2": {
+      "questions": 100,
+      "hit@1": 58,
+      "hit@5": 69,
+      "mrr@10": 0.632,
+      "median_ms": 584.5,
+      "errors": 0,
+      "hit@10": 73,
+      "p95_ms": 1308.622,
+      "zero_results": 0,
+      "provider_failure_reports_including_suspensions": {
+        "Unexpected error": 1,
+        "Resting: no results lately": 113
+      }
+    }
+  },
+  "payloads": {
+    "raw_http_canonical_json": {
+      "questions": 100,
+      "hit@1": 72,
+      "hit@5": 88,
+      "hit@10": 92,
+      "mrr@10": 0.791,
+      "median_bytes": 9978.0,
+      "median_tokens": {
+        "cl100k_base": 2429.0,
+        "o200k_base": 2379.0
+      },
+      "packing_p95_ms": null,
+      "source_urls": 1000,
+      "leading_80_chars_preserved": null
+    },
+    "compact": {
+      "questions": 100,
+      "hit@1": 72,
+      "hit@5": 88,
+      "hit@10": 92,
+      "mrr@10": 0.791,
+      "median_bytes": 6433.0,
+      "median_tokens": {
+        "cl100k_base": 1542.0,
+        "o200k_base": 1544.5
+      },
+      "packing_p95_ms": 0.045,
+      "source_urls": 1000,
+      "leading_80_chars_preserved": 1000
+    },
+    "cl100k_base": {
+      "questions": 100,
+      "hit@1": 72,
+      "hit@5": 88,
+      "hit@10": 92,
+      "mrr@10": 0.791,
+      "median_bytes": 6494.0,
+      "median_tokens": {
+        "cl100k_base": 1558.0,
+        "o200k_base": 1562.5
+      },
+      "packing_p95_ms": 0.105,
+      "source_urls": 1000,
+      "leading_80_chars_preserved": 997
+    },
+    "o200k_base": {
+      "questions": 100,
+      "hit@1": 72,
+      "hit@5": 88,
+      "hit@10": 92,
+      "mrr@10": 0.791,
+      "median_bytes": 6493.0,
+      "median_tokens": {
+        "cl100k_base": 1558.0,
+        "o200k_base": 1562.5
+      },
+      "packing_p95_ms": 0.111,
+      "source_urls": 1000,
+      "leading_80_chars_preserved": 1000
+    }
+  },
+  "tokenizer": "tiktoken 4.1.2 (Rust)",
+  "count_scope": "Compact sorted-key structured JSON, ordinary text, excluding MCP envelopes, text-content copy, SDK formatting, caller prompt and model framing. Raw token counts use canonicalized retained HTTP JSON; raw bytes are measured wire bytes.",
+  "limitations": "Frozen live responses; production compact projection and budget fitter; 10 steady-state packing samples per case; unchanged URLs/gold; no upstream calls, no answer-generation model. Leading 80 snippet characters are an evidence-retention proxy, not answer correctness."
+}

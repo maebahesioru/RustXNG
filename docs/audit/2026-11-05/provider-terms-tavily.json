@@ -1,0 +1,22 @@
+{
+  "recorded_at": "2026-11-05",
+  "scope": "tavilyエンジン（新規実装）の有効化審査。2026-11-05にAPIの動作と規約位置づけを確認した。",
+  "engines": {
+    "tavily": {
+      "request_url": "https://api.tavily.com/search",
+      "access_method": "Documented Search API with key (Bearer token)",
+      "terms_url": "https://www.tavily.com/terms",
+      "documentation_url": "https://docs.tavily.com/documentation/api-reference/endpoint/search",
+      "review_date": "2026-11-05",
+      "status": "review_incomplete_terms_not_verified",
+      "decision": "review_incomplete_terms_not_verified_2026-11-05",
+      "minimum_spacing_ms": 1100,
+      "rate_limit_host": "api.tavily.com",
+      "conditions": [
+        "規約本文の条項抽出が未完了（2026-11-05、headのみ取得）",
+        "APIの動作は確認済み（Bearer認証・結果JSON）。規約の確認が済むまで有効化は提案しない",
+        "キーは ~/.dsh/search-keys.env の TAVILY_API_KEY"
+      ]
+    }
+  }
+}

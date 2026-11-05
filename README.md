@@ -61,7 +61,8 @@ Choose a provider configuration with `--profile`. The default is `standard`.
 
 | Profile | Command | Sources |
 | --- | --- | --- |
-| Standard | `rustxng` | Default keyless providers, excluding selected disallowed or blocked sources |
+| Standard | `rustxng` | 34 keyless entries with recorded endpoint/use conditions, plus local indexes |
+| API | `rustxng --profile api` | Standard plus explicitly configured, billed Exa Search (`EXA_API_KEY`) |
 | Clean | `rustxng --profile clean` | Selected public APIs and locally indexed sites |
 | Full | `rustxng --profile full` | Additional HTML providers, including sources with restrictive or unverified automation terms |
 
@@ -69,7 +70,7 @@ Choose a provider configuration with `--profile`. The default is `standard`.
 
 The selected profile also works with MCP, for example `rustxng mcp --profile clean`. Optional API-backed providers may require keys and incur charges. Search queries are sent to the enabled external providers even when RustXNG runs locally.
 
-The [provider policy and inventory](docs/PROVIDERS.md) documents known limitations. I previously emphasized performance before checking every provider's conditions. That was a mistake; provider reviews remain ongoing.
+Standard now excludes every unreviewed enabled source. Reviews cover the recorded retrieval scope; source licences, quotas and deployment purposes still apply. The API profile never activates merely because a key exists. See the [current measurements and setup](docs/ISSUE-RESOLUTION-2026-11-05.md).
 
 ## Installation and configuration
 

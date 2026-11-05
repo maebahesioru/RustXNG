@@ -2,7 +2,7 @@
 FROM rust:1.99.1-slim-bookworm AS build
 WORKDIR /app
 COPY Cargo.toml Cargo.lock build.rs ./
-COPY settings.toml settings.full.toml settings.clean.toml ./
+COPY settings.toml settings.full.toml settings.clean.toml settings.api.toml ./
 COPY src ./src
 COPY templates ./templates
 COPY static ./static

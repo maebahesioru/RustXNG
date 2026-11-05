@@ -63,7 +63,8 @@ HTTP APIでは`include_raw_content=1`で本文を取得できます。PDFの文�
 
 | 構成 | コマンド | 検索先 |
 | --- | --- | --- |
-| Standard | `rustxng` | 自動アクセスを拒否する検索先などを除いた既定構成 |
+| Standard | `rustxng` | 取得先と用途の条件を記録したキー不要の34エントリと自前索引 |
+| API | `rustxng --profile api` | Standard に明示設定した有料 Exa Search を追加（`EXA_API_KEY`） |
 | Clean | `rustxng --profile clean` | 選択した公開APIと自前の索引 |
 | Full | `rustxng --profile full` | 利用規約の制限や許可が未確認のHTML検索先も含む構成 |
 
@@ -71,7 +72,7 @@ Fullは利用許可を不要にする機能ではありません。個人利用�
 
 MCPでも`rustxng mcp --profile clean`のように指定できます。検索元によってはAPIキーや料金が必要です。RustXNGをローカルで動かしても、検索語は選択した外部サービスへ送信されます。
 
-各検索先の確認状況は[プロバイダーの利用条件](docs/PROVIDERS.md)にまとめています。以前、検索先の条件を十分に確認する前に性能を強調してしまいました。これは私の確認不足でした。現在も検索先の見直しを続けています。
+Standardでは未確認の検索元をすべて既定無効にしました。確認範囲は記録した取得用途で、原著作物のライセンス・クォータ・運用目的の条件は残ります。キーが存在するだけではAPIを有効にしません。[今回の測定と設定方法](docs/ISSUE-RESOLUTION-2026-11-05.md)を参照してください。
 
 ## 導入と設定
 
