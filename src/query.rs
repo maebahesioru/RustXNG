@@ -252,6 +252,13 @@ impl Query {
             });
             return true;
         }
+        if matches!(value, "local index" | "wikipedia index") {
+            self.engine_refs.push(EngineRef {
+                name: value.replace(' ', "_"),
+                category: None,
+            });
+            return true;
+        }
         // !category
         let category = categories::normalize(value);
         if registry.has_category(&category) {
@@ -539,6 +546,20 @@ fn is_language_code(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn local_index_bangs_are_explicit_sources_without_remote_engines() {
+        for source in ["local_index", "wikipedia_index"] {
+            let query = super::Query::parse(
+                &format!("!{source} rust ownership"),
+                &crate::engine::EngineRegistry::default(),
+                &[],
+            );
+            assert!(query.specific);
+            assert_eq!(query.engine_ref_names(), [source]);
+            assert_eq!(query.query_text(), "rust ownership");
+        }
+    }
+
     #[test]
     fn a_japanese_query_searches_in_japanese_unless_a_locale_was_asked_for() {
         let mut query = Query::parse("気象庁 天気予報", &registry(), &[]);

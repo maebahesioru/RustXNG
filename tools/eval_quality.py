@@ -38,7 +38,8 @@ def search(base: str, query: str, extra: dict[str, str], timeout: float, retain_
         with urllib.request.urlopen(request, timeout=timeout) as response:
             body = response.read()
     except Exception as error:  # noqa: BLE001 - the report wants the reason
-        return {"error": f"{type(error).__name__}: {error}", "millis": 0.0, "urls": [], "bytes": 0}
+        millis = (time.perf_counter() - started) * 1000
+        return {"error": f"{type(error).__name__}: {error}", "millis": millis, "urls": [], "bytes": 0}
     millis = (time.perf_counter() - started) * 1000
     try:
         payload = json.loads(body)
@@ -148,7 +149,7 @@ def main() -> int:
     hits5 = sum(1 for row in rows if row["rank"] is not None and row["rank"] <= 5)
     hits1 = sum(1 for row in rows if row["rank"] == 1)
     mrr = sum(1.0 / row["rank"] for row in rows if row["rank"] is not None) / total
-    latencies = [row["millis"] for row in rows if "millis" in row and row["millis"] > 0]
+    latencies = [row["millis"] for row in rows]
     sizes = [row["bytes"] for row in rows if row.get("bytes")]
     report = {
         "base": args.base,

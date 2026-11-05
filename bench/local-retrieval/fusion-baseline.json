@@ -1,0 +1,50 @@
+{
+  "repeated_source": [
+    {
+      "engines": [
+        "one_source"
+      ],
+      "positions": [
+        1,
+        2,
+        3
+      ],
+      "score": 5.5,
+      "url": "https://example.test/repeated"
+    },
+    {
+      "engines": [
+        "independent_a",
+        "independent_b"
+      ],
+      "positions": [
+        1,
+        1
+      ],
+      "score": 4.0,
+      "url": "https://example.test/corroborated"
+    }
+  ],
+  "routed_weight": [
+    {
+      "engines": [
+        "ordinary"
+      ],
+      "positions": [
+        1
+      ],
+      "score": 1.0,
+      "url": "https://example.test/ordinary"
+    },
+    {
+      "engines": [
+        "routed"
+      ],
+      "positions": [
+        1
+      ],
+      "score": 1.0,
+      "url": "https://example.test/routed"
+    }
+  ]
+}

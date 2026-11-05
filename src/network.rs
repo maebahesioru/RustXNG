@@ -163,6 +163,7 @@ impl Network {
     #[cfg(test)]
     pub(crate) fn with_test_media_client(mut self, client: reqwest::Client) -> Self {
         self.media_client = client;
+        self.media_proxy_blocked = false;
         self
     }
 
@@ -945,13 +946,15 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        let mut network = Network::from_settings(&Settings::defaults()).unwrap();
-        network.media_client = crate::fetch::public_client(
+        let client = crate::fetch::public_client(
             &crate::settings::Outgoing::default(),
             &[("example.com".into(), address)],
         )
         .unwrap()
         .0;
+        let mut network = Network::from_settings(&Settings::defaults())
+            .unwrap()
+            .with_test_media_client(client);
         network.retries = 0;
         for path in ["literal", "name"] {
             let url = format!("http://example.com:{}/{path}", address.port());
@@ -985,13 +988,15 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        let mut network = Network::from_settings(&Settings::defaults()).unwrap();
-        network.media_client = crate::fetch::public_client(
+        let client = crate::fetch::public_client(
             &crate::settings::Outgoing::default(),
             &[("example.com".into(), address)],
         )
         .unwrap()
         .0;
+        let network = Network::from_settings(&Settings::defaults())
+            .unwrap()
+            .with_test_media_client(client);
         let result = tokio::time::timeout(
             Duration::from_secs(2),
             network.fetch_image(
@@ -1045,13 +1050,15 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        let mut network = Network::from_settings(&Settings::defaults()).unwrap();
-        network.media_client = crate::fetch::public_client(
+        let client = crate::fetch::public_client(
             &crate::settings::Outgoing::default(),
             &[("example.com".into(), address)],
         )
         .unwrap()
         .0;
+        let mut network = Network::from_settings(&Settings::defaults())
+            .unwrap()
+            .with_test_media_client(client);
         network.retries = 2;
         let response = network
             .fetch_image(

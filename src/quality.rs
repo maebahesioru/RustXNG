@@ -35,7 +35,7 @@ impl Suspicion {
     }
 }
 
-/// Text fragments that never appear in a real answer for a real query.
+/// Common markers of fabricated provider responses.
 const PLACEHOLDER_MARKERS: &[&str] = &[
     "lorem ipsum",
     "dolor sit amet",
@@ -67,13 +67,16 @@ pub fn inspect(query: &Query, items: &[EngineItem]) -> Option<Suspicion> {
         return None;
     }
 
+    let query_text = query.query_text().to_lowercase();
+    let markers: Vec<_> = PLACEHOLDER_MARKERS
+        .iter()
+        .copied()
+        .filter(|marker| !requested_placeholder(&query_text, marker))
+        .collect();
     let mut placeholder = 0usize;
     for (title, content, _) in &results {
         let haystack = format!("{} {}", title.to_lowercase(), content.to_lowercase());
-        if PLACEHOLDER_MARKERS
-            .iter()
-            .any(|marker| haystack.contains(marker))
-        {
+        if markers.iter().any(|marker| haystack.contains(marker)) {
             placeholder += 1;
         }
     }
@@ -96,6 +99,14 @@ pub fn inspect(query: &Query, items: &[EngineItem]) -> Option<Suspicion> {
         return Some(Suspicion::Unrelated);
     }
     None
+}
+
+fn requested_placeholder(query: &str, marker: &str) -> bool {
+    let word_character = |character: char| character.is_ascii_alphanumeric() || character == '_';
+    query.match_indices(marker).any(|(start, _)| {
+        !query[..start].ends_with(word_character)
+            && !query[start + marker.len()..].starts_with(word_character)
+    })
 }
 
 /// Number of results that share a title with another result.
@@ -194,6 +205,31 @@ mod tests {
             .collect();
         assert_eq!(
             inspect(&query("rust"), &items),
+            Some(Suspicion::Placeholder)
+        );
+    }
+
+    #[test]
+    fn explicitly_requested_placeholder_phrases_are_not_provider_failures() {
+        let items: Vec<_> = (0..3)
+            .map(|index| {
+                item(
+                    &format!("Lorem ipsum generator {index}"),
+                    "Lorem ipsum is placeholder text used in page design.",
+                    &format!("https://example.com/generator/{index}"),
+                )
+            })
+            .collect();
+        assert_eq!(
+            inspect(&query("\"LOREM   IPSUM\" placeholder text"), &items),
+            None
+        );
+        assert_eq!(
+            inspect(&query("lorem ipsumとは placeholder text"), &items),
+            None
+        );
+        assert_eq!(
+            inspect(&query("lorem ipsumx placeholder text"), &items),
             Some(Suspicion::Placeholder)
         );
     }

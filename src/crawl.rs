@@ -91,17 +91,25 @@ impl Directives {
 /// ignored.
 pub fn header_directives(value: &str) -> Directives {
     let mut directives = Directives::default();
-    for part in value.split(';') {
-        // Multiple tags can be folded into one header: "a: noindex, b: nofollow".
+    let mut applies = true;
+    for part in value.split([',', ';']) {
         let part = part.trim();
         match part.split_once(':') {
-            Some((agent, rest)) if !agent.contains(' ') && !agent.contains(',') => {
+            Some((agent, rest)) if !agent.contains(char::is_whitespace) => {
                 let agent = agent.trim().to_ascii_lowercase();
-                if agent == PRODUCT || agent == "*" {
+                if matches!(
+                    agent.as_str(),
+                    "max-snippet" | "max-image-preview" | "max-video-preview" | "unavailable_after"
+                ) {
+                    continue;
+                }
+                applies = agent == PRODUCT || agent == "*";
+                if applies {
                     directives.absorb(rest);
                 }
             }
-            _ => directives.absorb(part),
+            _ if applies => directives.absorb(part),
+            _ => {}
         }
     }
     directives
@@ -126,9 +134,9 @@ pub fn meta_directives(html: &Html) -> Directives {
     directives
 }
 
-/// The same-host `<link rel="canonical">` target, if the page names one.
+/// The same-origin `<link rel="canonical">` target, if the page names one.
 ///
-/// A canonical on another host is ignored: trusting it would let any page
+/// A canonical on another origin is ignored: trusting it would let any page
 /// redirect our index entry to a domain it does not control.
 pub fn canonical_url(html: &Html, base: &Url) -> Option<String> {
     let selector = Selector::parse("link[rel][href]").ok()?;
@@ -141,12 +149,55 @@ pub fn canonical_url(html: &Html, base: &Url) -> Option<String> {
             continue;
         }
         let resolved = base.join(element.value().attr("href")?).ok()?;
-        if resolved.host_str() != base.host_str() {
+        if resolved.origin() != base.origin() {
             return None;
         }
         return normalize_url(resolved.as_str());
     }
     None
+}
+
+/// Parse URL locations from a sitemap or sitemap index.
+pub fn sitemap_locations(xml: &[u8], limit: usize) -> Result<(bool, Vec<String>), String> {
+    use quick_xml::Reader;
+    use quick_xml::events::Event;
+
+    let mut reader = Reader::from_reader(xml);
+    let mut index = None;
+    let mut urls = Vec::new();
+    loop {
+        match reader.read_event().map_err(|error| error.to_string())? {
+            Event::Start(element) if index.is_none() => {
+                index = match element.local_name().as_ref() {
+                    "urlset" => Some(false),
+                    "sitemapindex" => Some(true),
+                    _ => return Err("not a sitemap document".into()),
+                };
+            }
+            Event::Start(element) if element.local_name().as_ref() == "loc" => {
+                if urls.len() >= limit {
+                    break;
+                }
+                let text = reader
+                    .read_text(element.name())
+                    .map_err(|error| error.to_string())?;
+                let text = quick_xml::escape::unescape(&text).map_err(|error| error.to_string())?;
+                if text.len() <= 8192 {
+                    if let Some(url) = normalize_url(&text) {
+                        urls.push(url);
+                    }
+                }
+                if urls.len() >= limit {
+                    break;
+                }
+            }
+            Event::Eof => break,
+            _ => {}
+        }
+    }
+    index
+        .map(|index| (index, urls))
+        .ok_or_else(|| "empty sitemap document".into())
 }
 
 /// Whether a link carries `rel="nofollow"` (or `ugc` / `sponsored`).
@@ -225,6 +276,9 @@ mod tests {
         assert!(header_directives("rustxng-index: noindex").noindex);
         assert!(!header_directives("googlebot: noindex").noindex);
         assert!(!header_directives("all").noindex);
+        assert!(header_directives("googlebot: nofollow, rustxng-index: noindex").noindex);
+        assert!(!header_directives("rustxng-index: noindex, googlebot: nofollow").nofollow);
+        assert!(header_directives("max-snippet: 50, noindex").noindex);
     }
 
     #[test]
@@ -253,6 +307,24 @@ mod tests {
         );
         let foreign = Html::parse_document(r#"<link rel="canonical" href="https://evil.test/a">"#);
         assert_eq!(canonical_url(&foreign, &base), None);
+        let port =
+            Html::parse_document(r#"<link rel="canonical" href="https://example.com:8443/a">"#);
+        assert_eq!(canonical_url(&port, &base), None);
+    }
+
+    #[test]
+    fn sitemaps_support_namespaces_entities_and_bounded_locations() {
+        let xml = br#"<sm:urlset xmlns:sm="http://www.sitemaps.org/schemas/sitemap/0.9">
+            <sm:url><sm:loc>https://example.org/p?a=1&amp;b=2</sm:loc></sm:url>
+            <sm:url><sm:loc>https://example.org/second</sm:loc></sm:url>
+        </sm:urlset>"#;
+        assert_eq!(
+            sitemap_locations(xml, 1).unwrap(),
+            (false, vec!["https://example.org/p?a=1&b=2".into()])
+        );
+        assert!(sitemap_locations(xml, 0).unwrap().1.is_empty());
+        assert_eq!(sitemap_locations(xml, 10).unwrap().1.len(), 2);
+        assert!(sitemap_locations(b"<html><loc>x</loc></html>", 10).is_err());
     }
 
     #[test]

@@ -244,6 +244,7 @@ pub struct UnresponsiveEngine {
 pub struct ResultContainer {
     main: Vec<SearchResult>,
     index: HashMap<String, usize>,
+    source_ranks: Vec<Vec<SourceRank>>,
     pub infoboxes: Vec<Infobox>,
     pub suggestions: BTreeSet<String>,
     pub answers: Vec<String>,
@@ -255,6 +256,24 @@ pub struct ResultContainer {
     pub redirect_url: Option<String>,
     closed: bool,
     ordered: Vec<SearchResult>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SourceRank {
+    weight: f64,
+    position: u32,
+    deep_page: u32,
+}
+
+impl SourceRank {
+    fn score(self, priority: Priority) -> f64 {
+        let score = match priority {
+            Priority::Low => 0.0,
+            Priority::Medium => self.weight / f64::from(self.position),
+            Priority::High => self.weight,
+        };
+        score * 0.5f64.powf(f64::from(self.deep_page))
+    }
 }
 
 impl ResultContainer {
@@ -283,7 +302,7 @@ impl ResultContainer {
             return;
         }
         const PAGE_POSITION_STRIDE: u32 = 100;
-        let mut position = page_offset * PAGE_POSITION_STRIDE;
+        let mut position = page_offset.saturating_mul(PAGE_POSITION_STRIDE);
         let deep_page = page_offset;
         for item in items {
             match item {
@@ -336,21 +355,50 @@ impl ResultContainer {
                     }
                     result.img_src = result.img_src.filter(|url| is_web_url(url));
                     result.thumbnail = result.thumbnail.filter(|url| is_web_url(url));
-                    position += 1;
+                    position = position.saturating_add(1);
                     result.positions = vec![position];
                     result.engine = engine_name.to_string();
                     result.engines = vec![engine_name.to_string()];
                     result.score = weight;
+                    let rank = SourceRank {
+                        weight,
+                        position,
+                        deep_page,
+                    };
                     let key = dedup_key(&result.url);
                     match self.index.get(&key).copied() {
                         Some(existing) => {
                             let merged = &mut self.main[existing];
+                            let ranks = &mut self.source_ranks[existing];
+                            match merged
+                                .engines
+                                .iter()
+                                .position(|engine| engine == engine_name)
+                            {
+                                Some(source) => {
+                                    let previous = ranks[source];
+                                    let score = rank.score(merged.priority);
+                                    let previous_score = previous.score(merged.priority);
+                                    if score > previous_score
+                                        || (score == previous_score && position < previous.position)
+                                    {
+                                        ranks[source] = rank;
+                                        merged.positions[source] = position;
+                                    }
+                                }
+                                None => {
+                                    ranks.push(rank);
+                                    merged.positions.push(position);
+                                }
+                            }
+                            merged.deep_page =
+                                ranks.iter().map(|rank| rank.deep_page).min().unwrap_or(0);
                             merge_result(merged, &result);
-                            merged.positions.push(position);
                         }
                         None => {
                             self.index.insert(key, self.main.len());
                             self.main.push(result);
+                            self.source_ranks.push(vec![rank]);
                         }
                     }
                 }
@@ -374,10 +422,13 @@ impl ResultContainer {
         self.infoboxes
             .sort_by_key(|infobox| infobox.img_src.is_none());
 
-        for result in &mut self.main {
+        for (result, ranks) in self.main.iter_mut().zip(&self.source_ranks) {
             let mut weight = 1.0;
-            for engine in &result.engines {
-                weight *= weight_of(engine);
+            for (source, engine) in result.engines.iter().enumerate() {
+                weight *= ranks
+                    .get(source)
+                    .map(|rank| rank.weight)
+                    .unwrap_or_else(|| weight_of(engine));
             }
             weight *= result.positions.len() as f64;
             let mut score = 0.0;
@@ -400,7 +451,7 @@ impl ResultContainer {
             // A page-2 hit is a fallback: it never outranks the same engine's
             // page-1 answer for the query.
             if result.deep_page > 0 {
-                result.score *= 0.5f64.powi(result.deep_page as i32);
+                result.score *= 0.5f64.powf(f64::from(result.deep_page));
             }
             if authority_weight > 0.0 {
                 let signal = authority(query_text, &result.url) - 0.5;
@@ -1202,7 +1253,12 @@ pub fn host_of(url: &str) -> Option<String> {
 
 /// Whether [host] is [domain] itself or one of its subdomains.
 pub fn domain_matches(host: &str, domain: &str) -> bool {
-    let domain = domain
+    let domain = normalize_domain(domain);
+    !domain.is_empty() && (host == domain || host.ends_with(&format!(".{domain}")))
+}
+
+pub(crate) fn normalize_domain(domain: &str) -> String {
+    domain
         .trim()
         .trim_start_matches("http://")
         .trim_start_matches("https://")
@@ -1213,11 +1269,7 @@ pub fn domain_matches(host: &str, domain: &str) -> bool {
         .next()
         .unwrap_or(domain)
         .trim_start_matches("www.")
-        .to_lowercase();
-    if domain.is_empty() {
-        return false;
-    }
-    host == domain || host.ends_with(&format!(".{domain}"))
+        .to_lowercase()
 }
 
 /// Apply the optional agent-facing result filters.
@@ -1564,6 +1616,105 @@ mod tests {
         );
         // `ordered` is the ranking the UI shows: engine weight wins.
         assert_eq!(container.ordered()[0].url, "https://example.com/b");
+    }
+
+    #[test]
+    fn weights_supplied_with_results_override_registry_defaults() {
+        let mut container = ResultContainer::new();
+        container.extend(
+            "routed",
+            2.0,
+            vec![result("https://example.com/routed", "routed")],
+        );
+        container.extend(
+            "official site",
+            0.5,
+            vec![result("https://example.com/official", "official")],
+        );
+        container.close(|_| 1.0, &[], 0.0, "", 0.0);
+        assert_eq!(container.ordered()[0].score, 2.0);
+        assert_eq!(container.ordered()[1].score, 0.5);
+    }
+
+    #[test]
+    fn repeated_urls_from_one_source_cast_one_vote() {
+        let mut container = ResultContainer::new();
+        container.extend(
+            "a",
+            1.0,
+            vec![
+                result("https://example.com/page", "page"),
+                result("http://example.com/page?utm_source=a", "page again"),
+            ],
+        );
+        container.extend_from_page(
+            "a",
+            1.0,
+            vec![result("https://example.com/page", "page again")],
+            1,
+        );
+        container.close(|_| 1.0, &[], 0.0, "", 0.0);
+        let result = &container.ordered()[0];
+        assert_eq!(result.engines, ["a"]);
+        assert_eq!(result.positions, [1]);
+        assert_eq!(result.score, 1.0);
+    }
+
+    #[test]
+    fn independent_sources_still_contribute_their_best_positions() {
+        let mut container = ResultContainer::new();
+        container.extend_from_page(
+            "a",
+            1.0,
+            vec![result("https://example.com/page", "page")],
+            1,
+        );
+        container.extend("a", 1.0, vec![result("https://example.com/page", "page")]);
+        container.extend("b", 1.0, vec![result("https://example.com/page", "page")]);
+        container.close(|_| 1.0, &[], 0.0, "", 0.0);
+        let result = &container.ordered()[0];
+        assert_eq!(result.engines, ["a", "b"]);
+        assert_eq!(result.positions, [1, 1]);
+        assert_eq!(result.deep_page, 0);
+        assert_eq!(result.score, 4.0);
+    }
+
+    #[test]
+    fn query_specific_weights_do_not_leak_between_results_of_one_source() {
+        for reverse in [false, true] {
+            let mut container = ResultContainer::new();
+            let mut passes = vec![
+                (
+                    1.0,
+                    vec![
+                        result("https://example.com/plain", "plain"),
+                        result("https://example.com/shared", "shared"),
+                    ],
+                ),
+                (
+                    2.0,
+                    vec![
+                        result("https://example.com/shared", "shared"),
+                        result("https://example.com/routed", "routed"),
+                    ],
+                ),
+            ];
+            if reverse {
+                passes.reverse();
+            }
+            for (weight, items) in passes {
+                container.extend("source", weight, items);
+            }
+            container.close(|_| 1.0, &[], 0.0, "", 0.0);
+            let scores: std::collections::BTreeMap<_, _> = container
+                .ordered()
+                .iter()
+                .map(|result| (result.url.as_str(), result.score))
+                .collect();
+            assert_eq!(scores["https://example.com/plain"], 1.0);
+            assert_eq!(scores["https://example.com/shared"], 2.0);
+            assert_eq!(scores["https://example.com/routed"], 1.0);
+        }
     }
 
     #[test]

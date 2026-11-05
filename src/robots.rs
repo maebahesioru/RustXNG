@@ -91,7 +91,7 @@ impl Robots {
                         if !value.is_empty() {
                             group.1.push(Rule {
                                 allow: key == "allow",
-                                pattern: value.to_string(),
+                                pattern: normalize_octets(value),
                             });
                         }
                     }
@@ -167,9 +167,10 @@ impl Robots {
         } else {
             path_and_query
         };
+        let target = normalize_octets(target);
         let mut best: Option<(usize, bool)> = None;
         for rule in &self.rules {
-            if !pattern_matches(&rule.pattern, target) {
+            if !pattern_matches(&rule.pattern, &target) {
                 continue;
             }
             let length = rule.pattern.len();
@@ -195,6 +196,41 @@ impl Robots {
     pub fn sitemaps(&self) -> &[String] {
         &self.sitemaps
     }
+}
+
+fn normalize_octets(value: &str) -> String {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let mut out = String::with_capacity(value.len());
+    let mut bytes = value.bytes().peekable();
+    while let Some(byte) = bytes.next() {
+        if byte == b'%' {
+            let mut lookahead = bytes.clone();
+            let escaped = lookahead
+                .next()
+                .and_then(|high| (high as char).to_digit(16))
+                .zip(lookahead.next().and_then(|low| (low as char).to_digit(16)));
+            if let Some((high, low)) = escaped {
+                bytes = lookahead;
+                let decoded = (high * 16 + low) as u8;
+                if decoded.is_ascii_alphanumeric() || b"-._~".contains(&decoded) {
+                    out.push(decoded as char);
+                } else {
+                    out.push('%');
+                    out.push(HEX[high as usize] as char);
+                    out.push(HEX[low as usize] as char);
+                }
+                continue;
+            }
+        }
+        if byte.is_ascii() {
+            out.push(byte as char);
+        } else {
+            out.push('%');
+            out.push(HEX[(byte >> 4) as usize] as char);
+            out.push(HEX[(byte & 15) as usize] as char);
+        }
+    }
+    out
 }
 
 /// Match a robots pattern (`*` wildcard, trailing `$` anchor) against the
@@ -228,6 +264,7 @@ fn pattern_matches(pattern: &str, target: &str) -> bool {
     // Anchored: the last literal part has to end the path. Re-check from the
     // end because a greedy first match may have stopped too early.
     match parts.last() {
+        Some(last) if parts.len() > 1 && last.is_empty() => true,
         Some(last) if parts.len() > 1 && !last.is_empty() => target.ends_with(last),
         _ => position == target.len(),
     }
@@ -277,6 +314,30 @@ mod tests {
         assert!(robots.allowed("/files/a.pdf.html"));
         assert!(!robots.allowed("/search?lang=en&q=x"));
         assert!(robots.allowed("/search"));
+    }
+
+    #[test]
+    fn anchored_trailing_wildcards_cover_descendants() {
+        let robots = Robots::parse("User-agent: *\nDisallow: /private/*$\n", PRODUCT);
+        assert!(!robots.allowed("/private/"));
+        assert!(!robots.allowed("/private/child/grandchild?x=1"));
+        assert!(robots.allowed("/private"));
+        let all = Robots::parse("User-agent: *\nDisallow: /*$\n", PRODUCT);
+        assert!(!all.allowed("/anything"));
+    }
+
+    #[test]
+    fn rules_compare_encoded_octets_without_decoding_reserved_characters() {
+        let robots = Robots::parse(
+            "User-agent: *\nDisallow: /内部/\nDisallow: /%73ecret/\nDisallow: /a%2fb\n",
+            PRODUCT,
+        );
+        assert!(!robots.allowed("/%e5%86%85%e9%83%a8/page"));
+        assert!(!robots.allowed("/内部/page"));
+        assert!(!robots.allowed("/secret/page"));
+        assert!(!robots.allowed("/%73ecret/page"));
+        assert!(!robots.allowed("/a%2Fb"));
+        assert!(robots.allowed("/a/b"));
     }
 
     #[test]

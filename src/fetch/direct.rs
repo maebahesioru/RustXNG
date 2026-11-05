@@ -195,6 +195,29 @@ fn public_client_with_resolver(
     ))
 }
 
+/// Direct-only crawler client. Callers validate literal URLs and each redirect.
+pub fn public_blocking_client(user_agent: &str) -> Result<reqwest::blocking::Client, String> {
+    if environment_proxy_configured() {
+        return Err("crawling is unavailable with configured proxies: destination validation requires direct connections".into());
+    }
+    blocking_client_with_resolver(user_agent, Arc::new(SystemResolver))
+}
+
+fn blocking_client_with_resolver(
+    user_agent: &str,
+    resolver: Arc<dyn Resolve>,
+) -> Result<reqwest::blocking::Client, String> {
+    reqwest::blocking::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .dns_resolver(Arc::new(PublicResolver(resolver)))
+        .timeout(Duration::from_secs(20))
+        .connect_timeout(Duration::from_secs(4))
+        .user_agent(user_agent)
+        .build()
+        .map_err(|error| format!("crawler client: {error}"))
+}
+
 /// Inject DNS before the production address check; address overrides are only
 /// for an owned redirect entry server and bypass DNS deliberately.
 #[cfg(test)]
@@ -251,6 +274,7 @@ impl PageReader {
     #[cfg(test)]
     pub(crate) fn with_test_client(mut self, client: reqwest::Client) -> Self {
         self.client = client;
+        self.proxy_blocked = false;
         self
     }
 
@@ -785,6 +809,29 @@ mod tests {
             let addresses = self.0.lock().unwrap().pop_front().unwrap();
             Box::pin(async move { Ok(Box::new(addresses.into_iter()) as Addrs) })
         }
+    }
+
+    #[test]
+    fn blocking_crawler_rejects_private_dns_answers_before_connecting() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap();
+        let resolver = Arc::new(Answers(Mutex::new(VecDeque::from([vec![address]]))));
+        let client = blocking_client_with_resolver("rustxng-index", resolver.clone()).unwrap();
+        assert!(
+            client
+                .get(format!("http://example.test:{}/", address.port()))
+                .send()
+                .is_err()
+        );
+        assert!(
+            resolver.0.lock().unwrap().is_empty(),
+            "the production DNS check was reached"
+        );
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
     }
 
     #[tokio::test]

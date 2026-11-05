@@ -1,0 +1,152 @@
+{
+  "date_utc": "2026-11-05",
+  "baseline_commit": "5f0ae3bd4779fa49af4a0be10f397d63b4080170",
+  "candidate_code_commit": "be8f9212792e34c1445d5767b008a2572b03e6bb",
+  "candidate_code_tree": "7bdc644d4201efeffacbd6d07dc252f2bf579320",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "profile": "dev (unoptimized), CARGO_PROFILE_DEV_DEBUG=0, CARGO_BUILD_JOBS=4",
+  "kernel": "6.18.57",
+  "build_isolation": "Separate baseline and candidate Cargo targets; baseline package rebuilt after clearing rustxng artifacts. No concurrent builds during timings.",
+  "fixture_sha256": "df48a6836760f170ed9efc349f70c246ec56bb4d510bbfc1d7c32cbb35a5bee3",
+  "evaluator_sha256": "76487e5704974ac5310ab9880a299c52f8caaf7b9ea7070309d3fd0144728591",
+  "fusion": {
+    "baseline_commit": "5f0ae3bd4779fa49af4a0be10f397d63b4080170",
+    "candidate_tree": "7bdc644d4201efeffacbd6d07dc252f2bf579320",
+    "harness_sha256": "7f2634225c31410c6f355787e4e8cbcf912a5122da2631ff0995de0250c29a7a",
+    "scope": "Deterministic synthetic ResultContainer behavior; no provider traffic, quality or latency measurement.",
+    "profile": "dev; CARGO_PROFILE_DEV_DEBUG=0",
+    "binaries": {
+      "baseline": "abecdde4a9508a43095e5ffcbc6c8d339eda263d6d9f80102a5b6d59d40e1d9d",
+      "candidate": "87919cc8a3fda06afb1bcd46d227a8f54b4c7701afbd49cc4cbe85228715f1c4"
+    }
+  },
+  "gates": [
+    {
+      "gate": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "exit_code": 0,
+      "seconds": 0.766
+    },
+    {
+      "gate": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "seconds": 13.536
+    },
+    {
+      "gate": "rust-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "--all-targets"
+      ],
+      "exit_code": 0,
+      "seconds": 31.899,
+      "tests": {
+        "passed": 1070,
+        "failed": 0,
+        "ignored": 3
+      },
+      "suites": 12
+    },
+    {
+      "gate": "no-default-features",
+      "command": [
+        "cargo",
+        "check",
+        "--offline",
+        "--locked",
+        "--no-default-features",
+        "--all-targets"
+      ],
+      "exit_code": 0,
+      "seconds": 12.165
+    },
+    {
+      "gate": "build",
+      "command": [
+        "cargo",
+        "build",
+        "--offline",
+        "--locked",
+        "--bins",
+        "--example",
+        "local_index_eval"
+      ],
+      "exit_code": 0,
+      "seconds": 1.221
+    },
+    {
+      "gate": "python-tests",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tools",
+        "-p",
+        "test_*.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.165
+    },
+    {
+      "gate": "provider-inventory",
+      "command": [
+        "python3",
+        "tools/provider_inventory.py",
+        "--check"
+      ],
+      "exit_code": 0,
+      "seconds": 0.115
+    },
+    {
+      "gate": "smoke",
+      "command": [
+        "python3",
+        "tools/smoke_agent_setup.py",
+        "--binary",
+        "$CARGO_TARGET_DIR/debug/rustxng"
+      ],
+      "exit_code": 0,
+      "seconds": 1.369
+    }
+  ],
+  "additional_checks": {
+    "markdownlint_cli2": "0.24.0; repository Markdown and local-retrieval README; 32 files, zero issues",
+    "python_tests": {
+      "passed": 44,
+      "failed": 0
+    }
+  },
+  "ignored_tests": [
+    "mysql_and_mariadb_engines_bind_parameters_and_page_real_rows (requires isolated MySQL-compatible server)",
+    "cancelling_a_render_removes_the_browser_profile (requires optional Firefox installation)",
+    "javascript_pages_keep_guarded_fetches_limits_and_cached_text (requires optional Firefox installation)"
+  ],
+  "test_environment": "Offline Cargo and localhost fixtures; proxy variables removed only in the reviewed local-test child process. Production proxy validation remains enabled.",
+  "limitations": [
+    "Synthetic development corpus, not held out or web scale.",
+    "No live Exa/Tavily comparison.",
+    "Non-release local search timings exclude HTTP, serialization and indexing.",
+    "Baseline loose zh02 returned185 changed payloads; detailed later snapshots were not captured, so changes cannot be classified. Quality uses the first observation by protocol.",
+    "Real browser, MySQL, other operating systems, Rust1.88, and container checks are left to repository CI."
+  ]
+}

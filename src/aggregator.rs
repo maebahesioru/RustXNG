@@ -73,6 +73,30 @@ impl SearchRequest {
             query,
         }
     }
+
+    fn explicit_engines(&self) -> Vec<String> {
+        if self.engines.is_empty() {
+            self.query.engine_ref_names()
+        } else {
+            self.engines.clone()
+        }
+    }
+
+    fn is_single_source(&self) -> bool {
+        let engines = self.explicit_engines();
+        engines
+            .first()
+            .is_some_and(|first| engines.iter().all(|name| name.eq_ignore_ascii_case(first)))
+    }
+
+    fn is_general_search(&self) -> bool {
+        self.engines.is_empty()
+            && !self.query.specific
+            && self.query.engine_refs.is_empty()
+            && self.categories.iter().all(|category| {
+                crate::categories::normalize(category) == crate::categories::GENERAL
+            })
+    }
 }
 
 /// The result of a search, mirroring the fields of upstream's JSON response.
@@ -155,52 +179,85 @@ fn open_local_index(settings: &Settings) -> Option<Arc<crate::localindex::LocalI
     open_index_at(settings.search.local_index_path.trim())
 }
 
-/// Open the configured Wikipedia index, if any.
-/// How long a local index may overrun the search deadline before its hits are
-/// dropped. An index on a cold disk cache can take seconds; a search must not
-/// wait for it, nor block an async worker while it reads.
 /// Extra weight for a source the query names ("... arxiv", "... npm").
 const ROUTED_WEIGHT: f64 = 2.0;
 
 /// Longest wait for the Wikidata official-site lookup.
 const OFFICIAL_SITE_BUDGET: Duration = Duration::from_millis(1500);
 
+/// Extra time for a local index on a cold disk cache.
 const INDEX_GRACE: Duration = Duration::from_millis(400);
+const LOCAL_PAGE_SIZE: usize = 20;
+static INDEX_SEARCH_SLOTS: std::sync::LazyLock<Arc<tokio::sync::Semaphore>> =
+    std::sync::LazyLock::new(|| Arc::new(tokio::sync::Semaphore::new(4)));
+
+struct IndexFailure {
+    kind: FailureKind,
+    message: String,
+}
 
 /// Query a local index off the async workers and give up at the deadline.
-/// Failures and timeouts yield no hits (the engines' results still stand).
 async fn bounded_index_search(
     index: &Arc<crate::localindex::LocalIndex>,
     text: String,
     loose: bool,
+    include_domains: Vec<String>,
+    exclude_domains: Vec<String>,
+    pageno: u32,
     deadline: Instant,
-) -> Vec<crate::localindex::Hit> {
+) -> Result<Vec<crate::localindex::Hit>, IndexFailure> {
     let index = Arc::clone(index);
-    let budget = deadline.saturating_duration_since(Instant::now()) + INDEX_GRACE;
-    let task = tokio::task::spawn_blocking(move || {
-        if loose {
-            index.search_loose(&text, 20)
-        } else {
-            index.search(&text, 20)
-        }
-    });
-    match tokio::time::timeout(budget, task).await {
-        Ok(Ok(Ok(mut hits))) => {
-            // One site near-duplicate pages must not crowd out the other
-            // sources in the merge (python release pages flooded a docs query).
-            if !loose {
-                hits = cap_per_host(hits, MAX_PER_HOST);
+    let expires = tokio::time::Instant::from_std(deadline + INDEX_GRACE);
+    let permit =
+        match tokio::time::timeout_at(expires, Arc::clone(&INDEX_SEARCH_SLOTS).acquire_owned())
+            .await
+        {
+            Ok(Ok(permit)) => permit,
+            Ok(Err(error)) => {
+                return Err(IndexFailure {
+                    kind: FailureKind::Other,
+                    message: error.to_string(),
+                });
             }
-            hits
-        }
-        Ok(Ok(Err(error))) => {
-            tracing::debug!(%error, "local index search failed");
-            Vec::new()
-        }
-        _ => {
-            tracing::debug!("local index search did not finish in time");
-            Vec::new()
-        }
+            Err(_) => {
+                return Err(IndexFailure {
+                    kind: FailureKind::Timeout,
+                    message: "local search timed out waiting for capacity".to_string(),
+                });
+            }
+        };
+    if tokio::time::Instant::now() >= expires {
+        return Err(IndexFailure {
+            kind: FailureKind::Timeout,
+            message: "local search timed out waiting for capacity".to_string(),
+        });
+    }
+    let task = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        let start = (pageno.saturating_sub(1) as usize).saturating_mul(LOCAL_PAGE_SIZE);
+        let end = start.saturating_add(LOCAL_PAGE_SIZE);
+        let end = if end <= crate::localindex::MAX_SEARCH_WINDOW {
+            end.saturating_add(1)
+                .min(crate::localindex::MAX_SEARCH_WINDOW)
+        } else {
+            end
+        };
+        index.search_range(&text, start..end, &include_domains, &exclude_domains, loose)
+    });
+    match tokio::time::timeout_at(expires, task).await {
+        Ok(Ok(Ok(hits))) => Ok(hits),
+        Ok(Ok(Err(message))) => Err(IndexFailure {
+            kind: FailureKind::Other,
+            message,
+        }),
+        Ok(Err(error)) => Err(IndexFailure {
+            kind: FailureKind::Other,
+            message: format!("local search task failed: {error}"),
+        }),
+        Err(_) => Err(IndexFailure {
+            kind: FailureKind::Timeout,
+            message: "local search timed out".to_string(),
+        }),
     }
 }
 
@@ -241,6 +298,10 @@ fn cap_per_host(hits: Vec<crate::localindex::Hit>, max: usize) -> Vec<crate::loc
 
 fn open_wiki_index(settings: &Settings) -> Option<Arc<crate::localindex::LocalIndex>> {
     open_index_at(settings.search.wikipedia_index_path.trim())
+}
+
+fn is_local_source(name: &str) -> bool {
+    name.eq_ignore_ascii_case("local_index") || name.eq_ignore_ascii_case("wikipedia_index")
 }
 
 fn open_index_at(path: &str) -> Option<Arc<crate::localindex::LocalIndex>> {
@@ -303,11 +364,7 @@ impl Searcher {
 
     /// Engines that answer a request, in registry order.
     pub fn select_engines(&self, request: &SearchRequest) -> Vec<EngineHandle> {
-        let explicit: Vec<String> = if !request.engines.is_empty() {
-            request.engines.clone()
-        } else {
-            request.query.engine_ref_names()
-        };
+        let explicit = request.explicit_engines();
         let wanted_categories: Vec<String> = if !request.categories.is_empty() {
             request.categories.clone()
         } else {
@@ -320,7 +377,11 @@ impl Searcher {
             let mut selected = Vec::new();
             for engine in self.registry.iter() {
                 let name = engine.name().to_string();
-                if request.disabled_engines.contains(&name) {
+                if request
+                    .disabled_engines
+                    .iter()
+                    .any(|disabled| disabled.eq_ignore_ascii_case(&name))
+                {
                     continue;
                 }
                 if !explicit.is_empty() {
@@ -345,10 +406,30 @@ impl Searcher {
             selected
         };
         let selected = run(&explicit);
-        if selected.is_empty() && !explicit.is_empty() {
+        if selected.is_empty()
+            && !explicit.is_empty()
+            && !explicit.iter().any(|name| is_local_source(name))
+        {
             return run(&[]);
         }
         selected
+    }
+
+    fn index_is_selected(&self, request: &SearchRequest, name: &str) -> bool {
+        if request
+            .disabled_engines
+            .iter()
+            .any(|disabled| disabled.eq_ignore_ascii_case(name))
+        {
+            return false;
+        }
+        let explicit = request.explicit_engines();
+        if !explicit.is_empty() {
+            return explicit
+                .iter()
+                .any(|selected| selected.eq_ignore_ascii_case(name));
+        }
+        self.settings.search.local_index_merge && request.is_general_search()
     }
 
     /// Specialised engines a general search names by their own name
@@ -370,11 +451,7 @@ impl Searcher {
             "scientific publications",
         ];
         const MAX_ROUTED: usize = 2;
-        let general_only = request.categories.is_empty()
-            || request.categories.iter().all(|category| {
-                crate::categories::normalize(category) == crate::categories::GENERAL
-            });
-        if !request.engines.is_empty() || request.query.specific || !general_only {
+        if !request.is_general_search() {
             return None;
         }
         let words: Vec<String> = request
@@ -490,7 +567,15 @@ impl Searcher {
             }
         }
         let mut engines = self.select_engines(&request);
-        if engines.is_empty() {
+        let local_index = self
+            .local_index
+            .as_ref()
+            .filter(|_| self.index_is_selected(&request, "local_index"));
+        let wiki_index = self
+            .wiki_index
+            .as_ref()
+            .filter(|_| self.index_is_selected(&request, "wikipedia_index"));
+        if engines.is_empty() && local_index.is_none() && wiki_index.is_none() {
             response.error = Some("no engine selected for this request".to_string());
             return response;
         }
@@ -501,12 +586,7 @@ impl Searcher {
         // engine failure.
         engines.retain(|engine| engine.is_applicable(&request.query));
 
-        // 全 engine の完了を待つ（join_all）。
-        //
-        // 以前はここで timeout_limit を engine ごとに一律適用していたため、
-        // **速い engine が締め切りに巻き込まれて結果を捨てていた**（実測: 45ms で
-        // 終わる engine が 102ms の締め切りで Timeout 扱いになり 0 件）。
-        // 締め切りは「検索全体」に対してかけ、完了済みの結果は必ず活かす。
+        // All providers share one deadline; completed results are retained.
         let deadline = Instant::now()
             + Duration::from_secs_f64(
                 request
@@ -517,42 +597,46 @@ impl Searcher {
         // A general search that names a specialised source ("... arxiv",
         // "... github") also asks that source, without the site's name.
         let routed = self.site_routes(&request, &engines);
-        // The local indexes are read on blocking threads while the engines
-        // are out, so they add no latency of their own.
-        let merged_search = self.settings.search.local_index_merge && request.engines.len() != 1;
-        let local_task = self
-            .local_index
-            .as_ref()
-            .filter(|_| merged_search)
-            .map(|index| {
+        let mut index_tasks = tokio::task::JoinSet::new();
+        for (source, index, loose) in [
+            ("local_index", local_index, false),
+            ("wikipedia_index", wiki_index, true),
+        ] {
+            if let Some(index) = index {
                 let index = Arc::clone(index);
-                let text = request.query.query_text();
-                tokio::spawn(
-                    async move { bounded_index_search(&index, text, false, deadline).await },
-                )
-            });
-        let wiki_task = self
-            .wiki_index
-            .as_ref()
-            .filter(|_| merged_search)
-            .map(|index| {
-                let index = Arc::clone(index);
-                let text = crate::engine::util::search_keywords(
-                    &crate::engines::wikipedia::without_site_name(&request.query.query_text()),
-                );
-                tokio::spawn(
-                    async move { bounded_index_search(&index, text, true, deadline).await },
-                )
-            });
+                let text = if loose {
+                    crate::engine::util::search_keywords(
+                        &crate::engines::wikipedia::without_site_name(&request.query.query_text()),
+                    )
+                } else {
+                    request.query.query_text()
+                };
+                let include_domains = request.include_domains.clone();
+                let exclude_domains = request.exclude_domains.clone();
+                let pageno = request.pageno;
+                index_tasks.spawn(async move {
+                    (
+                        source,
+                        bounded_index_search(
+                            &index,
+                            text,
+                            loose,
+                            include_domains,
+                            exclude_domains,
+                            pageno,
+                            deadline,
+                        )
+                        .await,
+                    )
+                });
+            }
+        }
         // The official-site lookup starts as soon as Wikipedia has answered,
         // not after the slowest engine.
-        let official_task: std::sync::Mutex<Option<tokio::task::JoinHandle<Vec<SearchResult>>>> =
-            std::sync::Mutex::new(None);
+        let official_tasks = std::sync::Mutex::new(tokio::task::JoinSet::new());
         let start_official = |outcome: &EngineOutcome| {
-            if let Some(task) = self.official_lookup_for(&request, outcome) {
-                if let Ok(mut slot) = official_task.lock() {
-                    slot.get_or_insert(task);
-                }
+            if let Ok(mut tasks) = official_tasks.lock() {
+                self.start_official_lookup(&request, outcome, &mut tasks);
             }
         };
         let main = async {
@@ -594,7 +678,9 @@ impl Searcher {
         for outcome in &outcomes {
             start_official(outcome);
         }
-        let official_lookup = official_task.into_inner().ok().flatten();
+        let mut official_tasks = official_tasks
+            .into_inner()
+            .unwrap_or_else(|error| error.into_inner());
 
         // Remember which engines answered before the outcomes are consumed;
         // the deep-page pass only asks those again.
@@ -623,7 +709,7 @@ impl Searcher {
         // Extra result pages: coverage, not ranking, is what limits recall for
         // documentation questions, so page 2 is worth fetching when asked for.
         let deep_pages = self.settings.search.deep_pages;
-        if deep_pages > 0 && request.engines.len() != 1 && Instant::now() < deadline {
+        if deep_pages > 0 && !request.is_single_source() && Instant::now() < deadline {
             let paging: Vec<EngineHandle> = engines
                 .iter()
                 .filter(|engine| engine.paging() && healthy.contains(&engine.name().to_string()))
@@ -634,7 +720,7 @@ impl Searcher {
                     break;
                 }
                 let mut deeper = request.clone();
-                deeper.pageno = request.pageno + extra;
+                deeper.pageno = request.pageno.saturating_add(extra);
                 let page_outcomes = futures::future::join_all(
                     paging
                         .iter()
@@ -653,56 +739,63 @@ impl Searcher {
         // Relevance re-ranking only applies when the response merges several
         // engines (the general search). A single pinned engine keeps the
         // engine's own order, which preserves exact SearXNG overlap@10.
-        let relevance_weight = if request.engines.len() == 1 {
+        let relevance_weight = if request.is_single_source() {
             0.0
         } else {
             self.settings.search.relevance_weight
         };
         // Canonical-site boost: naming a site means "that site's own page".
         let query_text = request.query.query_text();
-        let authority_weight = if request.engines.len() == 1 {
+        let authority_weight = if request.is_single_source() {
             0.0
         } else {
             self.settings.search.authority_weight
         };
-        // The local index is just another source of pages.
-        if let Some(task) = local_task {
-            let hits = task.await.unwrap_or_default();
-            let items: Vec<EngineItem> = hits
-                .into_iter()
-                .map(|hit| {
-                    let mut result = SearchResult::new(hit.url, hit.title);
-                    result.content = hit.snippet;
-                    result.score = f64::from(hit.score);
-                    EngineItem::Result(result)
-                })
-                .collect();
-            container.extend("local_index", 1.0, items);
+        let mut indexed_hits = BTreeMap::new();
+        while let Some(outcome) = index_tasks.join_next().await {
+            if let Ok((source, hits)) = outcome {
+                indexed_hits.insert(source, hits);
+            }
         }
-
-        // The Wikipedia dump index: loose matching over the opening of every
-        // article, so a question finds the article even when the words are spread.
-        if let Some(task) = wiki_task {
-            let hits = task.await.unwrap_or_default();
+        let mut index_errors = Vec::new();
+        for (source, outcome) in indexed_hits {
+            response.engines.push(source.to_string());
+            let mut hits = match outcome {
+                Ok(hits) => hits,
+                Err(error) => {
+                    tracing::debug!(source, message = %error.message, "local index search failed");
+                    container.add_unresponsive_engine(source, error.kind.error_type(), false);
+                    index_errors.push(format!("{source}: {}", error.message));
+                    continue;
+                }
+            };
+            container.paging |= hits.len() > LOCAL_PAGE_SIZE;
+            hits.truncate(LOCAL_PAGE_SIZE);
+            if source == "local_index" && !request.is_single_source() {
+                hits = cap_per_host(hits, MAX_PER_HOST);
+            }
             let items: Vec<EngineItem> = hits
                 .into_iter()
                 .map(|hit| {
-                    // Older dumps were indexed with `%28`-style
-                    // titles; use the canonical article URL.
-                    let url = match crate::official::article_of(&hit.url) {
-                        Some(article) => crate::official::article_iri(&article),
-                        None => hit.url,
+                    let url = if source == "wikipedia_index" {
+                        crate::official::article_of(&hit.url)
+                            .map(|article| crate::official::article_iri(&article))
+                            .unwrap_or(hit.url)
+                    } else {
+                        hit.url
                     };
                     let mut result = SearchResult::new(url, hit.title);
                     result.content = hit.snippet;
-                    result.score = f64::from(hit.score);
                     EngineItem::Result(result)
                 })
                 .collect();
-            container.extend("wikipedia_index", 1.0, items);
+            container.extend(source, 1.0, items);
+        }
+        if engines.is_empty() && container.main_results().is_empty() && !index_errors.is_empty() {
+            response.error = Some(index_errors.join("; "));
         }
 
-        if let Some(task) = official_lookup {
+        if !official_tasks.is_empty() {
             // It started with Wikipedia's answer; give it a little more time,
             // never past the search deadline.
             let wait =
@@ -711,14 +804,17 @@ impl Searcher {
                     .min(Duration::from_millis(
                         self.settings.search.official_sites_wait_ms,
                     ));
-            let found = tokio::time::timeout(wait, task).await;
-            if let Ok(Ok(found)) = found {
+            let found = tokio::time::timeout(wait, official_tasks.join_next()).await;
+            if let Ok(Some(Ok(found))) = found {
                 let items: Vec<EngineItem> = found.into_iter().map(EngineItem::Result).collect();
+                response.engines.push("official site".to_string());
                 container.extend(
                     "official site",
                     self.settings.search.official_sites_weight,
                     items,
                 );
+            } else {
+                official_tasks.abort_all();
             }
         }
 
@@ -740,9 +836,11 @@ impl Searcher {
             );
         }
 
-        // Semantic re-ranking (embeddings) for merged multi-engine results.
-        // Matches neural rankers like Exa; single-engine keeps upstream order.
-        if request.engines.len() != 1 && !self.settings.search.embedding_url.is_empty() {
+        // Local-only searches never contact an embeddings service.
+        if !engines.is_empty()
+            && !request.is_single_source()
+            && !self.settings.search.embedding_url.is_empty()
+        {
             results = self.rerank_by_embedding(&request.query, results).await;
         }
 
@@ -793,7 +891,7 @@ impl Searcher {
         let answer_context = crate::answerers::AnswerContext {
             locale: context.locale.clone(),
             base_url: context.base_url.clone(),
-            network: Some(self.network.clone()),
+            network: (!engines.is_empty()).then(|| Arc::clone(&self.network)),
         };
         let answers = crate::answerers::ask(
             &crate::answerers::all(),
@@ -807,21 +905,23 @@ impl Searcher {
     }
 
     /// Start the official-site lookup for the articles Wikipedia returned.
-    fn official_lookup_for(
+    fn start_official_lookup(
         &self,
         request: &SearchRequest,
         outcome: &EngineOutcome,
-    ) -> Option<tokio::task::JoinHandle<Vec<SearchResult>>> {
+        tasks: &mut tokio::task::JoinSet<Vec<SearchResult>>,
+    ) {
         if !self.settings.search.official_sites
-            || request.engines.len() == 1
+            || !request.is_general_search()
             || outcome.engine != "wikipedia"
+            || !tasks.is_empty()
         {
-            return None;
+            return;
         }
-        let articles: Vec<crate::official::Article> = outcome
-            .items
-            .as_ref()
-            .ok()?
+        let Ok(items) = &outcome.items else {
+            return;
+        };
+        let articles: Vec<crate::official::Article> = items
             .iter()
             .filter_map(|item| match item {
                 EngineItem::Result(result) => crate::official::article_of(&result.url),
@@ -830,14 +930,14 @@ impl Searcher {
             .take(crate::official::MAX_ARTICLES)
             .collect();
         if articles.is_empty() {
-            return None;
+            return;
         }
         let network = Arc::clone(&self.network);
         let kinds = crate::official::kinds_for(&request.query.query_text());
         let locale = request.language.clone();
         let cache = Arc::clone(&self.cache);
         let reader = self.page_reader.clone();
-        Some(tokio::spawn(async move {
+        tasks.spawn(async move {
             crate::official::lookup_cached(
                 &network,
                 &cache,
@@ -848,7 +948,7 @@ impl Searcher {
                 &locale,
             )
             .await
-        }))
+        });
     }
 
     async fn run_engine(
@@ -1032,7 +1132,7 @@ impl Searcher {
         request: &SearchRequest,
         mut results: Vec<SearchResult>,
     ) -> Vec<SearchResult> {
-        if !self.settings.search.site_scoped_retry || request.engines.len() == 1 {
+        if !self.settings.search.site_scoped_retry || !request.is_general_search() {
             return results;
         }
         let text = request.query.query_text();
@@ -1440,6 +1540,20 @@ mod orchestration_tests {
                 .map(|predicate| predicate(query))
                 .unwrap_or(true)
         }
+        fn is_offline(&self) -> bool {
+            true
+        }
+        fn search_offline(
+            &self,
+            query: &Query,
+            pageno: u32,
+        ) -> Result<Vec<EngineItem>, EngineError> {
+            self.build_request(query, pageno)?;
+            self.parse(
+                &EngineResponse::new(200, "https://fake.invalid/", Vec::new()),
+                query,
+            )
+        }
         fn build_request(&self, query: &Query, _pageno: u32) -> Result<EngineRequest, EngineError> {
             self.queries.lock().unwrap().push(query.clone());
             if self.build_error {
@@ -1493,6 +1607,260 @@ mod orchestration_tests {
 
     fn searcher_for_routes(engine: EngineHandle) -> Searcher {
         searcher(vec![engine])
+    }
+
+    fn with_local_index(engines: Vec<EngineHandle>) -> (tempfile::TempDir, Searcher) {
+        let directory = tempfile::tempdir().unwrap();
+        let index = crate::localindex::LocalIndex::open_for_write(directory.path()).unwrap();
+        index
+            .add(&crate::localindex::Page {
+                url: "https://docs.example/needle",
+                title: "Needle",
+                body: "The needle reference page.",
+                lang: "en",
+                snippet: "",
+            })
+            .unwrap();
+        index.commit().unwrap();
+        let mut searcher = searcher(engines);
+        searcher.local_index = Some(Arc::new(index));
+        (directory, searcher)
+    }
+
+    #[tokio::test]
+    async fn a_local_index_can_search_without_remote_engines() {
+        let (_directory, searcher) = with_local_index(vec![]);
+        let response = searcher
+            .search(SearchRequest::new(query("needle", &searcher.registry)))
+            .await;
+        assert!(response.error.is_none());
+        assert_eq!(response.engines, ["local_index"]);
+        assert_eq!(response.results.len(), 1);
+        assert_eq!(response.results[0].url, "https://docs.example/needle");
+    }
+
+    #[tokio::test]
+    async fn local_search_waits_for_capacity_only_until_its_deadline() {
+        let (_directory, searcher) = with_local_index(vec![]);
+        let occupied = Arc::clone(&INDEX_SEARCH_SLOTS)
+            .acquire_many_owned(4)
+            .await
+            .unwrap();
+        let deadline = Instant::now() - INDEX_GRACE + Duration::from_millis(20);
+        let error = bounded_index_search(
+            searcher.local_index.as_ref().unwrap(),
+            "needle".into(),
+            false,
+            Vec::new(),
+            Vec::new(),
+            1,
+            deadline,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.kind, FailureKind::Timeout);
+        drop(occupied);
+        let hits = bounded_index_search(
+            searcher.local_index.as_ref().unwrap(),
+            "needle".into(),
+            false,
+            Vec::new(),
+            Vec::new(),
+            1,
+            Instant::now() + Duration::from_secs(1),
+        )
+        .await
+        .map_err(|error| error.message)
+        .unwrap();
+        assert_eq!(hits.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn local_pages_are_disjoint_and_out_of_range_errors_are_visible() {
+        let (_directory, searcher) = with_local_index(vec![]);
+        let index = searcher.local_index.as_ref().unwrap();
+        for number in 1..45 {
+            index
+                .add(&crate::localindex::Page {
+                    url: &format!("https://docs.example/needle/{number}"),
+                    title: "Needle reference",
+                    body: "The needle reference page.",
+                    lang: "en",
+                    snippet: "",
+                })
+                .unwrap();
+        }
+        index.commit().unwrap();
+        let mut seen = std::collections::BTreeSet::new();
+        for (page, expected, more) in [(1, 20, true), (2, 20, true), (3, 5, false)] {
+            let mut request = SearchRequest::new(query("!local_index needle", &searcher.registry));
+            request.pageno = page;
+            let response = searcher.search(request).await;
+            assert!(response.error.is_none());
+            assert_eq!(response.results.len(), expected);
+            assert_eq!(response.paging, more);
+            for result in response.results {
+                assert!(seen.insert(result.url), "page {page} repeated a result");
+            }
+        }
+        let mut request = SearchRequest::new(query("!local_index needle", &searcher.registry));
+        request.pageno = u32::MAX;
+        let response = searcher.search(request).await;
+        assert!(response.error.as_deref().unwrap().contains("window"));
+        assert_eq!(response.unresponsive_engines.len(), 1);
+        assert_eq!(response.unresponsive_engines[0].engine, "local_index");
+        assert!(!response.paging);
+    }
+
+    #[tokio::test]
+    async fn local_source_selection_never_falls_back_to_remote_engines() {
+        let remote = FakeEngine::build("remote", &["general"], 1, false);
+        let (_directory, mut searcher) = with_local_index(vec![remote.clone()]);
+        Arc::make_mut(&mut searcher.settings)
+            .search
+            .local_index_merge = false;
+        for bang in [false, true] {
+            let text = if bang {
+                "!local_index needle"
+            } else {
+                "needle"
+            };
+            let mut request = SearchRequest::new(query(text, &searcher.registry));
+            if !bang {
+                request.engines = vec!["LOCAL_INDEX".to_string()];
+            }
+            let response = searcher.search(request).await;
+            assert!(response.error.is_none());
+            assert_eq!(response.engines, ["local_index"]);
+            assert_eq!(response.results.len(), 1);
+        }
+        assert!(remote.queries.lock().unwrap().is_empty());
+
+        searcher.local_index = None;
+        let request = SearchRequest::new(query("!local_index needle", &searcher.registry));
+        let response = searcher.search(request).await;
+        assert!(response.error.is_some());
+        assert!(remote.queries.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn combining_local_indexes_does_not_contact_embeddings() {
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let app = axum::Router::new().route(
+            "/v1/embeddings",
+            axum::routing::post(move || {
+                observed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                async { axum::Json(serde_json::json!({"data": []})) }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let (_directory, mut searcher) = with_local_index(vec![]);
+        let index = searcher.local_index.as_ref().unwrap();
+        index
+            .add(&crate::localindex::Page {
+                url: "https://docs.example/other",
+                title: "Needle notes",
+                body: "More notes about the needle reference.",
+                lang: "en",
+                snippet: "",
+            })
+            .unwrap();
+        index.commit().unwrap();
+        searcher.wiki_index = Some(Arc::clone(index));
+        Arc::make_mut(&mut searcher.settings).search.embedding_url = format!("http://{address}");
+        let mut request = SearchRequest::new(query("needle", &searcher.registry));
+        request.engines = vec!["local_index".into(), "wikipedia_index".into()];
+        let response = searcher.search(request).await;
+        server.abort();
+        assert_eq!(response.results.len(), 2);
+        assert_eq!(response.engines, ["local_index", "wikipedia_index"]);
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn explicit_remote_sources_do_not_merge_unrequested_indexes() {
+        let first = FakeEngine::build("first", &["general"], 1, false);
+        let second = FakeEngine::build("second", &["general"], 1, false);
+        let (_directory, searcher) = with_local_index(vec![first, second]);
+        let mut request = SearchRequest::new(query("needle", &searcher.registry));
+        request.engines = vec!["first".to_string(), "second".to_string()];
+        let response = searcher.search(request).await;
+        assert_eq!(response.engines, ["first", "second"]);
+        assert_eq!(response.results.len(), 2);
+        assert!(
+            response
+                .results
+                .iter()
+                .all(|result| result.engine != "local_index")
+        );
+    }
+
+    #[tokio::test]
+    async fn engine_bangs_preserve_source_order_and_exclude_local_results() {
+        let remote = FakeEngine::build("remote", &["general"], 2, false);
+        let (_directory, searcher) = with_local_index(vec![remote]);
+        let request = SearchRequest::new(query("!remote needle", &searcher.registry));
+        let response = searcher.search(request).await;
+        assert_eq!(response.engines, ["remote"]);
+        assert_eq!(response.results.len(), 2);
+        assert_eq!(response.results[0].score, 1.0);
+        assert_eq!(response.results[1].score, 0.5);
+    }
+
+    #[tokio::test]
+    async fn category_searches_do_not_merge_general_indexes() {
+        let images = FakeEngine::build("images", &["images"], 1, false);
+        let (_directory, searcher) = with_local_index(vec![images]);
+        let mut request = SearchRequest::new(query("needle", &searcher.registry));
+        request.categories = vec!["images".to_string()];
+        let response = searcher.search(request).await;
+        assert_eq!(response.engines, ["images"]);
+        assert_eq!(response.results.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_routed_source_gets_its_requested_weight() {
+        let web = FakeEngine::build("web", &["general"], 1, false);
+        let arxiv = FakeEngine::build("arxiv", &["science"], 1, false);
+        let mut searcher = searcher(vec![web, arxiv]);
+        let settings = Arc::make_mut(&mut searcher.settings);
+        settings.search.relevance_weight = 0.0;
+        settings.search.authority_weight = 0.0;
+        let request = SearchRequest::new(query("arxiv needle", &searcher.registry));
+        let response = searcher.search(request).await;
+        assert_eq!(response.results[0].engine, "arxiv");
+        assert_eq!(response.results[0].score, ROUTED_WEIGHT);
+        assert_eq!(response.results[1].score, 1.0);
+    }
+
+    #[tokio::test]
+    async fn official_lookups_are_started_once_and_respect_source_selection() {
+        let searcher = searcher(vec![]);
+        let outcome = EngineOutcome {
+            engine: "wikipedia".to_string(),
+            weight: 1.0,
+            items: Ok(vec![EngineItem::Result(SearchResult::new(
+                "https://en.wikipedia.org/wiki/Rust_(programming_language)",
+                "Rust",
+            ))]),
+            elapsed: Duration::ZERO,
+            suspended: false,
+        };
+        let request = SearchRequest::new(query("rust", &searcher.registry));
+        let mut tasks = tokio::task::JoinSet::new();
+        searcher.start_official_lookup(&request, &outcome, &mut tasks);
+        searcher.start_official_lookup(&request, &outcome, &mut tasks);
+        assert_eq!(tasks.len(), 1);
+        drop(tasks);
+
+        let mut request = request;
+        request.engines = vec!["wikipedia".to_string(), "wikidata".to_string()];
+        let mut tasks = tokio::task::JoinSet::new();
+        searcher.start_official_lookup(&request, &outcome, &mut tasks);
+        assert!(tasks.is_empty());
     }
 
     #[test]
@@ -1635,14 +2003,13 @@ mod orchestration_tests {
     }
 
     #[tokio::test]
-    async fn site_retry_preserves_query_options_and_engine_selection() {
+    async fn site_retry_preserves_query_options() {
         let selected = FakeEngine::build("selected", &["general"], 0, true);
-        let other = FakeEngine::build("other", &["general"], 0, true);
-        let mut searcher = searcher(vec![selected.clone(), other.clone()]);
+        let mut searcher = searcher(vec![selected.clone()]);
         Arc::make_mut(&mut searcher.settings)
             .search
             .site_scoped_retry = true;
-        let mut original = query("!selected :ja rust traits", &searcher.registry);
+        let mut original = query(":ja rust traits", &searcher.registry);
         original.safesearch = 2;
         original.time_range = Some(TimeRange::Week);
         original.locale = "ja-JP".into();
@@ -1659,7 +2026,18 @@ mod orchestration_tests {
         assert_eq!(retried.locale, original.locale);
         assert_eq!(retried.languages, original.languages);
         assert_eq!(retried.engine_refs, original.engine_refs);
-        assert!(other.queries.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn site_retry_does_not_expand_explicit_source_queries() {
+        let selected = FakeEngine::build("selected", &["general"], 0, true);
+        let mut searcher = searcher(vec![selected.clone()]);
+        Arc::make_mut(&mut searcher.settings)
+            .search
+            .site_scoped_retry = true;
+        let request = SearchRequest::new(query("!selected rust traits", &searcher.registry));
+        searcher.site_scoped_retry(&request, Vec::new()).await;
+        assert!(selected.queries.lock().unwrap().is_empty());
     }
 
     #[test]
