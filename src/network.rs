@@ -304,9 +304,7 @@ impl Network {
         // shipped signature earns grade 2, so use the plain one and stay on it
         // for this host.
         let user_agent = ANUBIS_PLAIN_USER_AGENT.to_string();
-        let Some((body, verification)) =
-            self.anubis_guard(url, deadline, &user_agent).await
-        else {
+        let Some((body, verification)) = self.anubis_guard(url, deadline, &user_agent).await else {
             debug!(url, "anubis: the guard page could not be fetched");
             return false;
         };
@@ -445,6 +443,27 @@ impl Network {
         headers
     }
 
+    /// Replay the cookies the browser solver won for this host.
+    ///
+    /// A cleared wall stays open for hours through its clearance cookie, and
+    /// that cookie answers a plain request in milliseconds. Without replaying
+    /// it every search pays for a browser tab all over again.
+    fn with_solver_cookies(&self, mut request: EngineRequest) -> EngineRequest {
+        let Some(solver) = self.solver.as_ref() else {
+            return request;
+        };
+        for (name, value) in solver.jar_cookies(&request.url) {
+            if !request
+                .cookies
+                .iter()
+                .any(|(existing, _)| existing == &name)
+            {
+                request.cookies.push((name, value));
+            }
+        }
+        request
+    }
+
     /// Fetch a request, using the cache when one is given.
     pub async fn fetch(
         &self,
@@ -455,6 +474,7 @@ impl Network {
     ) -> Result<EngineResponse, NetworkError> {
         let deadline = tokio::time::Instant::now() + timeout;
         let client = self.client_for(proxy);
+        let request = self.with_solver_cookies(request);
         let mut headers: Vec<_> = request
             .headers
             .iter()
@@ -499,7 +519,8 @@ impl Network {
                 Ok(response) => {
                     let marker = String::from_utf8_lossy(&response.body);
                     tracing::debug!(url = %request.url, status = response.status, bytes = response.body.len(), anubis_marker = marker.contains("anubis_challenge"), anubis_parsed = anubis_challenge(&response.body).is_some(), "fetch response");
-                    if marker.contains("anubis_challenge") && std::env::var("RUSTXNG_DUMP").is_ok() {
+                    if marker.contains("anubis_challenge") && std::env::var("RUSTXNG_DUMP").is_ok()
+                    {
                         let _ = std::fs::write("/tmp/anubis_body.html", &response.body);
                     }
                     // Anubis guarded sites answer 200 with a small proof of work
@@ -523,6 +544,14 @@ impl Network {
                             "anubis: the guard page survived the replay"
                         );
                     }
+                    // The cookie that used to open this host has expired, or the
+                    // site rotated its challenge: replaying it only answers a
+                    // refusal, so drop it and let the browser win a fresh one.
+                    if crate::solver::looks_like_challenge(response.status, &response.body) {
+                        if let Some(solver) = self.solver.as_ref() {
+                            solver.forget_cookies(&response.final_url);
+                        }
+                    }
                     // A WAF or CAPTCHA wall is not a page, but who retries it
                     // is the aggregator: only it knows which engine is asking,
                     // how much budget is left and which engines a tab cannot
@@ -531,6 +560,8 @@ impl Network {
                     if let Some(cache) = cache {
                         if response.status == 200
                             && !response.body.is_empty()
+                            && !guard
+                            && !crate::solver::looks_like_challenge(response.status, &response.body)
                             && tokio::time::timeout_at(
                                 deadline,
                                 cache.set(
@@ -614,6 +645,13 @@ impl Network {
             "solver: clearing a challenge"
         );
         let target = url.to_string();
+        // A search's budget is far too small for a page load, which is why a
+        // wall met mid-search is never cleared in time. Hand it to the
+        // background instead: the tab finishes on its own, keeps the clearance
+        // cookie, and the next search reads the site without a browser at all.
+        let warmer = solver.clone();
+        let warm_target = target.clone();
+        let may_warm = budget < Duration::from_secs(20);
         // The wait is bounded by the same budget the caller is about to spend
         // anyway: a tab that frees up in time rescues the engine, and one that
         // does not costs nothing that was not already lost.
@@ -641,6 +679,9 @@ impl Network {
                 if refuses(&error) {
                     SolverAttempt::Hopeless
                 } else {
+                    if may_warm {
+                        warmer.warm_in_background(&warm_target);
+                    }
                     SolverAttempt::Busy
                 }
             }
@@ -656,6 +697,9 @@ impl Network {
                     url,
                     "solver exceeded the engine budget; the tab is released"
                 );
+                if may_warm {
+                    warmer.warm_in_background(&warm_target);
+                }
                 SolverAttempt::Busy
             }
         }
@@ -808,8 +852,7 @@ fn solve_anubis_pow(
     // A digest starts with the requested hex zeros when its leading whole
     // bytes are zero and, for an odd grade, the high nibble of the next byte.
     let matches = move |digest: &[u8]| {
-        digest[..bytes].iter().all(|byte| *byte == 0)
-            && (!odd || digest[bytes] & 0xF0 == 0)
+        digest[..bytes].iter().all(|byte| *byte == 0) && (!odd || digest[bytes] & 0xF0 == 0)
     };
     let workers = std::thread::available_parallelism()
         .map(|count| count.get())

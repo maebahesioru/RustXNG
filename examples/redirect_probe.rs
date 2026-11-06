@@ -8,7 +8,10 @@ async fn main() {
         ("star", "*/*"),
         ("json", "application/json"),
         ("text-plain", "text/plain"),
-        ("html-noq", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"),
+        (
+            "html-noq",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        ),
     ];
     for (name, acc) in accepts {
         let client = reqwest::Client::builder()
@@ -18,7 +21,10 @@ async fn main() {
             .user_agent(ua.clone())
             .default_headers({
                 let mut h = reqwest::header::HeaderMap::new();
-                h.insert(reqwest::header::ACCEPT, reqwest::header::HeaderValue::from_str(acc).unwrap());
+                h.insert(
+                    reqwest::header::ACCEPT,
+                    reqwest::header::HeaderValue::from_str(acc).unwrap(),
+                );
                 h
             })
             .build()
@@ -28,7 +34,11 @@ async fn main() {
                 let status = resp.status();
                 let loc = resp.headers().get("location").is_some();
                 let body = resp.text().await.unwrap_or_default();
-                println!("[{name}] {status} loc={loc} body={}B legacy_bookTitle={}", body.len(), body.matches("bookTitle").count());
+                println!(
+                    "[{name}] {status} loc={loc} body={}B legacy_bookTitle={}",
+                    body.len(),
+                    body.matches("bookTitle").count()
+                );
             }
             Err(e) => println!("[{name}] ERROR {e}"),
         }

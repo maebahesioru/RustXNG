@@ -45,9 +45,12 @@ const DATA_OF_INTEREST: &[&str] = &[
     "weather_code",
 ];
 
-
 fn forecast_request(meta: &EngineMeta, latitude: f64, longitude: f64) -> EngineRequest {
-    let base = meta.base_url.as_deref().unwrap_or(API_URL).trim_end_matches('/');
+    let base = meta
+        .base_url
+        .as_deref()
+        .unwrap_or(API_URL)
+        .trim_end_matches('/');
     let fields = DATA_OF_INTEREST.join(",");
     let pairs: Vec<(&str, String)> = vec![
         ("latitude", latitude.to_string()),
@@ -69,7 +72,10 @@ fn geocoding_request(text: &str) -> EngineRequest {
         ("language", "en".to_string()),
         ("format", "json".to_string()),
     ];
-    EngineRequest::get(format!("{GEOCODING_URL}/v1/search?{}", query_string(&pairs)))
+    EngineRequest::get(format!(
+        "{GEOCODING_URL}/v1/search?{}",
+        query_string(&pairs)
+    ))
 }
 
 /// Open-Meteo, the weather forecast API.
@@ -182,11 +188,9 @@ impl Engine for OpenMeteo {
         let latitude = first.get("latitude").and_then(|value| value.as_f64());
         let longitude = first.get("longitude").and_then(|value| value.as_f64());
         match (latitude, longitude) {
-            (Some(latitude), Some(longitude)) => Ok(Some(forecast_request(
-                &self.meta,
-                latitude,
-                longitude,
-            ))),
+            (Some(latitude), Some(longitude)) => {
+                Ok(Some(forecast_request(&self.meta, latitude, longitude)))
+            }
             _ => Ok(None),
         }
     }
@@ -311,14 +315,20 @@ mod tests {
             .followup_request(&geocoded, &query("Berlin"))
             .unwrap()
             .expect("a followup request");
-        assert!(followup.url.starts_with("https://api.open-meteo.com/v1/forecast?"));
+        assert!(
+            followup
+                .url
+                .starts_with("https://api.open-meteo.com/v1/forecast?")
+        );
         assert!(followup.url.contains("latitude=52.52437"));
         assert!(followup.url.contains("longitude=13.41053"));
         let nothing = response(r#"{"generationtime_ms":0.1}"#);
-        assert!(engine
-            .followup_request(&nothing, &query("Berlin"))
-            .unwrap()
-            .is_none());
+        assert!(
+            engine
+                .followup_request(&nothing, &query("Berlin"))
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

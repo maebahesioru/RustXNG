@@ -83,7 +83,8 @@ impl Engine for Ollama {
             }
             let mut builder = ResultBuilder::new(url, title)
                 .content(text_of(element, CONTENT).unwrap_or_default());
-            if let Some(published) = attr_of(element, PUBLISHED, "title").and_then(|value| date(&value))
+            if let Some(published) =
+                attr_of(element, PUBLISHED, "title").and_then(|value| date(&value))
             {
                 builder = builder.published_date(published);
             }

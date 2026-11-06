@@ -283,7 +283,10 @@ mod tests {
         let body = request.json.expect("a JSON body");
         assert_eq!(body["size"], serde_json::json!(20));
         assert_eq!(body["from"], serde_json::json!(20));
-        assert_eq!(body["query"]["multi_match"]["query"], serde_json::json!("cancer"));
+        assert_eq!(
+            body["query"]["multi_match"]["query"],
+            serde_json::json!("cancer")
+        );
         assert_eq!(
             body["query"]["multi_match"]["fields"][0],
             serde_json::json!("label.*^3")

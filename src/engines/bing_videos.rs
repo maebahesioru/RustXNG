@@ -182,5 +182,4 @@ mod tests {
                 .contains(&format!("qft=filterui%3Avideoage-lt{}", 60 * 24))
         );
     }
-
 }

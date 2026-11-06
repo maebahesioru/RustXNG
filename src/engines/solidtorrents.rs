@@ -97,7 +97,8 @@ impl Engine for SolidTorrents {
                 continue;
             }
             let magnet = attr_of(card, "a[href^=\"magnet:\"]", "href").unwrap_or_default();
-            let torrent = attr_of(card, "a[href^=\"/download/torrent/\"]", "href").unwrap_or_default();
+            let torrent =
+                attr_of(card, "a[href^=\"/download/torrent/\"]", "href").unwrap_or_default();
             let torrent_url = absolute_url(&torrent, base).unwrap_or_default();
             // The card carries two meta rows: category/size/date, then the swarm
             // counters. Each cell is an inline-flex wrapper around icon + value.

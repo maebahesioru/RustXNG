@@ -161,7 +161,10 @@ mod tests {
         assert_eq!(request.method, crate::engine::Method::Post);
         assert_eq!(request.url, SEARCH_URL);
         let body = request.json.expect("a JSON body");
-        assert_eq!(body["query"]["bool"]["must"][0]["multi_match"]["query"], "dom");
+        assert_eq!(
+            body["query"]["bool"]["must"][0]["multi_match"]["query"],
+            "dom"
+        );
         assert_eq!(
             body["query"]["bool"]["must"][0]["multi_match"]["analyzer"],
             "camelcase"

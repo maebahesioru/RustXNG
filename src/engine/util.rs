@@ -520,12 +520,10 @@ pub fn unwrap_url_parameter(link: &str) -> String {
 mod tests {
     use super::*;
 
-
     #[test]
     fn noscript_wrappers_are_stripped() {
-        let html = parse_html(
-            "<html><body><noscript><div id='inner'>kept</div></noscript></body></html>",
-        );
+        let html =
+            parse_html("<html><body><noscript><div id='inner'>kept</div></noscript></body></html>");
         let found = select_elements(&html, "div#inner").expect("selector");
         assert_eq!(found.len(), 1);
         assert_eq!(text(found[0]), "kept");

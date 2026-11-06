@@ -80,7 +80,10 @@ impl Engine for Niconico {
             }
             None => pairs.push(("_sort", "-viewCounter".to_string())),
         }
-        Ok(EngineRequest::get(format!("{API_URL}?{}", query_string(&pairs))))
+        Ok(EngineRequest::get(format!(
+            "{API_URL}?{}",
+            query_string(&pairs)
+        )))
     }
 
     fn parse(
@@ -229,8 +232,7 @@ mod tests {
 
     #[test]
     fn formats_long_videos() {
-        let entry: serde_json::Value =
-            serde_json::from_str(r#"{"lengthSeconds":3725}"#).unwrap();
+        let entry: serde_json::Value = serde_json::from_str(r#"{"lengthSeconds":3725}"#).unwrap();
         assert_eq!(length(&entry).as_deref(), Some("1:02:05"));
     }
 }

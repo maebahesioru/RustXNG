@@ -53,7 +53,13 @@ impl Engine for DuckDuckGo {
         } else {
             region
         };
-        let mut form = vec![("q".to_string(), text), ("kl".to_string(), region)];
+        // DuckDuckGo fingerprints the transport, not the headers: the same query
+        // posted from this stack is answered with a 202 "anomaly" interstitial,
+        // while a plain GET returns the HTML results page. Keep it a GET.
+        let mut params = vec![
+            ("q".to_string(), encode(&text)),
+            ("kl".to_string(), encode(&region)),
+        ];
         if let Some(range) = query.time_range {
             let value = match range {
                 TimeRange::Day => "d",
@@ -61,9 +67,9 @@ impl Engine for DuckDuckGo {
                 TimeRange::Month => "m",
                 TimeRange::Year => "y",
             };
-            form.push(("df".to_string(), value.to_string()));
+            params.push(("df".to_string(), value.to_string()));
         }
-        form.push((
+        params.push((
             "kp".to_string(),
             match query.safesearch {
                 0 => "-2",
@@ -73,11 +79,15 @@ impl Engine for DuckDuckGo {
             .to_string(),
         ));
         if pageno > 1 {
-            form.push(("s".to_string(), ((pageno - 1) * 10).to_string()));
+            params.push(("s".to_string(), ((pageno - 1) * 10).to_string()));
         }
-        let request = EngineRequest::post(BASE_URL)
-            .form(form)
-            .header("Referer", "https://html.duckduckgo.com/")
+        let query_string = params
+            .iter()
+            .map(|(name, value)| format!("{name}={value}"))
+            .collect::<Vec<_>>()
+            .join("&");
+        let request = EngineRequest::get(format!("{BASE_URL}?{query_string}"))
+            .header("Referer", "https://duckduckgo.com/")
             .header(
                 "Accept-Language",
                 &format!(
@@ -86,7 +96,7 @@ impl Engine for DuckDuckGo {
                     locale_region(&query.locale).to_uppercase()
                 ),
             )
-            .header("Origin", "https://html.duckduckgo.com")
+            .header("Origin", "https://duckduckgo.com")
             .header("Sec-Fetch-Dest", "document")
             .header("Sec-Fetch-Mode", "navigate")
             .header("Sec-Fetch-Site", "same-origin")
@@ -106,6 +116,13 @@ impl Engine for DuckDuckGo {
         let html = parse_html(&body);
         let mut results = Vec::new();
         for element in select_elements(&html, "div.result, div.web-result")? {
+            // Sponsored slots are marked result--ad and link through y.js.
+            if attr(element, "class")
+                .map(|class| class.split_whitespace().any(|token| token == "result--ad"))
+                .unwrap_or(false)
+            {
+                continue;
+            }
             let Some(link) = child(element, "a.result__a").or_else(|| child(element, "a[href]"))
             else {
                 continue;
@@ -113,6 +130,9 @@ impl Engine for DuckDuckGo {
             let Some(href) = attr(link, "href") else {
                 continue;
             };
+            if href.contains("duckduckgo.com/y.js") {
+                continue;
+            }
             let Some(url) = absolute_url(&href, "https://duckduckgo.com/") else {
                 continue;
             };
@@ -203,14 +223,9 @@ mod tests {
         query.time_range = Some(TimeRange::Week);
         query.safesearch = 2;
         let request = engine.build_request(&query, 2).unwrap();
-        let form: Vec<&str> = request
-            .form
-            .iter()
-            .map(|(k, v)| if k == "q" { "q" } else { v.as_str() })
-            .collect();
-        assert!(request.form.contains(&("df".to_string(), "w".to_string())));
-        assert!(request.form.contains(&("kp".to_string(), "1".to_string())));
-        assert!(request.form.contains(&("s".to_string(), "10".to_string())));
-        assert_eq!(form[0], "q");
+        assert!(request.url.starts_with(&format!("{BASE_URL}?q=rust")));
+        assert!(request.url.contains("df=w"));
+        assert!(request.url.contains("kp=1"));
+        assert!(request.url.contains("s=10"));
     }
 }

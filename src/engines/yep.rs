@@ -1,8 +1,10 @@
-//! Yep engine, ported from searx/engines/yep.py (web search).
+//! Yep engine, ported from searx/engines/yep.py and kept in step with the web app.
 //!
-//! Upstream maps the UI locale to a Yep language through its engine traits;
-//! this port uses the configured language option when present and the language
-//! part of the locale otherwise.
+//! The historical JSON endpoint (api.yep.com/search) answers 404 now. The site
+//! itself is a SvelteKit app that fetches /web/v1/search with
+//! accept: application/json; because that endpoint sits behind Cloudflare the
+//! engine leans on the browser solver, and the solved response arrives as a
+//! rendered JSON document wrapped in a <pre> block, which parse unwraps.
 // engine-id: yep
 
 use std::sync::Arc;
@@ -22,14 +24,16 @@ const DEFAULTS: EngineDefaults = EngineDefaults {
     safesearch: true,
     language_support: true,
     weight: 1.0,
-    timeout: 4.0,
+    // Cloudflare plus a browser solve; a 4 second budget only ever yields
+    // "solver exceeded the engine budget".
+    timeout: 25.0,
 };
 
-const BASE_URL: &str = "https://api.yep.com";
-const WEB_BASE_URL: &str = "https://yep.com";
+const BASE_URL: &str = "https://yep.com";
+const SEARCH_PATH: &str = "/web/v1/search";
 const RESULTS_PER_PAGE: i64 = 20;
 
-/// Yep (formerly the Yelp search index).
+/// Yep.
 pub struct Yep {
     meta: EngineMeta,
 }
@@ -52,30 +56,28 @@ impl Engine for Yep {
             .base_url
             .as_deref()
             .unwrap_or(BASE_URL)
-            .trim_end_matches('/');
-        let safe = match query.safesearch {
-            0 => "off",
-            1 => "moderate",
-            _ => "strict",
-        };
+            .trim_end_matches('/')
+            .to_string();
         let mut pairs: Vec<(&str, String)> = vec![
-            ("query", query.query_text()),
-            ("safeSearch", safe.to_string()),
+            ("q", query.query_text()),
             ("limit", RESULTS_PER_PAGE.to_string()),
         ];
+        // The web app sends language=<ui filter> plus lang=<two letter code>.
+        // The locale is only a hint, so it is forwarded as lang and never as a
+        // hard language filter.
         let language = self
             .meta
             .opt_str("language")
             .map(str::to_string)
             .unwrap_or_else(|| locale_language(&query.locale));
-        if !language.is_empty() && language != "all" {
-            pairs.push(("hl", language));
+        if language.len() == 2 && language.bytes().all(|byte| byte.is_ascii_lowercase()) {
+            pairs.push(("lang", language));
         }
         Ok(
-            EngineRequest::get(format!("{base}/search?{}", query_string(&pairs)))
-                .header("Referer", "https://yep.com/")
-                .header("Origin", WEB_BASE_URL)
-                .header("x-csrf-protection", "1"),
+            EngineRequest::get(format!("{base}{SEARCH_PATH}?{}", query_string(&pairs)))
+                .header("accept", "application/json")
+                .header("referer", "https://yep.com/web")
+                .header("origin", BASE_URL),
         )
     }
 
@@ -84,8 +86,15 @@ impl Engine for Yep {
         response: &EngineResponse,
         _query: &Query,
     ) -> Result<Vec<EngineItem>, EngineError> {
-        let json = response.json()?;
-        let Some(items) = json_path(&json, "1.results").and_then(|value| value.as_array()) else {
+        let body = response.text();
+        if body.contains("Just a moment") || body.contains("cf-challenge") {
+            return Err(EngineError::Captcha);
+        }
+        let payload = json_payload(&body)
+            .ok_or_else(|| EngineError::Parse("yep returned no JSON payload".to_string()))?;
+        let json: serde_json::Value = serde_json::from_str(payload)
+            .map_err(|error| EngineError::Parse(format!("invalid JSON response: {error}")))?;
+        let Some(items) = json.get("results").and_then(|value| value.as_array()) else {
             return Ok(Vec::new());
         };
         let mut results = Vec::new();
@@ -97,12 +106,23 @@ impl Engine for Yep {
             }
             results.push(
                 ResultBuilder::new(url, title)
-                    .content(strip_tags(&json_str(item, "snippet")))
+                    .content(strip_tags(&json_str(item, "description")))
                     .build(),
             );
         }
         Ok(results)
     }
+}
+
+/// The JSON document of a response, which the solver hands back inside a
+/// rendered HTML page.
+fn json_payload(body: &str) -> Option<&str> {
+    let start = body.find('{')?;
+    let end = body.rfind('}')?;
+    if end <= start {
+        return None;
+    }
+    body.get(start..=end)
 }
 
 #[cfg(test)]
@@ -120,10 +140,10 @@ mod tests {
 
     #[test]
     fn parses_the_json_results() {
-        let body = r##"[{"query":"rust"},{"results":[
-          {"url":"https://www.rust-lang.org/","title":"Rust","snippet":"A <b>language</b> empowering everyone."},
-          {"url":"https://example.com/","title":"","snippet":"No title."}
-        ]}]"##;
+        let body = r##"{"results":[
+          {"url":"https://www.rust-lang.org/","title":"Rust","description":"A <b>language</b>","site_name":null},
+          {"url":"https://example.com/","title":"","description":"No title."}
+        ],"returned_count":2}"##;
         let response = EngineResponse::new(200, BASE_URL, body.as_bytes().to_vec());
         let items = engine().parse(&response, &query("rust")).unwrap();
         assert_eq!(items.len(), 1);
@@ -131,51 +151,56 @@ mod tests {
             EngineItem::Result(result) => {
                 assert_eq!(result.url, "https://www.rust-lang.org/");
                 assert_eq!(result.title, "Rust");
-                assert_eq!(result.content, "A language empowering everyone.");
+                assert_eq!(result.content, "A language");
             }
             _ => panic!("expected a result"),
         }
     }
 
     #[test]
-    fn request_carries_safesearch_and_language() {
+    fn unwraps_the_json_the_solver_renders() {
+        let body = concat!(
+            "<html><head><meta charset=\"utf-8\"></head><body><pre>",
+            "{\"results\":[{\"url\":\"https://rust-lang.org/\",\"title\":\"Rust\"}]}",
+            "</pre></body></html>"
+        );
+        let response = EngineResponse::new(200, BASE_URL, body.as_bytes().to_vec());
+        assert_eq!(engine().parse(&response, &query("rust")).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn request_targets_the_web_api() {
         let mut request_query = query("rust");
         request_query.locale = "de-DE".to_string();
-        request_query.safesearch = 2;
         let request = engine().build_request(&request_query, 1).unwrap();
-        assert!(request.url.starts_with("https://api.yep.com/search?"));
-        assert!(request.url.contains("query=rust"));
-        assert!(request.url.contains("safeSearch=strict"));
+        assert!(request.url.starts_with("https://yep.com/web/v1/search?"));
+        assert!(request.url.contains("q=rust"));
         assert!(request.url.contains("limit=20"));
-        assert!(request.url.contains("hl=de"));
+        assert!(request.url.contains("lang=de"));
         assert_eq!(
             request
                 .headers
-                .get("referer")
+                .get("accept")
                 .and_then(|value| value.to_str().ok()),
-            Some("https://yep.com/")
-        );
-        assert_eq!(
-            request
-                .headers
-                .get("origin")
-                .and_then(|value| value.to_str().ok()),
-            Some("https://yep.com")
+            Some("application/json")
         );
     }
 
     #[test]
-    fn missing_results_and_broken_bodies_are_handled() {
-        let response = EngineResponse::new(200, BASE_URL, br##"[{"query":"rust"},{}]"##.to_vec());
-        assert!(
-            engine()
-                .parse(&response, &query("rust"))
-                .unwrap()
-                .is_empty()
-        );
-        let broken = EngineResponse::new(200, BASE_URL, b"not json".to_vec());
+    fn a_cloudflare_challenge_is_a_captcha() {
+        let body = "<html><head><title>Just a moment...</title></head></html>";
+        let response = EngineResponse::new(403, BASE_URL, body.as_bytes().to_vec());
         assert!(matches!(
-            engine().parse(&broken, &query("rust")),
+            engine().parse(&response, &query("rust")),
+            Err(EngineError::Captcha)
+        ));
+    }
+
+    #[test]
+    fn broken_bodies_are_rejected() {
+        let response = EngineResponse::new(200, BASE_URL, b"not json".to_vec());
+        assert!(matches!(
+            engine().parse(&response, &query("rust")),
             Err(EngineError::Parse(_))
         ));
     }

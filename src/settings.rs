@@ -127,6 +127,17 @@ pub struct SolverSettings {
     /// solver clears, so an hour-long bench keeps a working engine out of
     /// every answer. Zero keeps the upstream timings untouched.
     pub suspension_cap_secs: u64,
+    /// File the cookies won by the browser are kept in.
+    ///
+    /// A clearance cookie is what makes a solved wall stay solved: replaying it
+    /// on a plain request answers in milliseconds, where the browser needs
+    /// seconds. The file lets those cookies outlive a restart, so the browser is
+    /// paid for once per host instead of once per process. Empty keeps the jar
+    /// in memory only.
+    pub cookie_file: Option<String>,
+    /// Whether a search that ran out of time may leave its wall to the
+    /// background and pick the clearance cookie up on the next search.
+    pub warm: bool,
 }
 
 impl Default for SolverSettings {
@@ -139,6 +150,8 @@ impl Default for SolverSettings {
             budget_ms: 2_500,
             max_timeout_ms: 45_000,
             suspension_cap_secs: 300,
+            cookie_file: None,
+            warm: true,
         }
     }
 }

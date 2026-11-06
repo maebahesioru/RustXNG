@@ -12,9 +12,12 @@
 //! supported OSS implementation. The endpoint is configurable so a drop-in
 //! replacement works unchanged.
 
-use std::time::Duration;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
+use std::sync::Mutex as StdMutex;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tracing::{debug, warn};
 
@@ -38,6 +41,29 @@ pub struct Solved {
     pub status: u16,
     pub body: String,
     pub url: String,
+    /// Cookies the browser is holding after the page load.
+    pub cookies: Vec<Cookie>,
+}
+
+/// One cookie the browser won while clearing a wall.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct Cookie {
+    pub name: String,
+    pub value: String,
+    #[serde(default)]
+    pub domain: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub path: String,
+    /// Seconds since the epoch; zero or negative for a session cookie.
+    #[serde(default)]
+    pub expires: f64,
+}
+
+impl Cookie {
+    fn expired(&self, now: f64) -> bool {
+        self.expires > 0.0 && self.expires < now
+    }
 }
 
 /// Body markers that mean "this is a challenge, not the page".
@@ -167,6 +193,14 @@ pub struct Solver {
     max_timeout_ms: u64,
     budget: Duration,
     slots: Vec<Slot>,
+    /// Cookies the browser has won, per host, mirrored to disk.
+    jar: StdMutex<Jar>,
+    /// One warm-up runs at a time: warming is housekeeping, and a burst of
+    /// blocked engines must not turn into a race for the tabs a search needs.
+    warm_gate: Mutex<()>,
+    /// Whether a search that ran out of time may hand the wall to the
+    /// background instead of losing the engine for good.
+    warm: bool,
 }
 
 #[derive(Deserialize)]
@@ -186,6 +220,10 @@ struct Solution {
     status: u16,
     #[serde(default)]
     response: String,
+    /// FlareSolverr hands back every cookie the browser holds for the page; the
+    /// clearance cookie is what makes the next request skip the wall entirely.
+    #[serde(default)]
+    cookies: Vec<Cookie>,
 }
 
 impl Solver {
@@ -218,7 +256,92 @@ impl Solver {
             max_timeout_ms,
             budget,
             slots,
+            jar: StdMutex::new(Jar::load(settings.cookie_file.as_deref())),
+            warm_gate: Mutex::new(()),
+            warm: settings.warm,
         })
+    }
+
+    /// Cookies the browser won for this url's host, ready to replay.
+    pub fn jar_cookies(&self, url: &str) -> Vec<(String, String)> {
+        let host = url_host(url);
+        match self.jar.lock() {
+            Ok(jar) => jar.cookies_for(&host),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// Drop the cookies remembered for this url's host.
+    ///
+    /// A clearance cookie expires silently: the site starts answering with the
+    /// challenge again while the jar still claims the wall is cleared. Replaying
+    /// a dead cookie fails exactly like sending none, so forget it as soon as a
+    /// plain request meets a challenge and let the browser win a fresh one.
+    pub fn forget_cookies(&self, url: &str) {
+        let host = url_host(url);
+        if let Ok(mut jar) = self.jar.lock() {
+            jar.forget(&host);
+        }
+    }
+
+    /// Clear a wall in the background so later searches never queue for a tab.
+    ///
+    /// A search budgets three seconds for engines and a browser page load needs
+    /// more, so a challenge-guarded engine loses inside a general search no
+    /// matter how well the solver works. Clearing it once, off the request path,
+    /// leaves the cookie in the jar: the next search fetches the engine with a
+    /// plain HTTP request and answers in milliseconds.
+    pub fn warm_in_background(self: &std::sync::Arc<Self>, url: &str) {
+        if !self.warm || tokio::runtime::Handle::try_current().is_err() {
+            return;
+        }
+        let host = url_host(url);
+        {
+            let Ok(mut jar) = self.jar.lock() else {
+                return;
+            };
+            if !jar.should_warm(&host) {
+                return;
+            }
+        }
+        let solver = self.clone();
+        let target = url.to_string();
+        tokio::spawn(async move {
+            let _serial = solver.warm_gate.lock().await;
+            let wait = Duration::from_millis(solver.max_timeout_ms.saturating_mul(2).max(30_000));
+            let started = Instant::now();
+            let outcome = solver.solve_within(&target, wait, false).await;
+            match outcome {
+                Ok(solved) => debug!(
+                    url = %target,
+                    ms = started.elapsed().as_millis(),
+                    len = solved.body.len(),
+                    cookies = solved.cookies.len(),
+                    "solver: warmed a wall in the background"
+                ),
+                Err(error) => debug!(
+                    url = %target,
+                    ms = started.elapsed().as_millis(),
+                    %error,
+                    "solver: background warm-up failed"
+                ),
+            }
+            if let Ok(mut jar) = solver.jar.lock() {
+                jar.warmed(&host);
+            }
+        });
+    }
+
+    /// Keep the cookies a solved page handed back.
+    fn remember(&self, url: &str, cookies: &[Cookie]) {
+        if cookies.is_empty() {
+            return;
+        }
+        let host = url_host(url);
+        if let Ok(mut jar) = self.jar.lock() {
+            jar.remember(&host, cookies);
+            debug!(host = %host, cookies = cookies.len(), "solver: keeping the cookies it won");
+        }
     }
 
     /// How long a single search is willing to wait for the browser.
@@ -457,7 +580,7 @@ impl Solver {
         if solution.response.trim().is_empty() {
             return Err(SolverError::Empty);
         }
-        Ok(Solved {
+        let solved = Solved {
             status: if solution.status == 0 {
                 200
             } else {
@@ -469,7 +592,13 @@ impl Solver {
             } else {
                 solution.url
             },
-        })
+            cookies: solution.cookies,
+        };
+        // The clearance cookie is the whole point of paying for a browser: keep
+        // it before the page is handed back, so a solved wall stays solved even
+        // if the caller drops the response.
+        self.remember(url, &solved.cookies);
+        Ok(solved)
     }
 
     async fn post(&self, payload: serde_json::Value) -> Result<Envelope, SolverError> {
@@ -498,6 +627,206 @@ impl Solver {
             ))
         })
     }
+}
+
+/// Cookies won per host, mirrored to disk so a restart does not pay again.
+///
+/// Every wall the browser clears leaves a clearance cookie the site honours for
+/// hours. Keeping those cookies turns the browser into a one-off cost per host:
+/// later searches fetch the engine with a plain HTTP client and answer inside
+/// the engine budget, which a browser round trip never can.
+struct Jar {
+    /// Host to the cookies the browser won there.
+    hosts: BTreeMap<String, Vec<Cookie>>,
+    /// File the jar is mirrored to; without one it lives in memory only.
+    path: Option<PathBuf>,
+    /// Hosts with a warm-up running right now, so a burst warms each once.
+    warming: BTreeSet<String>,
+    /// When each host was last warmed, so a wall that stays shut is not retried
+    /// on every single search.
+    warmed_at: BTreeMap<String, Instant>,
+    /// Set once after a write fails, to warn a single time.
+    warned: bool,
+}
+
+/// How long a host is left alone after a warm-up, successful or not.
+const WARM_BACKOFF: Duration = Duration::from_secs(30 * 60);
+
+/// One cookie as it is written to the jar file.
+#[derive(Serialize, Deserialize)]
+struct StoredCookie {
+    host: String,
+    name: String,
+    value: String,
+    #[serde(default)]
+    expires: f64,
+}
+
+impl Jar {
+    fn load(path: Option<&str>) -> Self {
+        let mut jar = Self {
+            hosts: BTreeMap::new(),
+            path: path.map(PathBuf::from),
+            warming: BTreeSet::new(),
+            warmed_at: BTreeMap::new(),
+            warned: false,
+        };
+        let Some(file) = jar.path.clone() else {
+            return jar;
+        };
+        let Ok(raw) = std::fs::read_to_string(&file) else {
+            return jar;
+        };
+        match serde_json::from_str::<Vec<StoredCookie>>(&raw) {
+            Ok(stored) => {
+                for entry in stored {
+                    jar.hosts.entry(entry.host).or_default().push(Cookie {
+                        name: entry.name,
+                        value: entry.value,
+                        domain: String::new(),
+                        path: String::new(),
+                        expires: entry.expires,
+                    });
+                }
+                debug!(file = %file.display(), hosts = jar.hosts.len(), "solver: loaded the cookie jar");
+            }
+            Err(error) => {
+                warn!(file = %file.display(), %error, "solver: ignoring an unreadable cookie jar");
+            }
+        }
+        jar
+    }
+
+    fn cookies_for(&self, host: &str) -> Vec<(String, String)> {
+        let now = unix_seconds();
+        let mut out: Vec<(String, String)> = Vec::new();
+        for (known, cookies) in &self.hosts {
+            if !same_site(host, known) {
+                continue;
+            }
+            for cookie in cookies.iter().filter(|cookie| !cookie.expired(now)) {
+                if out.iter().any(|(name, _)| name == &cookie.name) {
+                    continue;
+                }
+                out.push((cookie.name.clone(), cookie.value.clone()));
+            }
+        }
+        out
+    }
+
+    fn remember(&mut self, host: &str, cookies: &[Cookie]) {
+        if cookies.is_empty() || host.is_empty() {
+            return;
+        }
+        let entry = self.hosts.entry(host.to_string()).or_default();
+        for cookie in cookies.iter().filter(|cookie| !cookie.name.is_empty()) {
+            match entry.iter_mut().find(|known| known.name == cookie.name) {
+                Some(known) => known.value = cookie.value.clone(),
+                None => entry.push(cookie.clone()),
+            }
+        }
+        self.persist();
+    }
+
+    fn forget(&mut self, host: &str) {
+        let before = self.hosts.len();
+        self.hosts.retain(|known, _| !same_site(host, known));
+        // A cookie the site just refused must not silence the background warm
+        // for half an hour: dropping the backoff is what lets the next search
+        // win a fresh one. The in-flight marker stays, so a page load that is
+        // already running is still not duplicated.
+        self.warmed_at.retain(|known, _| !same_site(host, known));
+        if self.hosts.len() != before {
+            debug!(host = %host, "solver: dropped stale cookies");
+            self.persist();
+        }
+    }
+
+    fn should_warm(&mut self, host: &str) -> bool {
+        if host.is_empty() || self.warming.contains(host) {
+            return false;
+        }
+        if let Some(last) = self.warmed_at.get(host) {
+            if last.elapsed() < WARM_BACKOFF {
+                return false;
+            }
+        }
+        // Cookies already in hand mean the wall stands open: nothing to warm.
+        if !self.cookies_for(host).is_empty() {
+            return false;
+        }
+        self.warming.insert(host.to_string());
+        true
+    }
+
+    fn warmed(&mut self, host: &str) {
+        self.warming.remove(host);
+        self.warmed_at.insert(host.to_string(), Instant::now());
+    }
+
+    /// Mirror the jar to disk, atomically, ignoring failures after one warning.
+    fn persist(&mut self) {
+        let Some(path) = self.path.clone() else {
+            return;
+        };
+        let now = unix_seconds();
+        let stored: Vec<StoredCookie> = self
+            .hosts
+            .iter()
+            .flat_map(|(host, cookies)| {
+                let host = host.clone();
+                cookies
+                    .iter()
+                    .filter(move |cookie| !cookie.expired(now))
+                    .map(move |cookie| StoredCookie {
+                        host: host.clone(),
+                        name: cookie.name.clone(),
+                        value: cookie.value.clone(),
+                        expires: cookie.expires,
+                    })
+            })
+            .collect();
+        let Ok(body) = serde_json::to_vec(&stored) else {
+            return;
+        };
+        let temp = path.with_extension("tmp");
+        let write = std::fs::write(&temp, &body).and_then(|()| std::fs::rename(&temp, &path));
+        if let Err(error) = write {
+            if !self.warned {
+                self.warned = true;
+                warn!(file = %path.display(), %error, "solver: cannot write the cookie jar, keeping it in memory");
+            }
+        }
+    }
+}
+
+/// Whether cookies won for one host may be replayed to another.
+///
+/// The solver records the host it fetched rather than the cookie's own domain,
+/// so a parent and a child name the same site and both are valid carriers.
+fn same_site(a: &str, b: &str) -> bool {
+    if a.is_empty() || b.is_empty() {
+        return false;
+    }
+    a == b || a.ends_with(&format!(".{b}")) || b.ends_with(&format!(".{a}"))
+}
+
+/// The host of an absolute URL, without scheme, port, user or path.
+fn url_host(url: &str) -> String {
+    let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, rest)| rest);
+    host.split(':').next().unwrap_or("").to_string()
+}
+
+/// Seconds since the epoch, the unit cookies use for their expiry.
+fn unix_seconds() -> f64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs_f64())
+        .unwrap_or(0.0)
 }
 
 /// A page whose whole body is one word of refusal.
@@ -547,6 +876,7 @@ mod tests {
         let page = Solved {
             status: 200,
             url: "https://www.deviantart.com/search".into(),
+            cookies: Vec::new(),
             body: "<html><head><title>ERROR: The request could not be satisfied</title></head><body><h1>403 ERROR</h1> Request blocked. We can't connect to the server for this app or website at this time.</body></html>".into(),
         };
         assert!(refused_page(&page));
@@ -558,6 +888,7 @@ mod tests {
         let real = Solved {
             status: 200,
             url: "https://example.org/".into(),
+            cookies: Vec::new(),
             body: "<html><body><h1>Search results</h1><p>blocked by the firewall is a song</p></body></html>".into(),
         };
         assert!(!refused_page(&real));
@@ -600,6 +931,7 @@ mod tests {
         let blocked = Solved {
             status: 200,
             url: "https://example.test/api".into(),
+            cookies: Vec::new(),
             body: "<html><head><meta name=\"color-scheme\" content=\"light dark\"></head><body><pre style=\"word-wrap: break-word; white-space: pre-wrap;\">Forbidden</pre></body></html>".into(),
         };
         assert!(stale_block_page(&blocked));
@@ -610,15 +942,95 @@ mod tests {
         let json = Solved {
             status: 200,
             url: "https://example.test/api".into(),
+            cookies: Vec::new(),
             body: r#"<pre>{"pagination":{"total":81325}}</pre>"#.into(),
         };
         assert!(!stale_block_page(&json));
         let long = Solved {
             status: 200,
             url: "https://example.test/".into(),
+            cookies: Vec::new(),
             body: format!("<html><body>>Forbidden<{}</body></html>", "x".repeat(600)),
         };
         assert!(!stale_block_page(&long));
+    }
+
+    #[test]
+    fn the_jar_keeps_a_won_cookie_per_host_and_drops_it_when_asked() {
+        let mut jar = Jar {
+            hosts: BTreeMap::new(),
+            path: None,
+            warming: BTreeSet::new(),
+            warmed_at: BTreeMap::new(),
+            warned: false,
+        };
+        jar.remember(
+            "example.test",
+            &[Cookie {
+                name: "cf_clearance".into(),
+                value: "abc".into(),
+                domain: String::new(),
+                path: String::new(),
+                expires: 0.0,
+            }],
+        );
+        assert_eq!(
+            jar.cookies_for("example.test"),
+            vec![("cf_clearance".to_string(), "abc".to_string())]
+        );
+        // A fresh host is worth one background browser, and only one: the
+        // second search while the tab is loading must not queue another.
+        assert!(jar.should_warm("other.test"));
+        assert!(!jar.should_warm("other.test"));
+        jar.warmed("other.test");
+        jar.warmed("example.test");
+        assert!(
+            !jar.should_warm("example.test"),
+            "a host warmed a moment ago is left alone"
+        );
+        // The wall came back, so the cookie is worthless: forgetting it must
+        // also drop the backoff, otherwise a dead cookie keeps the site broken
+        // for half an hour.
+        jar.forget("example.test");
+        assert!(jar.cookies_for("example.test").is_empty());
+        assert!(
+            jar.should_warm("example.test"),
+            "the backoff dies with the cookie"
+        );
+    }
+
+    #[test]
+    fn an_expired_cookie_never_leaves_the_jar() {
+        let mut jar = Jar {
+            hosts: BTreeMap::new(),
+            path: None,
+            warming: BTreeSet::new(),
+            warmed_at: BTreeMap::new(),
+            warned: false,
+        };
+        jar.remember(
+            "example.test",
+            &[
+                Cookie {
+                    name: "fresh".into(),
+                    value: "1".into(),
+                    domain: String::new(),
+                    path: String::new(),
+                    expires: 0.0,
+                },
+                Cookie {
+                    name: "dead".into(),
+                    value: "2".into(),
+                    domain: String::new(),
+                    path: String::new(),
+                    expires: 1.0,
+                },
+            ],
+        );
+        assert_eq!(
+            jar.cookies_for("example.test"),
+            vec![("fresh".to_string(), "1".to_string())]
+        );
     }
 
     #[test]

@@ -162,7 +162,9 @@ fn payload(body: &str) -> Option<serde_json::Value> {
             // are unquoted (`{ response: {...} }`), which JSON rejects: descend
             // into the first value object and parse that instead.
             let colon = slice.find(':')?;
-            let inner = slice[colon + 1..].find('{').map(|offset| offset + colon + 1)?;
+            let inner = slice[colon + 1..]
+                .find('{')
+                .map(|offset| offset + colon + 1)?;
             serde_json::from_str::<serde_json::Value>(object_at(slice, inner)?).ok()?
         }
     };

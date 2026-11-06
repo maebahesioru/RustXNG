@@ -71,8 +71,11 @@ impl Engine for Destatis {
             .search_url
             .clone()
             .unwrap_or_else(|| format!("{base}{SEARCH_PATH}"));
+        // The results are only rendered when the search form is submitted; without
+        // submit=Suchen the page comes back with the form alone.
         let pairs: Vec<(&str, String)> = vec![
             ("templateQueryString", query.query_text()),
+            ("submit", "Suchen".to_string()),
             ("gtp", format!("474_list%3D{}", pageno.max(1))),
         ];
         Ok(EngineRequest::get(format!(
@@ -90,10 +93,9 @@ impl Engine for Destatis {
         let base = self.meta.base_url.as_deref().unwrap_or(BASE_URL);
         let base_slash = format!("{}/", base.trim_end_matches('/'));
         let mut results = Vec::new();
-        for item in select_elements(
-            &html,
-            "div.l-content-wrapper div.row div.column div.c-result",
-        )? {
+        // The result list lives inside <section id="searchresults">; the wrapper is a
+        // section, not a div, and the heading keeps the anchor two levels down.
+        for item in select_elements(&html, "#searchresults div.c-result")? {
             // Suggested results repeat on every page, upstream drops them after page one.
             if query.pageno > 1 {
                 let recommended = attr(item, "class")
@@ -107,7 +109,8 @@ impl Engine for Destatis {
                     continue;
                 }
             }
-            let Some(anchor) = child(item, "a") else {
+            let Some(anchor) = child(item, "h2.c-result__heading > a").or_else(|| child(item, "a"))
+            else {
                 continue;
             };
             let Some(href) = attr(anchor, "href") else {
@@ -121,7 +124,9 @@ impl Engine for Destatis {
                 continue;
             }
             let date = text_of(item, "span.c-result__date").unwrap_or_default();
-            let content = text_of(item, "div.column p").unwrap_or_default();
+            let content = text_of(item, "h2.c-result__heading + p")
+                .or_else(|| text_of(item, "div.column p"))
+                .unwrap_or_default();
             let doctype = text_of(item, "div.c-result__doctype p").unwrap_or_default();
             let mut builder = ResultBuilder::new(url, title).content(content);
             if !doctype.is_empty() {
@@ -140,17 +145,32 @@ impl Engine for Destatis {
 mod tests {
     use super::*;
 
-    const FIXTURE: &str = r##"<div class="l-content-wrapper"><div class="row"><div class="column">
+    const FIXTURE: &str = r##"<section class="l-content-wrapper" id="searchresults"><div class="row"><div class="column large-10">
       <div class="c-result">
-        <a href="/SiteGlobals/Facts"><span class="c-result__date">01.02.2024</span>Bevoelkerung</a>
-        <div class="column"><p>Statistik zur Bevoelkerung.</p></div>
-        <div class="c-result__doctype"><p>Pressemitteilung</p></div>
+        <div class="row">
+          <div class="column small-12 medium-3">
+            <div class="c-result__doctype"><p>Pressemitteilung</p></div>
+          </div>
+          <div class="column small-12 medium-7">
+            <h2 class="c-result__heading">
+              <a href="DE/Themen/Facts"><span class="c-result__date">01.02.2024</span>Bevoelkerung</a>
+            </h2>
+            <p>Statistik zur Bevoelkerung.</p>
+          </div>
+        </div>
       </div>
       <div class="c-result c-result--recommended">
-        <a href="/SiteGlobals/Other"><span class="c-result__date">02.02.2024</span>Empfohlen</a>
-        <div class="column"><p>Empfohlen.</p></div>
+        <div class="row collapse">
+          <div class="column">
+            <h2 class="c-result__heading">
+              <div class="c-result__flag"><p>Empfehlung der Redaktion</p></div>
+              <a href="DE/Themen/Other"><span class="c-result__date">02.02.2024</span>Empfohlen</a>
+            </h2>
+            <p>Empfohlen.</p>
+          </div>
+        </div>
       </div>
-    </div></div></div>"##;
+    </div></div></section>"##;
 
     fn engine() -> Arc<Destatis> {
         Destatis::from_config(&EngineConfig::new("destatis", "destatis", "destat", &[])).unwrap()
@@ -174,7 +194,7 @@ mod tests {
         let EngineItem::Result(result) = &items[0] else {
             panic!("expected a result");
         };
-        assert_eq!(result.url, "https://www.destatis.de/SiteGlobals/Facts");
+        assert_eq!(result.url, "https://www.destatis.de/DE/Themen/Facts");
         assert_eq!(result.title, "Bevoelkerung");
         assert_eq!(result.content, "Statistik zur Bevoelkerung.");
         assert_eq!(
@@ -203,7 +223,7 @@ mod tests {
         let request = engine().build_request(&query(2), 2).unwrap();
         assert_eq!(
             request.url,
-            "https://www.destatis.de/SiteGlobals/Forms/Suche/Expertensuche_Formular.html?templateQueryString=bevoelkerung&gtp=474_list%253D2"
+            "https://www.destatis.de/SiteGlobals/Forms/Suche/Expertensuche_Formular.html?templateQueryString=bevoelkerung&submit=Suchen&gtp=474_list%253D2"
         );
     }
 }

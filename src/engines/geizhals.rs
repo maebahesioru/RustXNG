@@ -79,7 +79,8 @@ impl Engine for Geizhals {
         let html = response.html()?;
         let base = self.base_url();
         let mut results = Vec::new();
-        for element in select_elements(&html, "article.galleryview__item, article.listview__item")? {
+        for element in select_elements(&html, "article.galleryview__item, article.listview__item")?
+        {
             // The listing renders the gallery layout by default and falls back
             // to the list layout for some categories, so both are read here.
             let title = text_of(element, "h3.galleryview__name")
@@ -111,8 +112,8 @@ impl Engine for Geizhals {
                 "div.galleryview__offercount",
             ]
             .iter()
-                .filter_map(|css| text_of(element, css))
-                .collect();
+            .filter_map(|css| text_of(element, css))
+            .collect();
             let mut builder = ResultBuilder::new(url, title)
                 .content(specs.join(" | "))
                 .metadata("metadata", metadata.join(", "));
