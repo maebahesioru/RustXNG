@@ -1456,7 +1456,7 @@ proxy = "http://127.0.0.1:18888"
     fn a_user_solver_section_reaches_the_merged_settings() {
         let defaults = Settings::defaults();
         assert!(!defaults.solver.enabled, "the solver ships switched off");
-        let user: Settings = toml::from_str(
+        let user: toml::Value = toml::from_str(
             r#"
 [solver]
 enabled = true
@@ -1465,7 +1465,7 @@ budget_ms = 4000
 "#,
         )
         .expect("user settings parse");
-        let merged = Settings::merge(defaults, user).expect("merge");
+        let merged = Settings::merge_values(Settings::defaults_value(), user).expect("merge");
         assert!(merged.solver.enabled, "the user section must be merged");
         assert_eq!(merged.solver.budget_ms, 4000);
         // untouched keys keep their defaults
@@ -1504,7 +1504,7 @@ api_key = "test-key"
         let shipped = defaults.engine("anaconda").expect("anaconda exists");
         assert_eq!(shipped.engine, "xpath");
 
-        let user: Settings = toml::from_str(
+        let user: toml::Value = toml::from_str(
             r#"
 [[engines]]
 name = "anaconda"
@@ -1515,7 +1515,7 @@ disabled = false
 "#,
         )
         .expect("user settings parse");
-        let merged = Settings::merge(defaults, user).expect("merge");
+        let merged = Settings::merge_values(Settings::defaults_value(), user).expect("merge");
         let engine = merged.engine("anaconda").expect("anaconda kept");
         assert_eq!(engine.engine, "json_engine", "implementation override wins");
         assert_eq!(
