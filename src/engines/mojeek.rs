@@ -1,8 +1,14 @@
 //! Mojeek engine, ported from `searx/engines/mojeek.py`.
+//!
+//! Mojeek answers a rate limited client with an Altcha proof-of-work page
+//! instead of results. The current widget solves a PBKDF2/SHA-256 puzzle and
+//! posts it to `/captcha/verify`; the server then sets a `chllg` cookie that is
+//! good for a month. The frozen `build_request` interface cannot perform those
+//! extra round trips, so the cookie is read from the `mojeek_cookie_file`
+//! option, exactly like `tiger` reads its arithmetic answer: `mojeek_solve.py`
+//! refreshes the file out of band and every request picks it up.
 
 use std::sync::Arc;
-
-use sha2::{Digest, Sha256};
 
 use crate::engine::util::*;
 use crate::engine::{
@@ -24,15 +30,32 @@ const DEFAULTS: EngineDefaults = EngineDefaults {
 
 const BASE_URL: &str = "https://www.mojeek.com/search";
 
+/// Split a Cookie header ("a=1; b=2") into its name/value pairs.
+fn cookie_pairs(raw: &str) -> Vec<(String, String)> {
+    raw.split(';')
+        .filter_map(|part| {
+            let (name, value) = part.trim().split_once('=')?;
+            let name = name.trim();
+            (!name.is_empty()).then(|| (name.to_string(), value.trim().to_string()))
+        })
+        .collect()
+}
+
 /// Mojeek, an independent crawler based search engine.
 pub struct Mojeek {
     meta: EngineMeta,
+    /// Path of the cookie file written by mojeek_solve.py (see the module docs).
+    cookie_file: Option<String>,
 }
 
 impl Mojeek {
     pub fn from_config(config: &EngineConfig) -> Result<Arc<Self>, String> {
         Ok(Arc::new(Self {
             meta: EngineMeta::from_config(config, DEFAULTS),
+            cookie_file: config
+                .opt_str("mojeek_cookie_file")
+                .filter(|path| !path.is_empty())
+                .map(str::to_string),
         }))
     }
 }
@@ -60,35 +83,19 @@ impl Engine for Mojeek {
             };
             pairs.push(("since", since.format("%Y%m%d").to_string()));
         }
-        Ok(
-            EngineRequest::get(format!("{BASE_URL}?{}", query_string(&pairs)))
-                .cookie("language", &locale_language(&query.locale))
-                .cookie("region", &locale_region(&query.locale)),
-        )
-    }
-
-    /// Mojeek answers with an Altcha proof-of-work page instead of a CAPTCHA.
-    /// The widget is solvable without a browser: the challenge carries a
-    /// PBKDF2/SHA-256 puzzle, and the answer is posted to /captcha/verify.
-    fn followup_request(
-        &self,
-        response: &EngineResponse,
-        _query: &Query,
-    ) -> Result<Option<EngineRequest>, EngineError> {
-        let body = response.text();
-        if !body.contains("altcha") {
-            return Ok(None);
+        let mut request = EngineRequest::get(format!("{BASE_URL}?{}", query_string(&pairs)))
+            .cookie("language", &locale_language(&query.locale))
+            .cookie("region", &locale_region(&query.locale));
+        // The Altcha clearance cookie. It is not bound to the exit address, so
+        // one solved session serves every request until it expires.
+        if let Some(path) = self.cookie_file.as_deref() {
+            if let Ok(raw) = std::fs::read_to_string(path) {
+                for (name, value) in cookie_pairs(&raw) {
+                    request = request.cookie(&name, &value);
+                }
+            }
         }
-        let Some(challenge) = altcha_challenge(&body) else {
-            return Ok(None);
-        };
-        let Some(solution) = solve_altcha(&challenge) else {
-            return Ok(None);
-        };
-        Ok(Some(
-            EngineRequest::post(format!("{BASE_URL}/captcha/verify"))
-                .form(vec![("altcha".to_string(), solution)]),
-        ))
+        Ok(request)
     }
 
     fn parse(
@@ -124,74 +131,83 @@ impl Engine for Mojeek {
     }
 }
 
-/// The base64 challenge the Altcha widget embeds in its `challenge` attribute.
-fn altcha_challenge(body: &str) -> Option<String> {
-    let marker = "challenge";
-    let mut rest = body;
-    while let Some(index) = rest.find(marker) {
-        let after = &rest[index + marker.len()..];
-        let quote_at = after.find(|c: char| c == char::from(39) || c == char::from(34));
-        if let Some(quote) = quote_at {
-            let value = &after[quote + 1..];
-            if let Some(end) = value.find(|c: char| c == char::from(39) || c == char::from(34)) {
-                let candidate = &value[..end];
-                if candidate.len() > 40
-                    && candidate
-                        .chars()
-                        .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
-                {
-                    return Some(candidate.to_string());
-                }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn engine(cookie_file: Option<&str>) -> Arc<Mojeek> {
+        let mut config = EngineConfig::new("mojeek", "mojeek", "mjk", &["general"]);
+        if let Some(path) = cookie_file {
+            config.extra.insert(
+                "mojeek_cookie_file".to_string(),
+                toml::Value::String(path.to_string()),
+            );
+        }
+        Mojeek::from_config(&config).expect("engine")
+    }
+
+    fn query() -> Query {
+        Query::parse("rust", &crate::engine::EngineRegistry::default(), &[])
+    }
+
+    #[test]
+    fn builds_the_search_request() {
+        let request = engine(None).build_request(&query(), 2).expect("request");
+        assert_eq!(
+            request.url,
+            "https://www.mojeek.com/search?q=rust&safe=0&s=10"
+        );
+    }
+
+    #[test]
+    fn a_cookie_file_carries_the_altcha_clearance() {
+        let path = std::env::temp_dir().join(format!("mojeek-cookie-{}.txt", std::process::id()));
+        std::fs::write(&path, "chllg=abc.def").expect("write");
+        let request = engine(Some(path.to_str().expect("utf-8")))
+            .build_request(&query(), 1)
+            .expect("request");
+        let _ = std::fs::remove_file(&path);
+        assert!(
+            request
+                .cookies
+                .iter()
+                .any(|(name, value)| name == "chllg" && value == "abc.def")
+        );
+    }
+
+    #[test]
+    fn a_challenge_page_is_a_captcha() {
+        let response = EngineResponse::new(
+            200,
+            "https://www.mojeek.com/search",
+            b"<title>Captcha</title><altcha-widget>".to_vec(),
+        );
+        assert!(matches!(
+            engine(None).parse(&response, &query()),
+            Err(EngineError::Captcha)
+        ));
+    }
+
+    #[test]
+    fn parses_the_result_list() {
+        let body = concat!(
+            "<html><body><ul class=\"results-standard\">",
+            "<li class=\"r1\"><a href=\"https://rust-lang.org/\" class=\"ob\"><p class=\"i\">",
+            "<span class=\"url\">https://rust-lang.org/</span></p></a>",
+            "<h2><a class=\"title\" href=\"https://rust-lang.org/\">Rust Programming Language</a></h2>",
+            "<p class=\"s\">Rust is blazingly fast.</p></li>",
+            "</ul></body></html>"
+        );
+        let response = EngineResponse::new(200, "https://www.mojeek.com/search", body.as_bytes().to_vec());
+        let items = engine(None).parse(&response, &query()).expect("parse");
+        assert_eq!(items.len(), 1);
+        match &items[0] {
+            EngineItem::Result(result) => {
+                assert_eq!(result.title, "Rust Programming Language");
+                assert_eq!(result.url, "https://rust-lang.org/");
+                assert_eq!(result.content, "Rust is blazingly fast.");
             }
+            _ => panic!("expected a result"),
         }
-        rest = &rest[index + marker.len()..];
     }
-    None
-}
-
-/// Solve the Altcha proof of work and return the JSON answer the widget posts.
-fn solve_altcha(challenge_b64: &str) -> Option<String> {
-    let raw = base64_decode(challenge_b64)?;
-    let json: serde_json::Value = serde_json::from_slice(&raw).ok()?;
-    let algorithm = json.get("algorithm")?.as_str()?;
-    if algorithm != "SHA-256" {
-        return None;
-    }
-    let challenge = json.get("challenge")?.as_str()?.to_string();
-    let salt = json.get("salt")?.as_str()?.to_string();
-    let signature = json.get("signature")?.as_str()?.to_string();
-    let max = json.get("maxnumber")?.as_u64().unwrap_or(1_000_000);
-    let cost = json.get("cost")?.as_u64().unwrap_or(0);
-    let zeros = vec![0u8; (cost as usize).div_ceil(2)];
-    let mut number = 0u64;
-    let mut hasher = Sha256::new();
-    while number <= max {
-        hasher.update(format!("{salt}{number}").as_bytes());
-        let digest = hasher.finalize_reset();
-        if digest[..].starts_with(&zeros) {
-            break;
-        }
-        number += 1;
-    }
-    if number > max {
-        return None;
-    }
-    let payload = serde_json::json!({
-        "algorithm": algorithm,
-        "challenge": challenge,
-        "number": number,
-        "salt": salt,
-        "signature": signature,
-    });
-    Some(base64_encode(payload.to_string().as_bytes()))
-}
-
-fn base64_decode(value: &str) -> Option<Vec<u8>> {
-    use base64::Engine as _;
-    base64::engine::general_purpose::STANDARD.decode(value).ok()
-}
-
-fn base64_encode(value: &[u8]) -> String {
-    use base64::Engine as _;
-    base64::engine::general_purpose::STANDARD.encode(value)
 }
