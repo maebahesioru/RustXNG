@@ -57,9 +57,10 @@ impl Engine for Ina {
     }
 
     fn build_request(&self, query: &Query, pageno: u32) -> Result<EngineRequest, EngineError> {
-        // Upstream offsets by one page per page number, so the first request
-        // already starts at PAGE_SIZE.
-        let offset = pageno.max(1) * PAGE_SIZE;
+        // The AJAX endpoint is zero-based: offset=0 is the first page. The
+        // previous implementation started at PAGE_SIZE and therefore dropped
+        // the twelve best hits of every search.
+        let offset = pageno.saturating_sub(1) * PAGE_SIZE;
         let pairs: Vec<(&str, String)> = vec![
             ("q", query.query_text()),
             ("espace", "1".to_string()),
@@ -184,7 +185,17 @@ mod tests {
         let request = engine().build_request(&query(), 2).unwrap();
         assert_eq!(
             request.url,
-            "https://www.ina.fr/ajax/recherche?q=documentaire&espace=1&sort=pertinence&order=desc&offset=24&modified=size"
+            "https://www.ina.fr/ajax/recherche?q=documentaire&espace=1&sort=pertinence&order=desc&offset=12&modified=size"
+        );
+    }
+
+    #[test]
+    fn the_first_page_starts_at_offset_zero() {
+        let request = engine().build_request(&query(), 1).unwrap();
+        assert!(
+            request.url.ends_with("&offset=0&modified=size"),
+            "{}",
+            request.url
         );
     }
 }
