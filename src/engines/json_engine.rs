@@ -252,10 +252,20 @@ fn resolve<'a>(value: &'a Value, path: &[&str]) -> Vec<&'a Value> {
         return vec![value];
     }
     match value {
-        Value::Object(map) => match map.get(path[0]) {
-            Some(child) => resolve(child, &path[1..]),
-            None => Vec::new(),
-        },
+        Value::Object(map) => {
+            if path[0] == "$" {
+                // An object keyed by id (Habr's publicationRefs) is a column of
+                // records just like an array, so the wildcard visits every value.
+                map.values()
+                    .flat_map(|child| resolve(child, &path[1..]))
+                    .collect()
+            } else {
+                match map.get(path[0]) {
+                    Some(child) => resolve(child, &path[1..]),
+                    None => Vec::new(),
+                }
+            }
+        }
         Value::Array(items) => {
             if path[0] == "$" {
                 items
@@ -364,6 +374,27 @@ mod tests {
         // (pageno - 1) * page_size + first_page_num, upstream's formula.
         let second = engine().build_request(&query, 2).unwrap().url;
         assert!(second.contains("page=11"), "{second}");
+    }
+
+    /// Habr keys its records by id, so the wildcard has to walk object values
+    /// as well as array elements.
+    #[test]
+    fn dollar_descends_into_id_keyed_objects() {
+        let value: Value = serde_json::json!({
+            "publicationRefs": {
+                "9001": {"titleHtml": "first", "id": "9001"},
+                "9002": {"titleHtml": "second", "id": "9002"}
+            }
+        });
+        let found = json_query(&value, "publicationRefs/$/titleHtml");
+        assert_eq!(found.len(), 2);
+        let titles: Vec<String> = found.iter().map(|value| to_string(value)).collect();
+        assert!(titles.contains(&"first".to_string()), "{titles:?}");
+        assert!(titles.contains(&"second".to_string()), "{titles:?}");
+        // A named key inside an object still resolves to exactly one value.
+        let one = json_query(&value, "publicationRefs/9002/id");
+        assert_eq!(one.len(), 1);
+        assert_eq!(to_string(one[0]), "9002");
     }
 
     #[test]

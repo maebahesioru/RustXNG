@@ -21,6 +21,11 @@ enum Predicate {
     Exists(String),
     Equals(String, String),
     Contains(String, String),
+    /// starts-with(@attr, "prefix") — used by ayo's suggestion filter.
+    StartsWith(String, String),
+    /// A bare element test such as [h5]: the node must have a child element
+    /// with that tag. Used by anaconda's content_xpath (./td[h5]/text()).
+    Child(String),
     Position(usize),
     Last,
 }
@@ -351,6 +356,14 @@ impl Step {
                 .attr(attribute)
                 .map(|value| value.contains(needle.as_str()))
                 .unwrap_or(false),
+            Predicate::StartsWith(attribute, prefix) => element
+                .attr(attribute)
+                .map(|value| value.starts_with(prefix.as_str()))
+                .unwrap_or(false),
+            Predicate::Child(tag) => element
+                .children
+                .iter()
+                .any(|child| tag == "*" || child.matches_tag(tag)),
             Predicate::Position(_) | Predicate::Last => true,
         })
     }
@@ -397,6 +410,15 @@ impl Step {
                 .attr(attribute)
                 .map(|value| value.contains(needle.as_str()))
                 .unwrap_or(false),
+            Predicate::StartsWith(attribute, prefix) => element
+                .value()
+                .attr(attribute)
+                .map(|value| value.starts_with(prefix.as_str()))
+                .unwrap_or(false),
+            Predicate::Child(tag) => element
+                .children()
+                .filter_map(ElementRef::wrap)
+                .any(|child| tag == "*" || child.value().name() == tag),
             Predicate::Position(_) | Predicate::Last => true,
         })
     }
@@ -446,24 +468,47 @@ fn parse_predicate(text: &str) -> Result<Predicate, String> {
             .to_string();
         return Ok(Predicate::Contains(attribute, unquote(&needle)));
     }
+    if let Some(rest) = inner.strip_prefix("starts-with(") {
+        let rest = rest.strip_suffix(')').unwrap_or(rest);
+        let (attribute, needle) = split_call_arguments(rest)?;
+        let attribute = attribute
+            .trim()
+            .strip_prefix('@')
+            .ok_or_else(|| format!("starts-with() needs an attribute: {text:?}"))?
+            .to_string();
+        return Ok(Predicate::StartsWith(attribute, unquote(&needle)));
+    }
     if let Some(attribute) = inner.strip_prefix('@') {
         if let Some((name, value)) = attribute.split_once('=') {
             return Ok(Predicate::Equals(name.trim().to_string(), unquote(value)));
         }
         return Ok(Predicate::Exists(attribute.trim().to_string()));
     }
+    // A bare element name is the XPath child test [tag].
+    if !inner.is_empty()
+        && inner
+            .chars()
+            .all(|character| character.is_alphanumeric() || "-_:*".contains(character))
+    {
+        return Ok(Predicate::Child(inner.to_string()));
+    }
     Err(format!("unsupported predicate {text:?}"))
 }
 
 fn split_call_arguments(text: &str) -> Result<(String, String), String> {
     let mut quote: Option<char> = None;
+    // Arguments may nest calls of their own, e.g. substring-after(.//a[contains(@class, "x")]/@href, "://");
+    // a comma inside those parentheses does not separate the outer arguments.
+    let mut depth = 0usize;
     for (index, character) in text.char_indices() {
         match quote {
             Some(active) if character == active => quote = None,
             Some(_) => {}
             None => match character {
                 '\'' | '"' => quote = Some(character),
-                ',' => {
+                '(' => depth += 1,
+                ')' => depth = depth.saturating_sub(1),
+                ',' if depth == 0 => {
                     return Ok((text[..index].to_string(), text[index + 1..].to_string()));
                 }
                 _ => {}

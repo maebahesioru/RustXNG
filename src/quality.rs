@@ -81,7 +81,7 @@ pub fn inspect(query: &Query, items: &[EngineItem]) -> Option<Suspicion> {
         return Some(Suspicion::Placeholder);
     }
 
-    let repeated = repeated_titles(&results);
+    let repeated = repeated_titles(query, &results);
     let unrelated = unrelated_share(query, &results);
 
     // A majority of repeated titles is a strong signal on its own.
@@ -99,16 +99,26 @@ pub fn inspect(query: &Query, items: &[EngineItem]) -> Option<Suspicion> {
 }
 
 /// Number of results that share a title with another result.
-fn repeated_titles(results: &[(&str, &str, &str)]) -> usize {
+///
+/// A title that is exactly one of the query's terms does not count: book, file
+/// and package indexes answer an exact search with entries whose title *is* the
+/// search term ("rust" comes back as ten different books called "Rust"), which
+/// is the expected shape of such a page and not evidence of fabrication.
+fn repeated_titles(query: &Query, results: &[(&str, &str, &str)]) -> usize {
     use std::collections::HashMap;
-    let mut counts: HashMap<String, usize> = HashMap::new();
-    for (title, _, _) in results {
-        let normalised: String = title
+    let terms = query_terms(&query.query_text());
+    let normalise = |title: &str| -> String {
+        title
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ")
-            .to_lowercase();
-        if normalised.is_empty() {
+            .to_lowercase()
+    };
+    let echoes_query = |normalised: &str| terms.iter().any(|term| term.as_str() == normalised);
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for (title, _, _) in results {
+        let normalised = normalise(title);
+        if normalised.is_empty() || echoes_query(&normalised) {
             continue;
         }
         *counts.entry(normalised).or_default() += 1;
@@ -116,11 +126,10 @@ fn repeated_titles(results: &[(&str, &str, &str)]) -> usize {
     results
         .iter()
         .filter(|(title, _, _)| {
-            let normalised = title
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ")
-                .to_lowercase();
+            let normalised = normalise(title);
+            if echoes_query(&normalised) {
+                return false;
+            }
             counts.get(&normalised).copied().unwrap_or(0) > 1
         })
         .count()
@@ -210,6 +219,22 @@ mod tests {
             })
             .collect();
         assert_eq!(inspect(&query("rust"), &items), Some(Suspicion::Repeated));
+    }
+
+    #[test]
+    fn titles_that_echo_the_query_are_not_repeated() {
+        // z-lib.id answers "rust" with ten different books titled "Rust"; the
+        // URLs differ, so the page is a real result list, not a placeholder.
+        let items: Vec<EngineItem> = (0..6)
+            .map(|index| {
+                item(
+                    "Rust",
+                    "Language: English | Year: 2019 | File: PDF",
+                    &format!("https://z-lib.id/book/rust-{index}"),
+                )
+            })
+            .collect();
+        assert_eq!(inspect(&query("rust"), &items), None);
     }
 
     #[test]

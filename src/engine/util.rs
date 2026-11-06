@@ -1,14 +1,36 @@
 //! Helpers shared by the engines: HTML extraction in the spirit of upstream's
 //! `xpath` engine, text cleanup and URL unwrapping.
 
+use std::sync::OnceLock;
+
+use regex::Regex;
 use scraper::{ElementRef, Html, Selector};
 
 use super::{EngineError, EngineItem};
 use crate::results::{Priority, SearchResult, Template};
 
 /// Parse a document.
+///
+/// The <noscript> wrapper tags are stripped first. The parser runs with
+/// scripting enabled, so markup inside <noscript> would otherwise collapse
+/// into a single text node and stay invisible to every selector. Several
+/// upstreams (Bing among them) ship the actual result list exactly there.
 pub fn parse_html(body: &str) -> Html {
-    Html::parse_document(body)
+    if body.contains("noscript") {
+        Html::parse_document(&strip_noscript_tags(body))
+    } else {
+        Html::parse_document(body)
+    }
+}
+
+/// Drop the opening and closing <noscript> tags, keeping the content.
+fn strip_noscript_tags(body: &str) -> String {
+    static OPEN: OnceLock<Regex> = OnceLock::new();
+    static CLOSE: OnceLock<Regex> = OnceLock::new();
+    let open = OPEN.get_or_init(|| Regex::new(r"(?i)<noscript\b[^>]*>").expect("noscript regex"));
+    let close = CLOSE.get_or_init(|| Regex::new(r"(?i)</noscript\s*>").expect("noscript regex"));
+    let without_open = open.replace_all(body, "");
+    close.replace_all(&without_open, "").into_owned()
 }
 
 /// Compile a CSS selector, mapping a bad selector to an engine error.
@@ -497,6 +519,17 @@ pub fn unwrap_url_parameter(link: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+
+    #[test]
+    fn noscript_wrappers_are_stripped() {
+        let html = parse_html(
+            "<html><body><noscript><div id='inner'>kept</div></noscript></body></html>",
+        );
+        let found = select_elements(&html, "div#inner").expect("selector");
+        assert_eq!(found.len(), 1);
+        assert_eq!(text(found[0]), "kept");
+    }
 
     #[test]
     fn entities_are_decoded() {

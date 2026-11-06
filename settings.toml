@@ -317,7 +317,7 @@ categories = ["news"]
 name = "abcnyheter"
 engine = "xpath"
 shortcut = "abc"
-categories = ["g", "e", "n", "e", "r", "a", "l"]
+categories = ["general"]
 paging = true
 search_url = "https://startsiden.abcnyheter.no/sok/?q={query}&page={pageno}"
 results_xpath = "//ul[contains(@class, \"results__list\")]/li[contains(@class, \"result\")]"
@@ -328,7 +328,7 @@ content_xpath = "./div"
 name = "anaconda"
 engine = "xpath"
 shortcut = "conda"
-categories = ["i", "t"]
+categories = ["it"]
 paging = true
 timeout = 6.0
 search_url = "https://anaconda.org/search?q={query}&page={pageno}"
@@ -349,7 +349,7 @@ search_type = "text"
 name = "ayo"
 engine = "xpath"
 shortcut = "ayo"
-categories = ["g", "e", "n", "e", "r", "a", "l"]
+categories = ["general"]
 search_url = "https://search.ayo.de/search?q={query}"
 results_xpath = "//div[contains(@class, 'search-result')]/div"
 url_xpath = ".//a/@href"
@@ -372,7 +372,7 @@ content_xpath = "//article[@class=\"repo-summary\"]/p"
 name = "crowdview"
 engine = "json_engine"
 shortcut = "cv"
-categories = ["g", "e", "n", "e", "r", "a", "l"]
+categories = ["general"]
 paging = false
 search_url = "https://crowdview-next-js.onrender.com/api/search-v3?query={query}"
 results_query = "results"
@@ -385,7 +385,7 @@ title_html_to_text = true
 name = "encyclosearch"
 engine = "json_engine"
 shortcut = "es"
-categories = ["g", "e", "n", "e", "r", "a", "l"]
+categories = ["general"]
 paging = true
 search_url = "https://encyclosearch.org/encyclosphere/search?q={query}&page={pageno}&resultsPerPage=15"
 results_query = "Results"
@@ -417,7 +417,7 @@ first_page_num = 1
 name = "fastbot"
 engine = "xpath"
 shortcut = "fa"
-categories = ["g", "e", "n", "e", "r", "a", "l"]
+categories = ["general"]
 search_url = "https://fastbot.de/search?q={query}"
 results_xpath = "//section[contains(@class, 'organic-results')]/div[contains(@class, 'result-item')]"
 url_xpath = "(./a/@href)[last()]"
@@ -436,7 +436,7 @@ search_type = "title"
 name = "fynd"
 engine = "xpath"
 shortcut = "fynd"
-categories = ["g", "e", "n", "e", "r", "a", "l"]
+categories = ["general"]
 paging = true
 safesearch = true
 search_url = "https://fynd.bot/?search={query}&offset={pageno}{safe_search}"
@@ -450,7 +450,7 @@ first_page_num = 0
 name = "gabanza"
 engine = "xpath"
 shortcut = "gab"
-categories = ["g", "e", "n", "e", "r", "a", "l"]
+categories = ["general"]
 timeout = 4
 search_url = "https://www.gabanza.com/search?query={query}"
 results_xpath = "//div[contains(@class, \"border-t\")]/div/div"
@@ -470,7 +470,7 @@ api_path = "api.php"
 name = "habrahabr"
 engine = "xpath"
 shortcut = "habr"
-categories = ["i", "t"]
+categories = ["it"]
 paging = true
 timeout = 4.0
 search_url = "https://habr.com/en/search/page{pageno}/?q={query}"
@@ -492,7 +492,7 @@ content_xpath = ".//div[@class=\"from\"]"
 name = "library genesis"
 engine = "xpath"
 shortcut = "lg"
-categories = ["f", "i", "l", "e", "s"]
+categories = ["files"]
 timeout = 7.0
 search_url = "https://libgen.rs/search.php?req={query}"
 url_xpath = "//a[contains(@href,\"book/index.php?md5\")]/@href"
@@ -502,7 +502,7 @@ content_xpath = "//td/a[1][contains(@href,\"=author\")]/text()"
 name = "lobste.rs"
 engine = "xpath"
 shortcut = "lo"
-categories = ["i", "t"]
+categories = ["it"]
 timeout = 5.0
 search_url = "https://lobste.rs/search?q={query}&what=stories&order=relevance"
 results_xpath = "//li[contains(@class, \"story\")]"
@@ -525,7 +525,7 @@ url_prefix = "https://developer.mozilla.org"
 name = "mankier"
 engine = "json_engine"
 shortcut = "man"
-categories = ["i", "t"]
+categories = ["it"]
 search_url = "https://www.mankier.com/api/v2/mans/?q={query}"
 results_query = "results"
 url_query = "url"
@@ -535,7 +535,7 @@ content_query = "description"
 name = "openairedatasets"
 engine = "json_engine"
 shortcut = "oad"
-categories = ["s", "c", "i", "e", "n", "c", "e"]
+categories = ["science"]
 paging = true
 timeout = 5.0
 search_url = "https://api.openaire.eu/search/datasets?format=json&page={pageno}&size=10&title={query}"
@@ -548,7 +548,7 @@ content_html_to_text = true
 name = "openairepublications"
 engine = "json_engine"
 shortcut = "oap"
-categories = ["s", "c", "i", "e", "n", "c", "e"]
+categories = ["science"]
 paging = true
 timeout = 5.0
 search_url = "https://api.openaire.eu/search/publications?format=json&page={pageno}&size=10&title={query}"
@@ -561,7 +561,7 @@ content_html_to_text = true
 name = "openrepos"
 engine = "xpath"
 shortcut = "or"
-categories = ["f", "i", "l", "e", "s"]
+categories = ["files"]
 paging = true
 timeout = 4.0
 search_url = "https://openrepos.net/search/node/{query}?page={pageno}"
@@ -608,7 +608,7 @@ content_xpath = "./p[@id='result-hightlight']"
 name = "tmdb"
 engine = "xpath"
 shortcut = "tm"
-categories = ["m", "o", "v", "i", "e", "s"]
+categories = ["movies"]
 paging = true
 search_url = "https://www.themoviedb.org/search?page={pageno}&query={query}"
 results_xpath = "//div[contains(@class,\"movie\") or contains(@class,\"tv\")]//div[contains(@class,\"card\")]"
@@ -620,7 +620,7 @@ thumbnail_xpath = ".//img/@src"
 name = "torch"
 engine = "xpath"
 shortcut = "tch"
-categories = ["o", "n", "i", "o", "n", "s"]
+categories = ["onions"]
 paging = true
 search_url = "http://xmh57jrknzkhv6y3ls3ubitzfqnkrwxhopf5aygthi7d6rplyvk3noyd.onion/cgi-bin/omega/omega?P={query}&DEFAULTOP=and"
 results_xpath = "//table//tr"
@@ -716,7 +716,7 @@ first_page_num = 1
 name = "reloado"
 engine = "xpath"
 shortcut = "rel"
-categories = ["g", "e", "n", "e", "r", "a", "l"]
+categories = ["general"]
 paging = true
 search_url = "https://reloado.com/search?q={query}&page={pageno}"
 results_xpath = "//div[contains(@class, 'result-item')]"
@@ -748,7 +748,7 @@ content_xpath = "//div[@class=\"synonyms-list-group\"]"
 name = "wikimini"
 engine = "xpath"
 shortcut = "wkmn"
-categories = ["g", "e", "n", "e", "r", "a", "l"]
+categories = ["general"]
 search_url = "https://fr.wikimini.org/w/index.php?search={query}&title=Sp%C3%A9cial%3ASearch&fulltext=Search"
 url_xpath = "//li/div[@class=\"mw-search-result-heading\"]/a/@href"
 title_xpath = "//li//div[@class=\"mw-search-result-heading\"]/a"
@@ -757,7 +757,7 @@ content_xpath = "//li/div[@class=\"searchresult\"]"
 name = "zapmeta"
 engine = "xpath"
 shortcut = "zpm"
-categories = ["g", "e", "n", "e", "r", "a", "l"]
+categories = ["general"]
 paging = true
 search_url = "https://www.zapmeta.com/search?q={query}&pg={pageno}"
 results_xpath = "//article[contains(@class, \"organic-results-item\")]"
@@ -842,8 +842,7 @@ paging = true
 name = "bandcamp"
 engine = "bandcamp"
 shortcut = "bc"
-categories = ["m", "u", "s", "i", "c"]
-
+categories = ["music"]
 [[engines]]
 name = "genius"
 engine = "genius"
@@ -992,8 +991,7 @@ paging = true
 name = "artstation"
 engine = "artstation"
 shortcut = "as"
-categories = ["i", "m", "a", "g", "e", "s"]
-
+categories = ["images"]
 [[engines]]
 name = "deviantart"
 engine = "deviantart"
