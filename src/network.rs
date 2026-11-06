@@ -148,11 +148,7 @@ fn build_client(
     extra_proxy: Option<reqwest::Proxy>,
     redirects: reqwest::redirect::Policy,
 ) -> Result<reqwest::Client, NetworkError> {
-    build_client_with(
-        outgoing,
-        extra_proxy,
-        reqwest::redirect::Policy::limited(outgoing.max_redirects),
-    )
+    build_client_with(outgoing, extra_proxy, redirects)
 }
 
 /// ["build_client"] with an explicit redirect policy.
