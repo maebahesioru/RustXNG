@@ -228,18 +228,9 @@ async fn run_search(
     let language = query.engine_language();
 
     let user = user_info(&headers);
-    match state.limiter.check(peer.0, &headers, &format) {
-        LimiterVerdict::Allow => {}
-        LimiterVerdict::Blocked {
-            retry_after,
-            message,
-        } => return limiter_response(&state, retry_after, &message, None),
-        LimiterVerdict::Challenge {
-            retry_after,
-            message,
-            set_cookie,
-        } => return limiter_response(&state, retry_after, &message, Some(&set_cookie)),
-        LimiterVerdict::Redirect => return Redirect::to("/").into_response(),
+    if let Some(response) = limiter_response(&state, state.limiter.check(peer.0, &headers, &format))
+    {
+        return response;
     }
 
     let request = SearchRequest {
@@ -934,10 +925,18 @@ pub struct ResearchParams {
 pub async fn research(
     State(state): State<AppState>,
     Query(params): Query<ResearchParams>,
+    peer: ClientAddr,
+    headers: HeaderMap,
 ) -> Response {
     let question = params.q.clone().unwrap_or_default();
     if question.trim().is_empty() {
         return error_page(&state, StatusCode::BAD_REQUEST, "missing question");
+    }
+    // A04: `/research` runs several searches (and, when configured, two LLM
+    // calls), so it must be charged to the same client quota as `/search`.
+    if let Some(response) = limiter_response(&state, state.limiter.check(peer.0, &headers, "json"))
+    {
+        return response;
     }
     let settings = state.settings();
     let max_queries = params
@@ -1004,25 +1003,33 @@ pub async fn not_found(State(state): State<AppState>) -> Response {
     error_page(&state, StatusCode::NOT_FOUND, "page not found")
 }
 
-/// A 429 (or limiter challenge) response with the limiter's HTML error page.
-fn limiter_response(
-    state: &AppState,
-    retry_after: u64,
-    message: &str,
-    set_cookie: Option<&str>,
-) -> Response {
-    let mut response = error_page(state, StatusCode::TOO_MANY_REQUESTS, message);
+/// Render a rejected request's limiter response.
+fn limiter_response(state: &AppState, verdict: LimiterVerdict) -> Option<Response> {
+    let (retry_after, message, set_cookie) = match verdict {
+        LimiterVerdict::Allow => return None,
+        LimiterVerdict::Blocked {
+            retry_after,
+            message,
+        } => (retry_after, message, None),
+        LimiterVerdict::Challenge {
+            retry_after,
+            message,
+            set_cookie,
+        } => (retry_after, message, Some(set_cookie)),
+        LimiterVerdict::Redirect => return Some(Redirect::to("/").into_response()),
+    };
+    let mut response = error_page(state, StatusCode::TOO_MANY_REQUESTS, &message);
     if retry_after > 0
         && let Ok(value) = axum::http::HeaderValue::from_str(&retry_after.to_string())
     {
         response.headers_mut().insert(header::RETRY_AFTER, value);
     }
     if let Some(cookie) = set_cookie
-        && let Ok(value) = axum::http::HeaderValue::from_str(cookie)
+        && let Ok(value) = axum::http::HeaderValue::from_str(&cookie)
     {
         response.headers_mut().append(header::SET_COOKIE, value);
     }
-    response
+    Some(response)
 }
 
 fn error_page(state: &AppState, status: StatusCode, message: &str) -> Response {
