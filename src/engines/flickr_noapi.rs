@@ -138,7 +138,7 @@ fn parse_photo(photo: &serde_json::Value) -> Option<EngineItem> {
         }
     }
     let size_data = size_data?;
-    let img_src = json_str(size_data, "url");
+    let img_src = absolute_url(&json_str(size_data, "url"));
     if !is_http_url(&img_src) {
         return None;
     }
@@ -150,13 +150,13 @@ fn parse_photo(photo: &serde_json::Value) -> Option<EngineItem> {
     let thumbnail = sizes
         .and_then(|sizes| sizes.get("n"))
         .and_then(|entry| entry.get("data"))
-        .map(|data| json_str(data, "url"))
+        .map(|data| absolute_url(&json_str(data, "url")))
         .filter(|url| !url.is_empty())
         .or_else(|| {
             sizes
                 .and_then(|sizes| sizes.get("z"))
                 .and_then(|entry| entry.get("data"))
-                .map(|data| json_str(data, "url"))
+                .map(|data| absolute_url(&json_str(data, "url")))
                 .filter(|url| !url.is_empty())
         })
         .unwrap_or_else(|| img_src.clone());
@@ -215,6 +215,15 @@ fn time_range_suffix(range: TimeRange) -> String {
 
 fn is_http_url(url: &str) -> bool {
     url.starts_with("http://") || url.starts_with("https://")
+}
+
+/// Flickr serves its asset URLs protocol relative, so every image on the page
+/// arrives as a bare double slash path that the http checks below would drop.
+fn absolute_url(url: &str) -> String {
+    match url.strip_prefix("//") {
+        Some(rest) => format!("https://{rest}"),
+        None => url.to_string(),
+    }
 }
 
 #[cfg(test)]
@@ -276,6 +285,37 @@ mod tests {
             }
             _ => panic!("expected a result"),
         }
+    }
+
+    #[test]
+    fn protocol_relative_assets_are_absolutised() {
+        // Flickr serves every asset as "//live.staticflickr.com/...", so the
+        // http check used to drop the whole legend.
+        let relative = PHOTO.replace("https://live.staticflickr.com/", "//live.staticflickr.com/");
+        let photo: serde_json::Value = serde_json::from_str(&relative).unwrap();
+        let model = serde_json::json!({
+            "legend": [["0", "0", "a", "b", "c", "d", "0", "e"]],
+            "main": {"0": [{"a": {"b": {"c": {"d": [{"e": photo}]}}}}]}
+        });
+        let body = format!(
+            "<html><head><script>\n  modelExport: {},\n</script></head><body></body></html>",
+            model
+        );
+        let response = EngineResponse::new(200, SEARCH_URL, body.as_bytes().to_vec());
+        let query = Query::parse("photo", &crate::engine::EngineRegistry::default(), &[]);
+        let items = engine().parse(&response, &query).unwrap();
+        assert_eq!(items.len(), 1);
+        let EngineItem::Result(result) = &items[0] else {
+            panic!("expected a result")
+        };
+        assert_eq!(
+            result.img_src.as_deref(),
+            Some("https://live.staticflickr.com/o.jpg")
+        );
+        assert_eq!(
+            result.thumbnail.as_deref(),
+            Some("https://live.staticflickr.com/n.jpg")
+        );
     }
 
     #[test]

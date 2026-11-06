@@ -24,11 +24,12 @@ const DEFAULTS: EngineDefaults = EngineDefaults {
 };
 
 const BASE_URL: &str = "https://ollama.com";
-/// Upstream xpath: //li[@x-test-model].
-const RESULTS: &str = "li[x-test-model]";
-const TITLE: &str = "span[x-test-search-response-title]";
-const CONTENT: &str = "p.max-w-lg.break-words.text-neutral-800.text-md";
-const PUBLISHED: &str = "span[class*=\"flex items-center\"]";
+/// The library list is a plain role=list wrapper; the old x-test-* hooks that
+/// upstream relied on are gone from the markup.
+const RESULTS: &str = "ul[role=\"list\"] > li";
+const TITLE: &str = "h2 > span";
+const CONTENT: &str = "p.line-clamp-2";
+const PUBLISHED: &str = "span[title^=\"Updated \"]";
 
 pub struct Ollama {
     meta: EngineMeta,
@@ -82,8 +83,7 @@ impl Engine for Ollama {
             }
             let mut builder = ResultBuilder::new(url, title)
                 .content(text_of(element, CONTENT).unwrap_or_default());
-            if let Some(published) =
-                attr_of(element, PUBLISHED, "title").and_then(|value| date(&value))
+            if let Some(published) = attr_of(element, PUBLISHED, "title").and_then(|value| date(&value))
             {
                 builder = builder.published_date(published);
             }
@@ -93,9 +93,14 @@ impl Engine for Ollama {
     }
 }
 
-/// Upstream parses "%b %d, %Y %I:%M %p %Z"; the zone suffix is optional here.
+/// The list shows an absolute stamp in the tooltip ("Updated October 31, 2026")
+/// and a relative one as the visible text ("4d").
 fn date(value: &str) -> Option<String> {
     let value = value.trim();
+    let value = value.strip_prefix("Updated ").unwrap_or(value).trim();
+    if let Ok(parsed) = chrono::NaiveDate::parse_from_str(value, "%B %d, %Y") {
+        return Some(parsed.format("%Y-%m-%dT00:00:00").to_string());
+    }
     let head = value
         .rsplit_once(' ')
         .map(|(head, _zone)| head)
@@ -122,16 +127,18 @@ mod tests {
 
     #[test]
     fn parses_the_model_list() {
-        let html = r##"<ul>
-          <li x-test-model>
-            <a href="/library/llama3.2">
-              <span x-test-search-response-title>llama3.2</span>
-              <p class="max-w-lg break-words text-neutral-800 text-md">Meta's Llama 3.2 model</p>
-              <span class="flex items-center gap-2" title="Oct 24, 2026 11:00 AM UTC">new</span>
+        let html = r##"<ul role="list" class="overflow-hidden rounded-3xl border-[0.5px] border-line">
+          <li class="border-t-[0.5px] border-line first:border-t-0">
+            <a href="/meta/llama3.2" class="group grid grid-cols-1">
+              <div class="flex min-w-0 items-baseline gap-2.5">
+                <h2 class="min-w-0 truncate text-xl font-medium" title="llama3.2"><span>meta/llama3.2</span></h2>
+                <span class="flex-none text-[15px] tabular-nums text-muted" title="Updated October 31, 2026">4d</span>
+              </div>
+              <p class="mt-1 line-clamp-2 text-[15px] leading-6 text-black sm:col-span-2">Meta's Llama 3.2 model</p>
             </a>
           </li>
-          <li x-test-model><a href="/library/broken"></a></li>
-          <li><a href="/library/nope"><span x-test-search-response-title>nope</span></a></li>
+          <li class="border-t-[0.5px] border-line"><a href="/meta/broken"></a></li>
+          <li><span>not a result</span></li>
         </ul>"##;
         let response = EngineResponse::new(200, BASE_URL, html.as_bytes().to_vec());
         let items = engine().parse(&response, &query("llama")).unwrap();
@@ -139,12 +146,12 @@ mod tests {
         let EngineItem::Result(result) = &items[0] else {
             panic!("expected a result")
         };
-        assert_eq!(result.url, "https://ollama.com/library/llama3.2");
-        assert_eq!(result.title, "llama3.2");
+        assert_eq!(result.url, "https://ollama.com/meta/llama3.2");
+        assert_eq!(result.title, "meta/llama3.2");
         assert_eq!(result.content, "Meta's Llama 3.2 model");
         assert_eq!(
             result.published_date.as_deref(),
-            Some("2026-10-24T11:00:00")
+            Some("2026-10-31T00:00:00")
         );
     }
 

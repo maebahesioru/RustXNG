@@ -1,4 +1,8 @@
 //! Niconico engine, ported from searx/engines/niconico.py.
+//!
+//! The search page became a client rendered application, so the HTML listing no
+//! longer carries any watch link. This port queries the public Snapshot Search
+//! API of nicovideo.jp instead, which needs no credentials.
 // engine-id: niconico
 
 use std::sync::Arc;
@@ -24,6 +28,8 @@ const DEFAULTS: EngineDefaults = EngineDefaults {
 
 const BASE_URL: &str = "https://www.nicovideo.jp";
 const EMBED_URL: &str = "https://embed.nicovideo.jp";
+const API_URL: &str = "https://snapshot.search.nicovideo.jp/api/v2/snapshot/video/contents/search";
+const PAGE_SIZE: u32 = 20;
 
 /// The Niconico video search.
 pub struct Niconico {
@@ -36,15 +42,6 @@ impl Niconico {
             meta: EngineMeta::from_config(config, DEFAULTS),
         }))
     }
-
-    fn base_url(&self) -> String {
-        self.meta
-            .base_url
-            .clone()
-            .unwrap_or_else(|| BASE_URL.to_string())
-            .trim_end_matches('/')
-            .to_string()
-    }
 }
 
 impl Engine for Niconico {
@@ -53,27 +50,37 @@ impl Engine for Niconico {
     }
 
     fn build_request(&self, query: &Query, pageno: u32) -> Result<EngineRequest, EngineError> {
-        let mut pairs: Vec<(&str, String)> = vec![("page", pageno.max(1).to_string())];
-        if let Some(range) = query.time_range {
-            let days = match range {
-                TimeRange::Day => 1,
-                TimeRange::Week => 7,
-                TimeRange::Month => 30,
-                TimeRange::Year => 365,
-            };
-            let start = chrono::Utc::now()
-                .date_naive()
-                .checked_sub_days(chrono::Days::new(days))
-                .map(|date| date.format("%Y-%m-%d").to_string())
-                .unwrap_or_default();
-            pairs.push(("start", start));
+        let pageno = pageno.max(1);
+        let mut pairs: Vec<(&str, String)> = vec![
+            ("q", query.query_text().to_string()),
+            ("targets", "title,description,tags".to_string()),
+            (
+                "fields",
+                "contentId,title,description,thumbnailUrl,lengthSeconds,startTime".to_string(),
+            ),
+            ("_limit", PAGE_SIZE.to_string()),
+            ("_offset", ((pageno - 1) * PAGE_SIZE).to_string()),
+            ("_context", "rustxng".to_string()),
+        ];
+        match query.time_range {
+            Some(range) => {
+                let days = match range {
+                    TimeRange::Day => 1,
+                    TimeRange::Week => 7,
+                    TimeRange::Month => 30,
+                    TimeRange::Year => 365,
+                };
+                let start = chrono::Utc::now()
+                    .date_naive()
+                    .checked_sub_days(chrono::Days::new(days))
+                    .map(|date| date.format("%Y-%m-%dT00:00:00+09:00").to_string())
+                    .unwrap_or_default();
+                pairs.push(("filters[startTime][gte]", start));
+                pairs.push(("_sort", "+startTime".to_string()));
+            }
+            None => pairs.push(("_sort", "-viewCounter".to_string())),
         }
-        Ok(EngineRequest::get(format!(
-            "{}/search/{}?{}",
-            self.base_url(),
-            query.query_text(),
-            query_string(&pairs)
-        )))
+        Ok(EngineRequest::get(format!("{API_URL}?{}", query_string(&pairs))))
     }
 
     fn parse(
@@ -81,33 +88,34 @@ impl Engine for Niconico {
         response: &EngineResponse,
         _query: &Query,
     ) -> Result<Vec<EngineItem>, EngineError> {
-        let html = response.html()?;
+        let body = response.text();
+        let Ok(document) = serde_json::from_str::<serde_json::Value>(&body) else {
+            return Ok(Vec::new());
+        };
+        let Some(entries) = json_path(&document, "data").and_then(|value| value.as_array()) else {
+            return Ok(Vec::new());
+        };
         let mut results = Vec::new();
-        for item in select_elements(&html, "li[data-video-item]")? {
-            let Some(href) = attr_of(item, "a.itemThumbWrap", "href") else {
-                continue;
-            };
-            let video_id = video_id(&href);
-            let title = text_of(item, "p.itemTitle a").unwrap_or_default();
-            if video_id.is_empty() || title.is_empty() {
+        for entry in entries {
+            let content_id = json_str(entry, "contentId");
+            let title = strip_tags(&json_str(entry, "title"));
+            if content_id.is_empty() || title.is_empty() {
                 continue;
             }
-            let url = format!("{}/watch/{video_id}", self.base_url());
+            let url = format!("{BASE_URL}/watch/{content_id}");
             let mut builder = ResultBuilder::new(url, title)
                 .template(Template::Videos)
-                .content(attr_of(item, "p.itemDescription", "title").unwrap_or_default())
-                .metadata("iframe_src", format!("{EMBED_URL}/watch/{video_id}"));
-            if let Some(length) = length(&text_of(item, "span.videoLength").unwrap_or_default()) {
-                builder = builder.metadata("length", length);
-            }
-            if let Some(date) =
-                published_date(&text_of(item, "p.itemTime span.time").unwrap_or_default())
-            {
-                builder = builder.published_date(date);
-            }
-            let thumbnail = attr_of(item, "img.thumb", "src").unwrap_or_default();
+                .content(strip_tags(&json_str(entry, "description")))
+                .metadata("iframe_src", format!("{EMBED_URL}/watch/{content_id}"));
+            let thumbnail = json_str(entry, "thumbnailUrl");
             if !thumbnail.is_empty() {
                 builder = builder.thumbnail(thumbnail);
+            }
+            if let Some(length) = length(entry) {
+                builder = builder.metadata("length", length);
+            }
+            if let Some(date) = published_date(&json_str(entry, "startTime")) {
+                builder = builder.published_date(date);
             }
             results.push(builder.build());
         }
@@ -115,53 +123,37 @@ impl Engine for Niconico {
     }
 }
 
-/// The id of the watched video, upstream splits the watch link on ? and /.
-fn video_id(href: &str) -> String {
-    href.split('?')
-        .next()
-        .unwrap_or_default()
-        .rsplit('/')
-        .next()
-        .unwrap_or_default()
-        .to_string()
+/// The playing time, the API reports it in seconds.
+fn length(entry: &serde_json::Value) -> Option<String> {
+    let seconds = entry.get("lengthSeconds")?.as_u64()?;
+    let hours = seconds / 3600;
+    let minutes = (seconds % 3600) / 60;
+    let seconds = seconds % 60;
+    if hours > 0 {
+        Some(format!("{hours}:{minutes:02}:{seconds:02}"))
+    } else {
+        Some(format!("{minutes:02}:{seconds:02}"))
+    }
 }
 
-/// Upstream parses the length with strptime %M:%S, longer videos are dropped.
-fn length(value: &str) -> Option<String> {
-    let (minutes, seconds) = value.trim().split_once(':')?;
-    if seconds.contains(':') {
-        return None;
-    }
-    let minutes: u32 = minutes.parse().ok()?;
-    let seconds: u32 = seconds.parse().ok()?;
-    if minutes > 59 || seconds > 59 {
-        return None;
-    }
-    Some(format!("{minutes:02}:{seconds:02}"))
-}
-
-/// Upstream parses the upload time with strptime %Y/%m/%d %H:%M.
+/// The upload time, the API reports it as an ISO 8601 timestamp.
 fn published_date(value: &str) -> Option<String> {
-    chrono::NaiveDateTime::parse_from_str(value.trim(), "%Y/%m/%d %H:%M")
+    chrono::DateTime::parse_from_rfc3339(value.trim())
         .ok()
-        .map(|date| date.format("%Y-%m-%dT%H:%M:%S").to_string())
+        .map(|date| date.naive_local().format("%Y-%m-%dT%H:%M:%S").to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const FIXTURE: &str = r##"<html><body><ul class="searchResult">
-      <li data-video-item>
-        <a class="itemThumbWrap" href="/watch/sm12345?from=search">
-          <img class="thumb" src="https://nicovideo.cdn.nimg.jp/thumb/sm12345">
-          <span class="videoLength">05:30</span>
-        </a>
-        <p class="itemTitle"><a href="/watch/sm12345">Rust tutorial</a></p>
-        <p class="itemDescription" title="A description">ignored body</p>
-        <p class="itemTime"><span class="time">2024/05/01 12:30</span></p>
-      </li>
-    </ul></body></html>"##;
+    const FIXTURE: &str = r##"{"meta":{"status":200,"totalCount":1},"data":[
+      {"contentId":"sm12345","title":"Rust tutorial",
+       "description":"A <br />description",
+       "thumbnailUrl":"https://nicovideo.cdn.nimg.jp/thumb/sm12345",
+       "lengthSeconds":330,"startTime":"2024-05-01T12:30:00+09:00"},
+      {"contentId":"","title":"dropped"}
+    ]}"##;
 
     fn engine() -> Arc<Niconico> {
         Niconico::from_config(&EngineConfig::new(
@@ -178,8 +170,8 @@ mod tests {
     }
 
     #[test]
-    fn parses_the_video_items() {
-        let response = EngineResponse::new(200, BASE_URL, FIXTURE.as_bytes().to_vec());
+    fn parses_the_api_payload() {
+        let response = EngineResponse::new(200, API_URL, FIXTURE.as_bytes().to_vec());
         let items = engine().parse(&response, &query()).unwrap();
         assert_eq!(items.len(), 1);
         match &items[0] {
@@ -210,22 +202,35 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_listing_is_not_an_error() {
-        let response = EngineResponse::new(200, BASE_URL, b"<html><body></body></html>".to_vec());
-        assert!(engine().parse(&response, &query()).unwrap().is_empty());
+    fn a_missing_payload_is_not_an_error() {
+        for body in [
+            "<html><body></body></html>".as_bytes().to_vec(),
+            br#"{"meta":{"status":200}}"#.to_vec(),
+        ] {
+            let response = EngineResponse::new(200, API_URL, body);
+            assert!(engine().parse(&response, &query()).unwrap().is_empty());
+        }
     }
 
     #[test]
     fn paging_and_time_range_are_forwarded() {
-        let request = engine().build_request(&query(), 2).unwrap();
-        assert_eq!(request.url, "https://www.nicovideo.jp/search/rust?page=2");
-        let mut query = query();
-        query.time_range = Some(TimeRange::Month);
-        let request = engine().build_request(&query, 1).unwrap();
-        assert!(
-            request
-                .url
-                .starts_with("https://www.nicovideo.jp/search/rust?page=1&start=")
-        );
+        let request = engine().build_request(&query(), 3).unwrap();
+        assert!(request.url.starts_with(API_URL));
+        assert!(request.url.contains("q=rust"));
+        assert!(request.url.contains("_offset=40"));
+        assert!(request.url.contains("_sort=-viewCounter"));
+
+        let mut ranged = query();
+        ranged.time_range = Some(TimeRange::Week);
+        let request = engine().build_request(&ranged, 1).unwrap();
+        assert!(request.url.contains("_sort=%2BstartTime"));
+        assert!(request.url.contains("filters%5BstartTime%5D%5Bgte%5D="));
+    }
+
+    #[test]
+    fn formats_long_videos() {
+        let entry: serde_json::Value =
+            serde_json::from_str(r#"{"lengthSeconds":3725}"#).unwrap();
+        assert_eq!(length(&entry).as_deref(), Some("1:02:05"));
     }
 }

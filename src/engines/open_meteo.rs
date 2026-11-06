@@ -1,10 +1,10 @@
 //! Open Meteo engine, ported from searx/engines/open_meteo.py.
 //!
 //! Upstream resolves the place with the geocoding API before it builds the
-//! forecast URL. The synchronous build_request interface cannot perform that
-//! round trip, so the coordinates are read from the latitude and longitude
-//! options (the weather answerer performs the geocoding). Only the current
-//! conditions are answered.
+//! forecast URL. The two calls are wired through build_request (geocoding)
+//! and followup_request (forecast) so a plain place name works as well as
+//! the latitude and longitude options. Only the current conditions are
+//! answered.
 // engine-id: open_meteo
 
 use std::sync::Arc;
@@ -30,6 +30,7 @@ const DEFAULTS: EngineDefaults = EngineDefaults {
 };
 
 const API_URL: &str = "https://api.open-meteo.com";
+const GEOCODING_URL: &str = "https://geocoding-api.open-meteo.com";
 
 /// The current and hourly fields of upstream's data_of_interest tuple.
 const DATA_OF_INTEREST: &[&str] = &[
@@ -43,6 +44,33 @@ const DATA_OF_INTEREST: &[&str] = &[
     "wind_direction_10m",
     "weather_code",
 ];
+
+
+fn forecast_request(meta: &EngineMeta, latitude: f64, longitude: f64) -> EngineRequest {
+    let base = meta.base_url.as_deref().unwrap_or(API_URL).trim_end_matches('/');
+    let fields = DATA_OF_INTEREST.join(",");
+    let pairs: Vec<(&str, String)> = vec![
+        ("latitude", latitude.to_string()),
+        ("longitude", longitude.to_string()),
+        ("timeformat", "unixtime".to_string()),
+        ("timezone", "auto".to_string()),
+        ("format", "json".to_string()),
+        ("current", fields.clone()),
+        ("forecast_days", "3".to_string()),
+        ("hourly", fields),
+    ];
+    EngineRequest::get(format!("{base}/v1/forecast?{}", query_string(&pairs)))
+}
+
+fn geocoding_request(text: &str) -> EngineRequest {
+    let pairs: Vec<(&str, String)> = vec![
+        ("name", text.to_string()),
+        ("count", "1".to_string()),
+        ("language", "en".to_string()),
+        ("format", "json".to_string()),
+    ];
+    EngineRequest::get(format!("{GEOCODING_URL}/v1/search?{}", query_string(&pairs)))
+}
 
 /// Open-Meteo, the weather forecast API.
 pub struct OpenMeteo {
@@ -114,38 +142,53 @@ impl Engine for OpenMeteo {
         &self.meta
     }
 
-    fn build_request(&self, _query: &Query, _pageno: u32) -> Result<EngineRequest, EngineError> {
-        let latitude = coordinate(&self.meta, "latitude").ok_or_else(|| {
-            EngineError::Message(
-                "open_meteo requires the latitude and longitude options".to_string(),
-            )
-        })?;
-        let longitude = coordinate(&self.meta, "longitude").ok_or_else(|| {
-            EngineError::Message(
-                "open_meteo requires the latitude and longitude options".to_string(),
-            )
-        })?;
-        let base = self
-            .meta
-            .base_url
-            .as_deref()
-            .unwrap_or(API_URL)
-            .trim_end_matches('/');
-        let fields = DATA_OF_INTEREST.join(",");
-        let pairs: Vec<(&str, String)> = vec![
-            ("latitude", latitude.to_string()),
-            ("longitude", longitude.to_string()),
-            ("timeformat", "unixtime".to_string()),
-            ("timezone", "auto".to_string()),
-            ("format", "json".to_string()),
-            ("current", fields.clone()),
-            ("forecast_days", "3".to_string()),
-            ("hourly", fields),
-        ];
-        Ok(EngineRequest::get(format!(
-            "{base}/v1/forecast?{}",
-            query_string(&pairs)
-        )))
+    fn build_request(&self, query: &Query, _pageno: u32) -> Result<EngineRequest, EngineError> {
+        if let (Some(latitude), Some(longitude)) = (
+            coordinate(&self.meta, "latitude"),
+            coordinate(&self.meta, "longitude"),
+        ) {
+            return Ok(forecast_request(&self.meta, latitude, longitude));
+        }
+        let text = query.query_text();
+        let text = text.trim();
+        if text.is_empty() {
+            return Err(EngineError::Message(
+                "open_meteo needs a place name or the latitude and longitude options".to_string(),
+            ));
+        }
+        Ok(geocoding_request(text))
+    }
+
+    fn followup_request(
+        &self,
+        response: &EngineResponse,
+        _query: &Query,
+    ) -> Result<Option<EngineRequest>, EngineError> {
+        if coordinate(&self.meta, "latitude").is_some()
+            && coordinate(&self.meta, "longitude").is_some()
+        {
+            return Ok(None);
+        }
+        let Ok(json) = response.json() else {
+            return Ok(None);
+        };
+        let Some(first) = json
+            .get("results")
+            .and_then(|value| value.as_array())
+            .and_then(|results| results.first())
+        else {
+            return Ok(None);
+        };
+        let latitude = first.get("latitude").and_then(|value| value.as_f64());
+        let longitude = first.get("longitude").and_then(|value| value.as_f64());
+        match (latitude, longitude) {
+            (Some(latitude), Some(longitude)) => Ok(Some(forecast_request(
+                &self.meta,
+                latitude,
+                longitude,
+            ))),
+            _ => Ok(None),
+        }
     }
 
     fn parse(
@@ -237,10 +280,45 @@ mod tests {
     }
 
     #[test]
-    fn coordinates_are_required() {
+    fn a_place_name_goes_through_the_geocoding_api() {
         let config = EngineConfig::new("openmeteo", "open_meteo", "om", &["weather"]);
         let engine = OpenMeteo::from_config(&config).unwrap();
-        assert!(engine.build_request(&query("Berlin"), 1).is_err());
+        let request = engine.build_request(&query("Berlin"), 1).unwrap();
+        assert!(
+            request
+                .url
+                .starts_with("https://geocoding-api.open-meteo.com/v1/search?"),
+            "{}",
+            request.url
+        );
+        assert!(request.url.contains("name=Berlin"));
+    }
+
+    #[test]
+    fn an_empty_message_without_coordinates_is_an_error() {
+        let config = EngineConfig::new("openmeteo", "open_meteo", "om", &["weather"]);
+        let engine = OpenMeteo::from_config(&config).unwrap();
+        assert!(engine.build_request(&query(""), 1).is_err());
+    }
+
+    #[test]
+    fn the_geocoding_answer_becomes_the_forecast_request() {
+        let config = EngineConfig::new("openmeteo", "open_meteo", "om", &["weather"]);
+        let engine = OpenMeteo::from_config(&config).unwrap();
+        let body = r#"{"results":[{"name":"Berlin","latitude":52.52437,"longitude":13.41053,"country_code":"DE"}]}"#;
+        let geocoded = response(body);
+        let followup = engine
+            .followup_request(&geocoded, &query("Berlin"))
+            .unwrap()
+            .expect("a followup request");
+        assert!(followup.url.starts_with("https://api.open-meteo.com/v1/forecast?"));
+        assert!(followup.url.contains("latitude=52.52437"));
+        assert!(followup.url.contains("longitude=13.41053"));
+        let nothing = response(r#"{"generationtime_ms":0.1}"#);
+        assert!(engine
+            .followup_request(&nothing, &query("Berlin"))
+            .unwrap()
+            .is_none());
     }
 
     #[test]

@@ -28,11 +28,24 @@ const DEFAULTS: EngineDefaults = EngineDefaults {
 };
 
 const BASE_URL: &str = "https://tiger.ch";
+
+/// Split a Cookie header ("a=1; b=2") into its name/value pairs.
+fn cookie_pairs(raw: &str) -> Vec<(String, String)> {
+    raw.split(';')
+        .filter_map(|part| {
+            let (name, value) = part.trim().split_once('=')?;
+            let name = name.trim();
+            (!name.is_empty()).then(|| (name.to_string(), value.trim().to_string()))
+        })
+        .collect()
+}
 const CATEGORIES: [&str; 2] = ["Websuche", "News"];
 
 /// Tiger, a Swiss meta search engine.
 pub struct Tiger {
     meta: EngineMeta,
+    /// Path of the cookie file written by tiger_solve.py (see the module docs).
+    cookie_file: Option<String>,
 }
 
 impl Tiger {
@@ -43,6 +56,10 @@ impl Tiger {
         }
         Ok(Arc::new(Self {
             meta: EngineMeta::from_config(config, DEFAULTS),
+            cookie_file: config
+                .opt_str("tiger_cookie_file")
+                .filter(|path| !path.is_empty())
+                .map(str::to_string),
         }))
     }
 
@@ -82,6 +99,17 @@ impl Engine for Tiger {
             .filter(|code| !code.is_empty())
         {
             request = request.cookie("Tiger.ch", &format!("Tiger.ch=&Code={code}&Checked=1"));
+        }
+        // tiger.ch asks an arithmetic question before the first search and
+        // remembers the answer in these two cookies.  tiger_solve.py answers it
+        // out of band and refreshes the file, so every request picks up a
+        // working session without a restart.
+        if let Some(path) = self.cookie_file.as_deref() {
+            if let Ok(raw) = std::fs::read_to_string(path) {
+                for (name, value) in cookie_pairs(&raw) {
+                    request = request.cookie(&name, &value);
+                }
+            }
         }
         Ok(request)
     }
@@ -206,6 +234,15 @@ mod tests {
         };
         assert_eq!(result.title, "Tiger news");
         assert_eq!(result.published_date.as_deref(), Some("2024-05-01"));
+    }
+
+    #[test]
+    fn reads_the_solved_cookies() {
+        let pairs = cookie_pairs("ASP.NET_SessionId=abc; Tiger.ch=Checked=1&Code=8; ");
+        assert_eq!(pairs.len(), 2);
+        assert_eq!(pairs[0].0, "ASP.NET_SessionId");
+        assert_eq!(pairs[1].1, "Checked=1&Code=8");
+        assert!(cookie_pairs("  ").is_empty());
     }
 
     #[test]

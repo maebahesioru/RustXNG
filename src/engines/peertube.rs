@@ -59,8 +59,9 @@ impl Engine for Peertube {
             return Err(EngineError::Message("peertube: empty query".into()));
         }
         let pairs: Vec<(&str, String)> = vec![
+            // `searchTarget=search-index` is 400 on instances running an older
+            // PeerTube (peer.tube); the default target already searches videos.
             ("search", query.query_text()),
-            ("searchTarget", "search-index".to_string()),
             ("resultType", "videos".to_string()),
             ("start", ((pageno.max(1) - 1) * 10).to_string()),
             ("count", "10".to_string()),
@@ -283,6 +284,7 @@ mod tests {
                 .starts_with("https://peer.tube/api/v1/search/videos?")
         );
         assert!(request.url.contains("start=10"));
+        assert!(!request.url.contains("searchTarget"));
         assert!(request.url.contains("nsfw=false"));
         assert!(request.url.contains("&startDate="));
     }

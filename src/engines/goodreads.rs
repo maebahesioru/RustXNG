@@ -60,7 +60,11 @@ impl Engine for Goodreads {
             "{}/search?{}",
             self.base_url(),
             query_string(&pairs)
-        )))
+        ))
+        // Goodreads answers any `Accept` that mentions text/html with a 302 to the brand
+        // new React search UI, which the table parser below cannot read. A wildcard
+        // `Accept` keeps the request on the legacy server-rendered list.
+        .header("accept", "*/*"))
     }
 
     fn parse(

@@ -23,7 +23,12 @@ const DEFAULTS: EngineDefaults = EngineDefaults {
     timeout: 4.0,
 };
 
-const BASE_URL: &str = "https://api.bitchute.com/api/beta/search/videos";
+const BASE_URL: &str = "https://api.bitchute.com/api/beta/search2/videos";
+
+/// The public web client sends a client-generated 28 character token in
+/// the X-Service-Info header; any token of that length is accepted, so a fixed
+/// one keeps the request deterministic.
+const SERVICE_INFO: &str = "rustxngserviceinfo0000000001";
 const RESULTS_PER_PAGE: u32 = 20;
 
 /// Bitchute video search.
@@ -54,7 +59,9 @@ impl Engine for Bitchute {
         });
         Ok(EngineRequest::post(BASE_URL)
             .json_body(body)
-            .header("Content-Type", "application/json"))
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .header("X-Service-Info", SERVICE_INFO))
     }
 
     fn parse(
@@ -108,6 +115,16 @@ impl Engine for Bitchute {
 mod tests {
     use super::*;
 
+    fn engine() -> Arc<Bitchute> {
+        Bitchute::from_config(&EngineConfig::new(
+            "bitchute",
+            "bitchute",
+            "bit",
+            &["videos"],
+        ))
+        .unwrap()
+    }
+
     #[test]
     fn parses_videos_json() {
         let body = r#"{"videos":[
@@ -116,14 +133,7 @@ mod tests {
            "duration":"PT5M","view_count":"120","channel":{"channel_name":"Some Channel"}}
         ]}"#;
         let response = EngineResponse::new(200, BASE_URL, body.as_bytes().to_vec());
-        let engine = Bitchute::from_config(&EngineConfig::new(
-            "bitchute",
-            "bitchute",
-            "bit",
-            &["videos"],
-        ))
-        .unwrap();
-        let items = engine
+        let items = engine()
             .parse(
                 &response,
                 &Query::parse("test", &crate::engine::EngineRegistry::default(), &[]),
@@ -142,19 +152,26 @@ mod tests {
 
     #[test]
     fn builds_a_json_post() {
-        let engine = Bitchute::from_config(&EngineConfig::new(
-            "bitchute",
-            "bitchute",
-            "bit",
-            &["videos"],
-        ))
-        .unwrap();
         let query = Query::parse("x", &crate::engine::EngineRegistry::default(), &[]);
-        let request = engine.build_request(&query, 2).unwrap();
+        let request = engine().build_request(&query, 2).unwrap();
         assert_eq!(request.method, crate::engine::Method::Post);
         assert_eq!(
             request.json.as_ref().and_then(|j| j["offset"].as_i64()),
             Some(20)
+        );
+    }
+
+    #[test]
+    fn sends_the_service_info_token() {
+        assert_eq!(SERVICE_INFO.len(), 28);
+        let query = Query::parse("x", &crate::engine::EngineRegistry::default(), &[]);
+        let request = engine().build_request(&query, 1).unwrap();
+        assert_eq!(
+            request
+                .headers
+                .get("x-service-info")
+                .and_then(|v| v.to_str().ok()),
+            Some(SERVICE_INFO)
         );
     }
 }

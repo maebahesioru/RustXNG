@@ -1,8 +1,10 @@
 //! Public domain image archive engine, ported from searx/engines/public_domain_image_archive.py.
-//! Upstream discovers the Algolia proxy URL in the Astro config; this port
-//! reads it from the api_url setting and falls back to the search proxy path
-//! of the main host. Metadata lines are joined with a pipe because the result
-//! builder collapses the newline upstream uses.
+//! The site is a Svelte single page app that queries an Algolia proxy on AWS
+//! Lambda; the proxy URL is baked into the InfiniteSearch bundle, so this port
+//! uses it as the default and lets the api_url setting override it. The proxy
+//! answers without the search token the page fetches (it is optional), which
+//! keeps the request single-shot. Metadata lines are joined with a pipe
+//! because the result builder collapses the newline upstream uses.
 // engine-id: public_domain_image_archive
 
 use std::sync::Arc;
@@ -27,6 +29,10 @@ const DEFAULTS: EngineDefaults = EngineDefaults {
 };
 
 const BASE_URL: &str = "https://pdimagearchive.org";
+/// The Algolia proxy found in /_astro/InfiniteSearch.*.js; the page posts
+/// {"indexName","query","page","hitsPerPage","filters"?,"token"} here.
+const DEFAULT_API_URL: &str =
+    "https://tc1386gc0f.execute-api.eu-west-1.amazonaws.com/default/search-proxy";
 const THUMBNAIL_SUFFIX: &str = "?fit=max&h=360&w=360";
 const PAGE_SIZE: i64 = 20;
 
@@ -51,7 +57,7 @@ impl PublicDomainImageArchive {
     fn api_url(&self) -> String {
         match self.meta.opt_str("api_url") {
             Some(url) => url.trim_end_matches('/').to_string(),
-            None => format!("{}/search-proxy", self.base_url()),
+            None => DEFAULT_API_URL.to_string(),
         }
     }
 }
@@ -196,6 +202,20 @@ mod tests {
         assert!(image.ends_with("/print.jpg"));
         let thumb = result.thumbnail.clone().unwrap_or_default();
         assert!(thumb.ends_with("?fit=max&h=360&w=360"));
+    }
+
+    #[test]
+    fn defaults_to_the_lambda_proxy() {
+        let config = EngineConfig::new(
+            "public domain image archive",
+            "public_domain_image_archive",
+            "pdia",
+            &["images"],
+        );
+        let engine = PublicDomainImageArchive::from_config(&config).unwrap();
+        let query = Query::parse("cat", &crate::engine::EngineRegistry::default(), &[]);
+        let request = engine.build_request(&query, 1).unwrap();
+        assert_eq!(request.url, DEFAULT_API_URL);
     }
 
     #[test]

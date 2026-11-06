@@ -79,9 +79,15 @@ impl Engine for Geizhals {
         let html = response.html()?;
         let base = self.base_url();
         let mut results = Vec::new();
-        for element in select_elements(&html, "article.listview__item")? {
-            let title = text_of(element, "h3.listview__name").unwrap_or_default();
-            let href = attr_of(element, "a.listview__name-link", "href").unwrap_or_default();
+        for element in select_elements(&html, "article.galleryview__item, article.listview__item")? {
+            // The listing renders the gallery layout by default and falls back
+            // to the list layout for some categories, so both are read here.
+            let title = text_of(element, "h3.galleryview__name")
+                .or_else(|| text_of(element, "h3.listview__name"))
+                .unwrap_or_default();
+            let href = attr_of(element, "a.galleryview__name-link", "href")
+                .or_else(|| attr_of(element, "a.listview__name-link", "href"))
+                .unwrap_or_default();
             let url = if is_http_url(&href) {
                 href
             } else {
@@ -98,18 +104,27 @@ impl Engine for Geizhals {
                     specs.push(format!("{term}: {value}"));
                 }
             }
-            let metadata: Vec<String> = ["div.stars-rating-label", "div.listview__offercount"]
-                .iter()
+            let metadata: Vec<String> = [
+                "span.stars-rating-label",
+                "div.stars-rating-label",
+                "div.listview__offercount",
+                "div.galleryview__offercount",
+            ]
+            .iter()
                 .filter_map(|css| text_of(element, css))
                 .collect();
             let mut builder = ResultBuilder::new(url, title)
                 .content(specs.join(" | "))
                 .metadata("metadata", metadata.join(", "));
-            let thumbnail = attr_of(element, "img.listview__image", "src").unwrap_or_default();
+            let thumbnail = attr_of(element, "img.galleryview__image", "src")
+                .or_else(|| attr_of(element, "img.listview__image", "src"))
+                .unwrap_or_default();
             if !thumbnail.is_empty() {
                 builder = builder.thumbnail(thumbnail);
             }
-            let price = text_of(element, "a.listview__price-link").unwrap_or_default();
+            let price = text_of(element, "a.galleryview__price-link")
+                .or_else(|| text_of(element, "a.listview__price-link"))
+                .unwrap_or_default();
             let words: Vec<&str> = price.split_whitespace().collect();
             if words.len() > 1 {
                 builder = builder.metadata("price", format!("Bestes Angebot: {}€", words[1]));
@@ -191,6 +206,50 @@ mod tests {
                 assert_eq!(
                     result.thumbnail.as_deref(),
                     Some("https://cdn.geizhals.de/test.jpg")
+                );
+            }
+            _ => panic!("expected a result"),
+        }
+    }
+
+    #[test]
+    fn parses_galleryview_items() {
+        let fixture = r#"<html><body>
+          <article class="galleryview__item card">
+            <div class="galleryview__image-wrapper">
+              <a href="/a/323578/logitech.html" class="galleryview__image-link">
+                <img src="https://gzhls.at/pix/0e/6b/x-m.webp" class="galleryview__image">
+              </a>
+            </div>
+            <h3 class="galleryview__name">
+              <a href="/a/323578/logitech.html" class="galleryview__name-link">Logitech PC Headset 960</a>
+            </h3>
+            <div class="galleryview__rating-wrapper">
+              <a href="/a/323578/logitech.html#ratings" class="galleryview__rating-link">
+                <span class="stars-rating-label">4.6</span>
+              </a>
+            </div>
+            <div class="galleryview__offercount">
+              <a href="/a/323578/logitech.html#offerlist" class="galleryview__offercount-link">86 Angebote</a>
+            </div>
+            <a href="/a/323578/logitech.html#offerlist" class="galleryview__price-link">
+              <span class="price">&euro; 14,14</span>
+            </a>
+          </article>
+        </body></html>"#;
+        let response = EngineResponse::new(200, BASE_URL, fixture.as_bytes().to_vec());
+        let items = engine().parse(&response, &query("kopfhoerer")).unwrap();
+        assert_eq!(items.len(), 1);
+        match &items[0] {
+            EngineItem::Result(result) => {
+                assert_eq!(result.title, "Logitech PC Headset 960");
+                assert_eq!(result.url, "https://geizhals.de/a/323578/logitech.html");
+                let metadata = |key: &str| result.metadata.get(key).cloned().unwrap_or_default();
+                assert_eq!(metadata("metadata"), "4.6, 86 Angebote");
+                assert_eq!(metadata("price"), "Bestes Angebot: 14,14€");
+                assert_eq!(
+                    result.thumbnail.as_deref(),
+                    Some("https://gzhls.at/pix/0e/6b/x-m.webp")
                 );
             }
             _ => panic!("expected a result"),

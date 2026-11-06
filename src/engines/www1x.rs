@@ -70,15 +70,33 @@ impl Engine for Www1x {
         let Some(payload) = captures.get(1) else {
             return Ok(Vec::new());
         };
-        // The XML payload keeps the result markup as escaped text.
+        // The XML payload keeps the result markup as escaped text, wrapped in a
+        // CDATA section that would otherwise be swallowed as a bogus comment.
+        let payload = payload
+            .as_str()
+            .trim()
+            .trim_start_matches("<![CDATA[")
+            .trim_end_matches("]]>");
         let base = self.meta.base_url.as_deref().unwrap_or(BASE_URL);
-        let html = parse_html(&decode_entities(payload.as_str()));
+        let html = parse_html(&decode_entities(payload));
         let mut results = Vec::new();
         for link in select_elements(&html, "a")? {
             let Some(url) = attr(link, "href").and_then(|href| absolute_url(&href, base)) else {
                 continue;
             };
-            let title = text(link);
+            // The gallery links carry an icon, not a caption, so the title has
+            // to fall back to the image alt text and finally to the URL itself.
+            let title = {
+                let caption = text(link);
+                if !caption.is_empty() {
+                    caption
+                } else {
+                    child(link, "img")
+                        .and_then(|image| attr(image, "alt"))
+                        .filter(|alt| !alt.is_empty())
+                        .unwrap_or_else(|| fallback_title(&url))
+                }
+            };
             if title.is_empty() || !is_http_url(&url) {
                 continue;
             }
@@ -92,6 +110,16 @@ impl Engine for Www1x {
             results.push(builder.build());
         }
         Ok(results)
+    }
+}
+
+/// A readable title for a link that has no caption of its own.
+fn fallback_title(url: &str) -> String {
+    let path = url.split("://").nth(1).unwrap_or(url);
+    let segments: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
+    match segments.len() {
+        0 | 1 => path.to_string(),
+        n => format!("{} {}", segments[n - 2], segments[n - 1]),
     }
 }
 
@@ -134,6 +162,30 @@ mod tests {
                 assert_eq!(result.url, "https://1x.com/photo/456");
                 assert_eq!(result.title, "B portrait");
                 assert!(result.thumbnail.is_none());
+            }
+            _ => panic!("expected an image result"),
+        }
+    }
+
+    #[test]
+    fn cdata_payload_without_captions_is_parsed() {
+        let body = r##"<?xml version="1.0" encoding="UTF-8"?><response><data><![CDATA[<a href="/photo/203885"><img src="https://1x.com/images/a-sq.jpg"><span><i class="fas fa-image"></i></span></a><a href="/photo/40103"><img alt="Harbour at dusk" src="https://1x.com/images/b-sq.jpg"></a>]]></data></response>"##;
+        let response = EngineResponse::new(200, BASE_URL, body.as_bytes().to_vec());
+        let query = Query::parse("cat", &crate::engine::EngineRegistry::default(), &[]);
+        let items = engine().parse(&response, &query).unwrap();
+        assert_eq!(items.len(), 2);
+        match &items[0] {
+            EngineItem::Result(result) => {
+                assert_eq!(result.url, "https://1x.com/photo/203885");
+                assert_eq!(result.title, "photo 203885");
+                assert_eq!(result.template, Template::Images);
+            }
+            _ => panic!("expected an image result"),
+        }
+        match &items[1] {
+            EngineItem::Result(result) => {
+                assert_eq!(result.url, "https://1x.com/photo/40103");
+                assert_eq!(result.title, "Harbour at dusk");
             }
             _ => panic!("expected an image result"),
         }

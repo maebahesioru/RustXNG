@@ -56,8 +56,8 @@ impl Engine for SwisscowsNews {
             .opt_i64("results_per_page")
             .filter(|value| *value > 0)
             .unwrap_or(RESULTS_PER_PAGE);
-        // Upstream only looks at the language part of the SearXNG locale.
-        let locale = appropriate_locale(query.locale.split('-').next().unwrap_or("all"));
+        // Upstream only serves a handful of "language-COUNTRY" news regions.
+        let locale = appropriate_locale(&query.locale);
         let language = locale.split('-').next().unwrap_or("de").to_string();
         let freshness = match query.time_range {
             Some(TimeRange::Day) => "Day",
@@ -115,23 +115,28 @@ impl Engine for SwisscowsNews {
     }
 }
 
-/// Upstream's appropriate_locale for the German news regions.
+/// Maps a SearXNG locale onto one of the regions the news API actually serves.
+///
+/// Anything else answers HTTP 501 "The service doesn't provide result for the
+/// given region.", so unsupported locales fall back to the de-DE edition.
 fn appropriate_locale(locale: &str) -> String {
-    const REGIONS: &[&str] = &["DE"];
-    let locale = locale.trim();
-    let parts: Vec<&str> = locale.split('-').collect();
-    let language = parts.first().copied().unwrap_or_default();
-    if language == "all" || language.is_empty() {
-        return "de-DE".to_string();
+    const SUPPORTED: &[&str] = &["de-DE", "de-AT", "de-CH", "fr-FR", "fr-CH", "it-IT"];
+    let normalised = locale.trim().replace('_', "-");
+    for region in SUPPORTED {
+        if normalised.eq_ignore_ascii_case(region) {
+            return (*region).to_string();
+        }
     }
-    if parts.len() == 1 || REGIONS.contains(&parts[1]) {
-        return locale.to_string();
+    let language = normalised
+        .split('-')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    match language.as_str() {
+        "fr" => "fr-FR".to_string(),
+        "it" => "it-IT".to_string(),
+        _ => "de-DE".to_string(),
     }
-    if language.to_uppercase() == "DE" {
-        return format!("{language}-DE");
-    }
-    // The babel likely subtags table is not ported; German stays the default.
-    "de-DE".to_string()
 }
 
 fn is_http(url: &str) -> bool {
@@ -212,7 +217,7 @@ mod tests {
         request_query.locale = "de-DE".to_string();
         request_query.time_range = Some(TimeRange::Week);
         let request = engine().build_request(&request_query, 3).unwrap();
-        assert!(request.url.contains("region=de&"));
+        assert!(request.url.contains("region=de-DE&"));
         assert!(request.url.contains("freshness=Week"));
         assert!(request.url.contains("offset=40"));
     }

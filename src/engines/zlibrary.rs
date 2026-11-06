@@ -28,6 +28,10 @@ const DEFAULTS: EngineDefaults = EngineDefaults {
 pub struct Zlibrary {
     meta: EngineMeta,
     mirror: String,
+    /// Current mirrors (z-lib.id and friends) take the term as "/s/?q=term";
+    /// the legacy layout used a path segment ("/s/term"). Setting
+    /// "query_style = true" in the engine block selects the query-string form.
+    query_style: bool,
 }
 
 impl Zlibrary {
@@ -37,7 +41,16 @@ impl Zlibrary {
         if mirror.is_empty() {
             return Err("zlibrary requires a base_url (a working mirror)".into());
         }
-        Ok(Arc::new(Self { meta, mirror }))
+        let query_style = config
+            .extra
+            .get("query_style")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
+        Ok(Arc::new(Self {
+            meta,
+            mirror,
+            query_style,
+        }))
     }
 }
 
@@ -48,10 +61,17 @@ impl Engine for Zlibrary {
 
     fn build_request(&self, query: &Query, pageno: u32) -> Result<EngineRequest, EngineError> {
         let mirror = self.mirror.trim_end_matches('/');
+        let page = pageno.to_string();
+        if self.query_style {
+            return Ok(EngineRequest::get(format!(
+                "{mirror}/s/?{}",
+                query_string(&[("q", query.query_text()), ("page", page)])
+            )));
+        }
         Ok(EngineRequest::get(format!(
             "{mirror}/s/{}?{}",
             encode(&query.query_text()),
-            query_string(&[("page", pageno.to_string())])
+            query_string(&[("page", page)])
         )))
     }
 
@@ -136,6 +156,21 @@ mod tests {
         let query = Query::parse("rust", &crate::engine::EngineRegistry::default(), &[]);
         let request = engine().build_request(&query, 2).unwrap();
         assert_eq!(request.url, "https://example-mirror.test/s/rust?page=2");
+    }
+
+    #[test]
+    fn searches_with_the_query_string_layout() {
+        let mut config = config();
+        config
+            .extra
+            .insert("query_style".into(), toml::Value::Boolean(true));
+        let engine = Zlibrary::from_config(&config).expect("engine");
+        let query = Query::parse("rust lang", &crate::engine::EngineRegistry::default(), &[]);
+        let request = engine.build_request(&query, 2).unwrap();
+        assert_eq!(
+            request.url,
+            "https://example-mirror.test/s/?q=rust%20lang&page=2"
+        );
     }
 
     #[test]

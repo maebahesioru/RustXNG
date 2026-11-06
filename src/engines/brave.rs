@@ -87,9 +87,10 @@ impl Engine for Brave {
         _query: &Query,
     ) -> Result<Vec<EngineItem>, EngineError> {
         let body = response.text();
-        if body.contains("captcha") && body.contains("Brave") {
-            return Err(EngineError::Captcha);
-        }
+        // Brave's own result page carries localisation strings such as
+        // "Switch to traditional CAPTCHA", so the word alone is not a block
+        // page; only an empty result set makes it one.
+        let looks_blocked = body.contains("captcha") && body.contains("Brave");
         let html = parse_html(&body);
         let mut results = Vec::new();
         for element in select_elements(&html, "div.snippet, div.snippet-cta")? {
@@ -112,6 +113,9 @@ impl Engine for Brave {
                 .or_else(|| text_of(element, "div.snippet-content"))
                 .unwrap_or_default();
             results.push(ResultBuilder::new(url, title).content(content).build());
+        }
+        if results.is_empty() && looks_blocked {
+            return Err(EngineError::Captcha);
         }
         Ok(results)
     }

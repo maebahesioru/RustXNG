@@ -118,15 +118,12 @@ impl Engine for S1SearchRampjs {
     }
 }
 
-/// The JSON value of the payload embedded in the page.
-fn payload(body: &str) -> Option<serde_json::Value> {
-    let marker = body.find("__RAMPJS__")?;
-    let rest = &body[marker..];
-    let start = rest.find('{')?;
+/// The `{...}` object literal that starts at `start`, matched by braces.
+fn object_at(text: &str, start: usize) -> Option<&str> {
     let mut depth = 0usize;
     let mut in_string = false;
     let mut escaped = false;
-    for (index, character) in rest[start..].char_indices() {
+    for (index, character) in text[start..].char_indices() {
         if in_string {
             if escaped {
                 escaped = false;
@@ -143,15 +140,33 @@ fn payload(body: &str) -> Option<serde_json::Value> {
             '}' => {
                 depth -= 1;
                 if depth == 0 {
-                    let slice = &rest[start..start + index + 1];
-                    let document = serde_json::from_str::<serde_json::Value>(slice).ok()?;
-                    return Some(document.get("response").cloned().unwrap_or(document));
+                    return Some(&text[start..start + index + 1]);
                 }
             }
             _ => {}
         }
     }
     None
+}
+
+/// The JSON value of the payload embedded in the page.
+fn payload(body: &str) -> Option<serde_json::Value> {
+    let marker = body.find("__RAMPJS__")?;
+    let rest = &body[marker..];
+    let start = rest.find('{')?;
+    let slice = object_at(rest, start)?;
+    let document = match serde_json::from_str::<serde_json::Value>(slice) {
+        Ok(document) => document,
+        Err(_) => {
+            // The live payload is a JavaScript object literal whose outer keys
+            // are unquoted (`{ response: {...} }`), which JSON rejects: descend
+            // into the first value object and parse that instead.
+            let colon = slice.find(':')?;
+            let inner = slice[colon + 1..].find('{').map(|offset| offset + colon + 1)?;
+            serde_json::from_str::<serde_json::Value>(object_at(slice, inner)?).ok()?
+        }
+    };
+    Some(document.get("response").cloned().unwrap_or(document))
 }
 
 fn is_http_url(url: &str) -> bool {
@@ -209,6 +224,31 @@ window.__RAMPJS__ = { "response": {"search": {"regions": [
         }
         let empty = EngineResponse::new(200, BASE_URL, b"<html></html>".to_vec());
         assert!(engine().parse(&empty, &query()).unwrap().is_empty());
+    }
+
+    #[test]
+    fn parses_the_unquoted_object_literal_payload() {
+        // The live page embeds a JavaScript object literal whose outer key is
+        // not quoted, which plain JSON parsing rejects.
+        const LIVE: &str = r##"<html><script>
+window.__RAMPJS__ = { response: {"search": {"regions": [
+  {"name": "mainline", "groups": [
+    {"result_type": "web", "results": [
+      {"url": "https://example.test/live", "title": "Live <b>hit</b>", "description": "Body"}
+    ]}
+  ]}
+]}} };
+</script></html>"##;
+        let response = EngineResponse::new(200, BASE_URL, LIVE.as_bytes().to_vec());
+        let items = engine().parse(&response, &query()).unwrap();
+        assert_eq!(items.len(), 1);
+        match &items[0] {
+            EngineItem::Result(result) => {
+                assert_eq!(result.url, "https://example.test/live");
+                assert_eq!(result.title, "Live hit");
+            }
+            _ => panic!("expected a result"),
+        }
     }
 
     #[test]

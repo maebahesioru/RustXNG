@@ -82,7 +82,7 @@ impl Engine for Meilisearch {
             .header("Content-Type", "application/json");
         if let Some(key) = self.meta.api_key.as_deref() {
             if !key.is_empty() {
-                request = request.header("Authorization", key);
+                request = request.header("Authorization", &format!("Bearer {key}"));
             }
         }
         Ok(request)

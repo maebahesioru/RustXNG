@@ -75,9 +75,11 @@ impl Engine for ShopifyStock {
         let html = response.html()?;
         let base = self.base_url();
         let mut results = Vec::new();
-        for element in select_elements(&html, "div.js-masonry-grid > div")? {
-            let href = attr_of(element, "a.photo-tile", "href").unwrap_or_default();
-            let url = absolute_url(&href, &base).unwrap_or_default();
+        for element in select_elements(&html, "div.photo-card")? {
+            let href = attr_of(element, "a.photo-tile__image-wrapper", "href").unwrap_or_default();
+            let url = absolute_url(&href, &base)
+                .map(|url| strip_query(&url))
+                .unwrap_or_default();
             let title = text_of(element, "p.photo-tile__title").unwrap_or_default();
             if title.is_empty() || !is_http_url(&url) {
                 continue;
@@ -85,7 +87,12 @@ impl Engine for ShopifyStock {
             let mut builder = ResultBuilder::new(url.clone(), title)
                 .template(Template::Images)
                 .image(download_url(&url));
-            let thumbnail = attr_of(element, "img.photo-card__image", "src").unwrap_or_default();
+            let thumbnail = attr_of(element, "img.photo-card__image", "src")
+                .or_else(|| {
+                    attr_of(element, "img.photo-card__image", "data-srcset")
+                        .and_then(|value| first_srcset_url(&value))
+                })
+                .unwrap_or_default();
             if !thumbnail.is_empty() {
                 builder = builder.thumbnail(thumbnail);
             }
@@ -97,10 +104,26 @@ impl Engine for ShopifyStock {
 
 /// The download link of the full quality image, upstream _get_download_url.
 fn download_url(url: &str) -> String {
+    format!("{}/download?quality=premium", strip_query(url))
+}
+
+/// The same address without its query string.
+fn strip_query(url: &str) -> String {
     match url.find('?') {
-        Some(index) => format!("{}/download?quality=premium", &url[..index]),
-        None => format!("{url}/download?quality=premium"),
+        Some(index) => url[..index].to_string(),
+        None => url.to_string(),
     }
+}
+
+/// The first candidate of a srcset attribute.
+fn first_srcset_url(value: &str) -> Option<String> {
+    value
+        .split(',')
+        .next()?
+        .split_whitespace()
+        .next()
+        .map(str::to_string)
+        .filter(|url| is_http_url(url))
 }
 
 fn is_http_url(url: &str) -> bool {
@@ -111,21 +134,45 @@ fn is_http_url(url: &str) -> bool {
 mod tests {
     use super::*;
 
-    const FIXTURE: &str = r#"<html><body>
-      <div class="js-masonry-grid">
-        <div class="photo-tile-wrapper">
-          <a class="photo-tile" href="/stock-photos/photos/happy-dog">
-            <img class="photo-card__image" src="https://cdn.shopify.com/dog.jpg">
+    const FIXTURE: &str = r##"<html><body>
+      <div class="grid__item">
+        <div class="photo-card tile--with-overlay" data-photo-id="123">
+          <div class="photo-tile">
+            <a class="photo-tile__image-wrapper" href="/stock-photos/photos/happy-dog?q=dog">
+              <img class="photo-card__image"
+                   src="https://burst.shopifycdn.com/photos/happy-dog.jpg?width=1000"
+                   data-srcset="https://burst.shopifycdn.com/photos/happy-dog.jpg?width=500 500w">
+            </a>
             <p class="photo-tile__title">Happy dog</p>
-          </a>
-        </div>
-        <div class="photo-tile-wrapper">
-          <a class="photo-tile" href="/stock-photos/photos/no-title">
-            <p class="photo-tile__title"></p>
-          </a>
+          </div>
         </div>
       </div>
-    </body></html>"#;
+      <div class="grid__item">
+        <div class="photo-card">
+          <div class="photo-tile">
+            <a class="photo-tile__image-wrapper" href="/stock-photos/photos/no-title">
+              <img class="photo-card__image"
+                   data-srcset="https://burst.shopifycdn.com/photos/no-title.jpg?width=500 500w">
+            </a>
+            <p class="photo-tile__title"></p>
+          </div>
+        </div>
+      </div>
+    </body></html>"##;
+
+    const SRCSET_ONLY: &str = r##"<html><body>
+      <div class="grid__item">
+        <div class="photo-card">
+          <div class="photo-tile">
+            <a class="photo-tile__image-wrapper" href="/stock-photos/photos/laptop">
+              <img class="photo-card__image"
+                   data-srcset="https://burst.shopifycdn.com/photos/laptop.jpg?width=500 500w, https://burst.shopifycdn.com/photos/laptop.jpg?width=1000 1000w">
+            </a>
+            <p class="photo-tile__title">Laptop With Shopify Sticker</p>
+          </div>
+        </div>
+      </div>
+    </body></html>"##;
 
     fn engine() -> Arc<ShopifyStock> {
         let config = EngineConfig::new("shopify stock", "shopify_stock", "shs", &["stock images"]);
@@ -157,7 +204,30 @@ mod tests {
                 );
                 assert_eq!(
                     result.thumbnail.as_deref(),
-                    Some("https://cdn.shopify.com/dog.jpg")
+                    Some("https://burst.shopifycdn.com/photos/happy-dog.jpg?width=1000")
+                );
+            }
+            _ => panic!("expected a result"),
+        }
+    }
+
+    #[test]
+    fn falls_back_to_the_srcset() {
+        let response = EngineResponse::new(200, BASE_URL, SRCSET_ONLY.as_bytes().to_vec());
+        let items = engine().parse(&response, &query("laptop")).unwrap();
+        assert_eq!(items.len(), 1);
+        match &items[0] {
+            EngineItem::Result(result) => {
+                assert_eq!(result.title, "Laptop With Shopify Sticker");
+                assert_eq!(
+                    result.thumbnail.as_deref(),
+                    Some("https://burst.shopifycdn.com/photos/laptop.jpg?width=500")
+                );
+                assert_eq!(
+                    result.img_src.as_deref(),
+                    Some(
+                        "https://www.shopify.com/stock-photos/photos/laptop/download?quality=premium"
+                    )
                 );
             }
             _ => panic!("expected a result"),

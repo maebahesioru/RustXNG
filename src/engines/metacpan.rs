@@ -61,18 +61,20 @@ impl Engine for Metacpan {
         let size = self.page_size();
         let from = u64::from(pageno.max(1) - 1) * u64::from(size);
         let body = serde_json::json!({
-            "query": {"multi_match": {
-                "type": "most_fields",
-                "fields": ["documentation", "documentation.*"],
-                "analyzer": "camelcase",
-                "query": query.query_text()
+            "query": {"bool": {
+                "must": [{"multi_match": {
+                    "type": "most_fields",
+                    "fields": ["documentation", "documentation.*"],
+                    "analyzer": "camelcase",
+                    "query": query.query_text()
+                }}],
+                "filter": [
+                    {"exists": {"field": "documentation"}},
+                    {"term": {"status": "latest"}},
+                    {"term": {"indexed": true}},
+                    {"term": {"authorized": true}}
+                ]
             }},
-            "filter": {"bool": {"must": [
-                {"exists": {"field": "documentation"}},
-                {"term": {"status": "latest"}},
-                {"term": {"indexed": 1}},
-                {"term": {"authorized": 1}}
-            ]}},
             "sort": [{"_score": {"order": "desc"}}, {"date": {"order": "desc"}}],
             "_source": ["documentation", "abstract"],
             "from": from,
@@ -159,12 +161,16 @@ mod tests {
         assert_eq!(request.method, crate::engine::Method::Post);
         assert_eq!(request.url, SEARCH_URL);
         let body = request.json.expect("a JSON body");
-        assert_eq!(body["query"]["multi_match"]["query"], "dom");
-        assert_eq!(body["query"]["multi_match"]["analyzer"], "camelcase");
+        assert_eq!(body["query"]["bool"]["must"][0]["multi_match"]["query"], "dom");
+        assert_eq!(
+            body["query"]["bool"]["must"][0]["multi_match"]["analyzer"],
+            "camelcase"
+        );
         assert_eq!(body["from"], 20);
         assert_eq!(body["size"], 20);
         assert_eq!(body["_source"][0], "documentation");
-        assert_eq!(body["filter"]["bool"]["must"][2]["term"]["indexed"], 1);
+        assert_eq!(body["query"]["bool"]["filter"][2]["term"]["indexed"], true);
+        assert!(body.get("filter").is_none());
         assert_eq!(body["sort"][1]["date"]["order"], "desc");
     }
 

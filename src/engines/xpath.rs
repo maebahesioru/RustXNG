@@ -28,16 +28,53 @@ const DEFAULTS: EngineDefaults = EngineDefaults {
     timeout: 4.0,
 };
 
+/// One result field: either a node-set path, or a value expression
+/// (concat(...), substring-after(...), a string literal) that upstream
+/// evaluates with query()[0]. searchch needs the value form for its URL.
+enum Field {
+    Path(XPath),
+    Value(String),
+}
+
+impl Field {
+    fn parse(expression: &str) -> Result<Self, String> {
+        match XPath::parse(expression) {
+            Ok(path) => Ok(Field::Path(path)),
+            Err(error) => {
+                if is_value_expression(expression) {
+                    Ok(Field::Value(expression.trim().to_string()))
+                } else {
+                    Err(error)
+                }
+            }
+        }
+    }
+}
+
+fn is_value_expression(expression: &str) -> bool {
+    let expression = expression.trim();
+    if expression.starts_with("concat(")
+        || expression.starts_with("substring-before(")
+        || expression.starts_with("substring-after(")
+    {
+        return true;
+    }
+    matches!(expression.chars().next(), Some('\u{27}') | Some('"'))
+}
+
 /// A declaratively configured HTML engine.
 pub struct XPathEngine {
     meta: EngineMeta,
     search_url: String,
     results_xpath: Option<XPath>,
-    url_xpath: Option<XPath>,
-    title_xpath: Option<XPath>,
-    content_xpath: Option<XPath>,
-    thumbnail_xpath: Option<XPath>,
+    url_xpath: Option<Field>,
+    title_xpath: Option<Field>,
+    content_xpath: Option<Field>,
+    thumbnail_xpath: Option<Field>,
     suggestion_xpath: Option<XPath>,
+    /// XPath selecting a fragment URL the page loads its results from.
+    followup_xpath: Option<XPath>,
+    followup_headers: Vec<(String, String)>,
     url_prefix: String,
     first_page_num: u32,
     method: String,
@@ -64,6 +101,14 @@ impl XPathEngine {
                 _ => Ok(None),
             }
         };
+        let opt_field = |key: &str| -> Result<Option<Field>, String> {
+            match config.opt_str(key) {
+                Some(expression) if !expression.trim().is_empty() => Field::parse(expression)
+                    .map(Some)
+                    .map_err(|error| format!("{:?}: {key}: {error}", config.name)),
+                _ => Ok(None),
+            }
+        };
         let first_page_num = config
             .opt_i64("first_page_num")
             .map(|value| value.max(0) as u32)
@@ -72,15 +117,18 @@ impl XPathEngine {
         let cookies = string_pairs(config.extra.get("cookies"));
         let time_range_map = string_pairs(config.extra.get("time_range_map"));
         let safesearch_map = string_pairs(config.extra.get("safesearch_map"));
+        let followup_headers = string_pairs(config.extra.get("followup_headers"));
         Ok(Arc::new(Self {
             meta: EngineMeta::from_config(config, DEFAULTS),
             search_url,
             results_xpath: opt_xpath("results_xpath")?,
-            url_xpath: opt_xpath("url_xpath")?,
-            title_xpath: opt_xpath("title_xpath")?,
-            content_xpath: opt_xpath("content_xpath")?,
-            thumbnail_xpath: opt_xpath("thumbnail_xpath")?,
+            url_xpath: opt_field("url_xpath")?,
+            title_xpath: opt_field("title_xpath")?,
+            content_xpath: opt_field("content_xpath")?,
+            thumbnail_xpath: opt_field("thumbnail_xpath")?,
             suggestion_xpath: opt_xpath("suggestion_xpath")?,
+            followup_xpath: opt_xpath("followup_xpath")?,
+            followup_headers,
             url_prefix: config.opt_str("url_prefix").unwrap_or_default().to_string(),
             first_page_num,
             method: config.opt_str("method").unwrap_or("GET").to_string(),
@@ -193,6 +241,35 @@ impl Engine for XPathEngine {
         }
         Ok(self.parse_html(&body))
     }
+
+    /// Some sites serve a shell page whose result list is loaded by a second
+    /// request to a signed fragment URL, so the first response has nothing to
+    /// parse. `followup_xpath` selects that URL from the shell; the aggregator
+    /// fetches it with the remaining timeout and parses the fragment instead.
+    fn followup_request(
+        &self,
+        response: &EngineResponse,
+        _query: &Query,
+    ) -> Result<Option<EngineRequest>, EngineError> {
+        let Some(expression) = &self.followup_xpath else {
+            return Ok(None);
+        };
+        let html = parse_html(&response.text());
+        let target = expression
+            .select(&html)
+            .into_iter()
+            .map(|node| node.text())
+            .find(|text| !text.is_empty());
+        let Some(target) = target else {
+            return Ok(None);
+        };
+        let url = absolute_url(&target, &origin_of(&self.search_url)).unwrap_or(target);
+        let mut request = EngineRequest::get(url);
+        for (name, value) in &self.followup_headers {
+            request = request.header(name, value);
+        }
+        Ok(Some(request))
+    }
 }
 
 impl XPathEngine {
@@ -216,13 +293,17 @@ impl XPathEngine {
             let Node::Element(element) = container else {
                 continue;
             };
-            let evaluate = |expression: &Option<XPath>| -> Option<String> {
-                let expression = expression.as_ref()?;
-                expression
-                    .select_in(element)
-                    .into_iter()
-                    .map(|node| node.text())
-                    .find(|text| !text.is_empty())
+            let evaluate = |field: &Option<Field>| -> Option<String> {
+                match field.as_ref()? {
+                    Field::Path(path) => path
+                        .select_in(element)
+                        .into_iter()
+                        .map(|node| node.text())
+                        .find(|text| !text.is_empty()),
+                    Field::Value(expression) => {
+                        crate::engine::xpath::evaluate_in(element, expression)
+                    }
+                }
             };
             let Some(url) = evaluate(&self.url_xpath).map(|url| {
                 let with_prefix = format!("{}{}", self.url_prefix, url);
@@ -271,13 +352,17 @@ impl XPathEngine {
             let XmlNode::Element(element) = container else {
                 continue;
             };
-            let evaluate = |expression: &Option<XPath>| -> Option<String> {
-                let expression = expression.as_ref()?;
-                expression
-                    .select_xml_in(element)
-                    .into_iter()
-                    .map(|node| node.text())
-                    .find(|text| !text.is_empty())
+            let evaluate = |field: &Option<Field>| -> Option<String> {
+                match field.as_ref()? {
+                    Field::Path(path) => path
+                        .select_xml_in(element)
+                        .into_iter()
+                        .map(|node| node.text())
+                        .find(|text| !text.is_empty()),
+                    // Value expressions only apply to HTML results; an XML feed
+                    // that asks for one simply yields no value.
+                    Field::Value(_) => None,
+                }
             };
             let Some(url) = evaluate(&self.url_xpath).map(|url| {
                 let with_prefix = format!("{}{}", self.url_prefix, url);

@@ -30,7 +30,10 @@ const DEFAULTS: EngineDefaults = EngineDefaults {
     timeout: 4.0,
 };
 
-const SEARCH_URL: &str = "https://cir.nii.ac.jp/opensearch/all";
+// v1 (/opensearch/all) now answers 403 "Service Unavailable" for anonymous
+// clients; v2 (/opensearch/v2/all) is open and returns the flat JSON-LD shape
+// this parser already expects.
+const SEARCH_URL: &str = "https://cir.nii.ac.jp/opensearch/v2/all";
 const PAGE_SIZE: u32 = 20;
 
 /// CiNii Research's public OpenSearch API.

@@ -1,4 +1,8 @@
-//! ScanR structures engine, ported from searx/engines/scanr_structures.py.
+//! ScanR organizations engine, ported from searx/engines/scanr_structures.py.
+//!
+//! The upstream REST API (`/api/structures/search`) was retired; the web app now
+//! queries the Elasticsearch indices behind `{base}/api/<index>/_search` directly,
+//! so this engine speaks Elasticsearch.  See `scanr-organizations`.
 
 // engine-id: scanr_structures
 
@@ -23,6 +27,7 @@ const DEFAULTS: EngineDefaults = EngineDefaults {
 };
 
 const BASE_URL: &str = "https://scanr.enseignementsup-recherche.gouv.fr";
+const INDEX: &str = "scanr-organizations";
 const PAGE_SIZE: u32 = 20;
 
 /// The ScanR open data API, limited to research structures.
@@ -50,14 +55,58 @@ impl ScanrStructures {
         self.meta
             .search_url
             .clone()
-            .unwrap_or_else(|| format!("{}/api/structures/search", self.base_url()))
+            .unwrap_or_else(|| format!("{}/api/{}/_search", self.base_url(), INDEX))
     }
 
-    fn page_size(&self) -> i64 {
+    fn page_size(&self) -> u32 {
         self.meta
             .opt_i64("page_size")
             .filter(|value| *value > 0)
-            .unwrap_or(i64::from(PAGE_SIZE))
+            .map(|value| u32::try_from(value).unwrap_or(PAGE_SIZE))
+            .unwrap_or(PAGE_SIZE)
+    }
+}
+
+/// `label` is an object keyed by language; fall back to whatever it holds.
+fn label_of(source: &serde_json::Value) -> String {
+    for key in ["label.default", "label.fr", "label.en"] {
+        let value = json_str(source, key);
+        if !value.is_empty() {
+            return value;
+        }
+    }
+    json_path(source, "label")
+        .and_then(|value| value.as_object())
+        .and_then(|map| {
+            map.values()
+                .find_map(|value| value.as_str().map(str::to_string))
+        })
+        .unwrap_or_default()
+}
+
+/// The main address is normally (but not always) the first one.
+fn address_of(source: &serde_json::Value) -> String {
+    let Some(entries) = json_path(source, "address").and_then(|value| value.as_array()) else {
+        return String::new();
+    };
+    let entry = entries
+        .iter()
+        .find(|entry| {
+            json_path(entry, "main")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false)
+        })
+        .or_else(|| entries.first());
+    let Some(entry) = entry else {
+        return String::new();
+    };
+    let city = json_str(entry, "city");
+    let country = json_str(entry, "country");
+    match (city.is_empty(), country.is_empty()) {
+        (false, false) => format!("{city}, {country}"),
+        (false, true) => city,
+        (true, false) => country,
+        (true, true) => String::new(),
     }
 }
 
@@ -67,13 +116,22 @@ impl Engine for ScanrStructures {
     }
 
     fn build_request(&self, query: &Query, pageno: u32) -> Result<EngineRequest, EngineError> {
+        let size = self.page_size();
+        let from = u64::from(pageno.saturating_sub(1)) * u64::from(size);
         let body = serde_json::json!({
-            "query": query.query_text(),
-            "searchField": "ALL",
-            "sortDirection": "ASC",
-            "sortOrder": "RELEVANCY",
-            "page": pageno,
-            "pageSize": self.page_size(),
+            "size": size,
+            "from": from,
+            "_source": [
+                "id", "label", "kind", "level", "status", "address", "externalIds",
+                "publicationsCount", "projectsCount", "patentsCount",
+            ],
+            "query": {
+                "multi_match": {
+                    "query": query.query_text(),
+                    "type": "best_fields",
+                    "fields": ["label.*^3", "alias.*", "acronym.*^2", "autocompleted.*"],
+                }
+            },
         });
         Ok(EngineRequest::post(self.search_url())
             .json_body(body)
@@ -86,33 +144,66 @@ impl Engine for ScanrStructures {
         _query: &Query,
     ) -> Result<Vec<EngineItem>, EngineError> {
         let json = response.json()?;
-        let total = json_path(&json, "total")
-            .and_then(|value| value.as_i64())
-            .unwrap_or(0);
-        if total < 1 {
-            return Ok(Vec::new());
-        }
-        let Some(entries) = json_path(&json, "results").and_then(|value| value.as_array()) else {
+        let Some(hits) = json_path(&json, "hits.hits").and_then(|value| value.as_array()) else {
             return Ok(Vec::new());
         };
         let base = self.base_url();
         let mut results = Vec::new();
-        for entry in entries {
-            let id = json_str(entry, "id");
-            let title = json_str(entry, "label");
+        for hit in hits {
+            let source = json_path(hit, "_source").unwrap_or(hit);
+            let id = {
+                let id = json_str(source, "id");
+                if id.is_empty() {
+                    json_str(hit, "_id")
+                } else {
+                    id
+                }
+            };
+            let title = label_of(source);
             if id.is_empty() || title.is_empty() {
                 continue;
             }
-            let url = format!("{base}/structure/{}", encode(&id));
-            let content = json_path(entry, "highlights.0.value")
-                .and_then(|value| value.as_str())
-                .map(strip_tags)
-                .unwrap_or_default();
-            let mut builder = ResultBuilder::new(url, title).content(content);
-            if let Some(logo) = absolute_url(&json_str(entry, "logo"), &base) {
-                if logo.starts_with("http://") || logo.starts_with("https://") {
-                    builder = builder.thumbnail(logo);
+            let url = format!("{base}/organizations/{}", encode(&id));
+
+            let mut parts = Vec::new();
+            let kind = json_str(source, "kind.0");
+            if !kind.is_empty() {
+                parts.push(kind);
+            }
+            let level = json_str(source, "level");
+            if !level.is_empty() {
+                parts.push(level);
+            }
+            let address = address_of(source);
+            if !address.is_empty() {
+                parts.push(address);
+            }
+            for (path, noun) in [
+                ("publicationsCount", "publications"),
+                ("projectsCount", "projects"),
+                ("patentsCount", "patents"),
+            ] {
+                let count = json_path(source, path)
+                    .and_then(|value| value.as_i64())
+                    .unwrap_or(0);
+                if count > 0 {
+                    parts.push(format!("{count} {noun}"));
                 }
+            }
+            let content = parts.join(" · ");
+
+            let mut builder = ResultBuilder::new(url, title).content(content);
+            if let Some(siren) = json_path(source, "externalIds")
+                .and_then(|value| value.as_array())
+                .and_then(|entries| {
+                    entries.iter().find(|entry| {
+                        json_path(entry, "type").and_then(|value| value.as_str()) == Some("siren")
+                    })
+                })
+                .map(|entry| json_str(entry, "id"))
+                .filter(|id| !id.is_empty())
+            {
+                builder = builder.metadata("siren", siren);
             }
             results.push(builder.build());
         }
@@ -124,13 +215,17 @@ impl Engine for ScanrStructures {
 mod tests {
     use super::*;
 
-    const FIXTURE: &str = r##"{"total": 4, "results": [
-      {"id": "struct-1", "label": "Laboratory one", "logo": "/img/one.png",
-       "highlights": [{"value": "A <b>research</b> lab"}]},
-      {"id": "struct-2", "label": "Laboratory two"},
-      {"id": "", "label": "Without an id"},
-      {"id": "struct-3", "label": ""}
-    ]}"##;
+    const FIXTURE: &str = r##"{"took": 3, "hits": {"total": {"value": 3, "relation": "eq"}, "hits": [
+      {"_id": "doc-1", "_source": {"id": "443011044",
+        "label": {"default": "UNIVERSITE CLARIANE"}, "kind": ["Secteur privé"],
+        "level": "Association déclarée",
+        "address": [{"main": false, "city": "Paris", "country": "France"},
+                     {"main": true, "city": "Clermont-Ferrand", "country": "France"}],
+        "externalIds": [{"id": "443011044", "type": "siren"}],
+        "publicationsCount": 12, "projectsCount": 0, "patentsCount": 2}},
+      {"_id": "doc-2", "_source": {"label": {"fr": "LABO DEUX"}}},
+      {"_id": "doc-3", "_source": {"id": "struct-3", "label": {"default": ""}}}
+    ]}}"##;
 
     fn engine() -> Arc<ScanrStructures> {
         ScanrStructures::from_config(&EngineConfig::new(
@@ -147,57 +242,63 @@ mod tests {
     }
 
     #[test]
-    fn parses_the_structure_list() {
+    fn parses_the_organization_hits() {
         let response = EngineResponse::new(200, BASE_URL, FIXTURE.as_bytes().to_vec());
         let items = engine().parse(&response, &query()).unwrap();
         assert_eq!(items.len(), 2);
         match &items[0] {
             EngineItem::Result(result) => {
-                assert_eq!(result.title, "Laboratory one");
+                assert_eq!(result.title, "UNIVERSITE CLARIANE");
                 assert_eq!(
                     result.url,
-                    "https://scanr.enseignementsup-recherche.gouv.fr/structure/struct-1"
+                    "https://scanr.enseignementsup-recherche.gouv.fr/organizations/443011044"
                 );
-                assert_eq!(result.content, "A research lab");
                 assert_eq!(
-                    result.thumbnail.as_deref(),
-                    Some("https://scanr.enseignementsup-recherche.gouv.fr/img/one.png")
+                    result.content,
+                    "Secteur privé · Association déclarée · Clermont-Ferrand, France · 12 publications · 2 patents"
                 );
             }
             _ => panic!("expected a result"),
         }
         match &items[1] {
             EngineItem::Result(result) => {
+                assert_eq!(result.title, "LABO DEUX");
                 assert_eq!(
                     result.url,
-                    "https://scanr.enseignementsup-recherche.gouv.fr/structure/struct-2"
+                    "https://scanr.enseignementsup-recherche.gouv.fr/organizations/doc-2"
                 );
                 assert!(result.content.is_empty());
-                assert!(result.thumbnail.is_none());
             }
             _ => panic!("expected a result"),
         }
     }
 
     #[test]
-    fn builds_the_json_request() {
+    fn builds_the_elasticsearch_request() {
         let request = engine().build_request(&query(), 2).unwrap();
         assert_eq!(
             request.url,
-            "https://scanr.enseignementsup-recherche.gouv.fr/api/structures/search"
+            "https://scanr.enseignementsup-recherche.gouv.fr/api/scanr-organizations/_search"
         );
         let body = request.json.expect("a JSON body");
-        assert_eq!(body["query"], serde_json::json!("cancer"));
-        assert_eq!(body["page"], serde_json::json!(2));
-        assert_eq!(body["pageSize"], serde_json::json!(20));
-        assert_eq!(body["searchField"], serde_json::json!("ALL"));
+        assert_eq!(body["size"], serde_json::json!(20));
+        assert_eq!(body["from"], serde_json::json!(20));
+        assert_eq!(body["query"]["multi_match"]["query"], serde_json::json!("cancer"));
+        assert_eq!(
+            body["query"]["multi_match"]["fields"][0],
+            serde_json::json!("label.*^3")
+        );
+        assert!(body.get("searchField").is_none());
         assert!(request.form.is_empty());
     }
 
     #[test]
     fn empty_hits_yield_no_results() {
-        let response =
-            EngineResponse::new(200, BASE_URL, br#"{"total": 0, "results": []}"#.to_vec());
+        let response = EngineResponse::new(
+            200,
+            BASE_URL,
+            br#"{"hits": {"total": {"value": 0}, "hits": []}}"#.to_vec(),
+        );
         assert!(engine().parse(&response, &query()).unwrap().is_empty());
     }
 }

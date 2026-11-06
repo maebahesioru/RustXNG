@@ -83,11 +83,18 @@ impl Engine for DuckDuckGoWeather {
         if location.is_empty() {
             return Ok(Vec::new());
         }
-        let summary = ["summary", "currentWeather.summary"]
-            .iter()
-            .map(|path| json_str(&json, path))
-            .find(|value| !value.is_empty())
-            .unwrap_or_default();
+        // The live payload carries `conditionCode` ("Rain") instead of the
+        // `summary` the fixture used, so a test-only field must not be the only
+        // thing the answer can be built from.
+        let summary = [
+            "summary",
+            "currentWeather.summary",
+            "currentWeather.conditionCode",
+        ]
+        .iter()
+        .map(|path| json_str(&json, path))
+        .find(|value| !value.is_empty())
+        .unwrap_or_default();
         let temperature = ["currentWeather.temperature", "currentWeather.temp"]
             .iter()
             .map(|path| json_str(&json, path))
