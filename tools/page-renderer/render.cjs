@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 const net = require('node:net');
 const readline = require('node:readline');
+const { ResourceMonitor } = require('./resource-monitor.cjs');
 
 async function main() {
   const { firefox } = require('playwright');
@@ -10,18 +11,23 @@ async function main() {
   if (first.done) throw new Error('renderer input closed');
   const {
     url, html, content_type: contentType = 'text/html', max_bytes: maxBytes,
+    budget_ms: budgetMs = 10000,
   } = JSON.parse(first.value);
   if (typeof html !== 'string' || !Number.isInteger(maxBytes) ||
       maxBytes < 1 || maxBytes > 4 * 1024 * 1024 || Buffer.byteLength(html) > maxBytes) {
     throw new Error('invalid renderer input size');
   }
   if (!['text/html', 'application/xhtml+xml'].includes(contentType)) throw new Error('invalid page content type');
+  if (!Number.isInteger(budgetMs) || budgetMs < 3000 || budgetMs > 60000) {
+    throw new Error('invalid renderer budget');
+  }
   const initialUrl = new URL(url);
   initialUrl.hash = '';
   if (!['http:', 'https:'].includes(initialUrl.protocol)) throw new Error('invalid page URL');
 
   const pending = new Map();
   let browser;
+  let resources;
   let nextId = 0;
   let fail;
   const failure = new Promise((_, reject) => { fail = reject; });
@@ -54,7 +60,7 @@ async function main() {
     });
     browser = await firefox.launch({
       headless: true,
-      timeout: 10000,
+      timeout: budgetMs,
       proxy: { server: `http://127.0.0.1:${denyProxy.address().port}` },
       firefoxUserPrefs: {
         // Firefox interception requires service workers enabled.
@@ -73,8 +79,10 @@ async function main() {
     });
     const context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: false });
     await context.routeWebSocket('**/*', socket => socket.close());
+    resources = new ResourceMonitor(budgetMs);
     let initial = true;
     await context.route('**/*', async route => {
+      const finished = resources.start();
       try {
         const request = route.request();
         if (initial && request.isNavigationRequest() && request.url() === initialUrl.href) {
@@ -97,21 +105,48 @@ async function main() {
       } catch (error) {
         fail(error);
         await route.abort().catch(() => {});
+      } finally {
+        finished();
       }
     });
     const page = await context.newPage();
+    page.on('worker', worker => {
+      const finished = resources.start();
+      const closed = new Promise(resolve => {
+        worker.once('close', () => { finished(); resolve(); });
+      });
+      // Let startup yield to a normal worker task before considering it idle.
+      void worker.evaluate(() => new Promise(resolve => {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = () => {
+          channel.port1.close();
+          channel.port2.close();
+          resolve();
+        };
+        channel.port2.postMessage(null);
+      // Self-closing workers can destroy their context before Playwright
+      // delivers the close event. Keep their startup token until close; a
+      // still-live worker whose probe failed remains bounded by the deadline.
+      })).catch(() => closed).finally(finished);
+    });
     const rendered = (async () => {
-      await page.goto(url, { waitUntil: 'networkidle', timeout: 10000 });
-      const output = await page.evaluate(limit => {
-        const value = document.documentElement.outerHTML;
-        return typeof value === 'string' && value.length <= limit ? value : null;
-      }, maxBytes);
+      await page.goto(url, { waitUntil: 'load', timeout: budgetMs });
+      let version;
+      let output;
+      do {
+        version = await resources.wait();
+        output = await page.evaluate(limit => {
+          const value = document.documentElement.outerHTML;
+          return typeof value === 'string' && value.length <= limit ? value : null;
+        }, maxBytes);
+      } while (!resources.unchanged(version));
       if (output === null || Buffer.byteLength(output) > maxBytes) throw new Error('rendered HTML too large');
       return Buffer.from(output).toString('base64');
     })();
-    const body = await Promise.race([rendered, failure]);
+    const body = await Promise.race([rendered, failure, resources.deadline]);
     process.stdout.write(JSON.stringify({ type: 'html', body }) + '\n');
   } finally {
+    resources?.close();
     if (browser) await browser.close();
     await new Promise(resolve => denyProxy.close(resolve));
     input.removeListener('close', stop);

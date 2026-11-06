@@ -37,6 +37,8 @@ pub struct SearchParams {
     pub theme: Option<String>,
     pub autocomplete: Option<String>,
     pub enabled_engines: Option<String>,
+    /// Fail the request when `engines=` names an engine that does not exist.
+    pub strict_engines: Option<String>,
     pub disabled_engines: Option<String>,
     pub enabled_plugins: Option<String>,
     pub disabled_plugins: Option<String>,
@@ -252,6 +254,11 @@ async fn run_search(
         exclude_domains: split_param(params.exclude_domains.as_deref()).unwrap_or_default(),
         include_raw_content: params
             .include_raw_content
+            .as_deref()
+            .map(|value| matches!(value, "1" | "true" | "on" | "yes"))
+            .unwrap_or(false),
+        strict_engines: params
+            .strict_engines
             .as_deref()
             .map(|value| matches!(value, "1" | "true" | "on" | "yes"))
             .unwrap_or(false),

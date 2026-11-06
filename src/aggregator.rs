@@ -61,6 +61,9 @@ pub struct SearchRequest {
     pub strategy: crate::settings::SearchStrategy,
     /// Set once the site-scoped second pass already ran, so it cannot recurse.
     pub site_retry_done: bool,
+    /// Fail the request when explicit engine names do not exist, instead of
+    /// SearXNG-compatible silent fallback to the default set.
+    pub strict_engines: bool,
 }
 
 impl SearchRequest {
@@ -85,6 +88,7 @@ impl SearchRequest {
             include_raw_content: false,
             strategy: crate::settings::SearchStrategy::Parallel,
             site_retry_done: false,
+            strict_engines: false,
             query,
         }
     }
@@ -302,6 +306,18 @@ impl Searcher {
             }
         }
         let mut engines = self.select_engines(&request);
+        if request.strict_engines {
+            let explicit = request.explicit_engines();
+            let unknown: Vec<&str> = explicit
+                .iter()
+                .filter(|name| self.registry.get(name).is_none())
+                .map(String::as_str)
+                .collect();
+            if !unknown.is_empty() {
+                response.error = Some(format!("unknown engines: {}", unknown.join(", "),));
+                return response;
+            }
+        }
         if engines.is_empty() {
             response.error = Some("no engine selected for this request".to_string());
             return response;
@@ -1979,6 +1995,35 @@ mod orchestration_tests {
         let response = searcher.search(request).await;
         assert_eq!(response.engines, vec!["syntax engine".to_string()]);
         assert_eq!(response.unresponsive_engines.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn strict_engines_fails_on_unknown_names() {
+        let searcher = searcher(vec![FakeEngine::build("web engine", &["general"], 1, true)]);
+        let mut request = SearchRequest::new(query("cats", &searcher.registry));
+        request.engines = vec!["web engine".to_string(), "nope".to_string()];
+        request.strict_engines = true;
+        let response = searcher.search(request).await;
+        assert_eq!(response.error.as_deref(), Some("unknown engines: nope"),);
+    }
+
+    #[tokio::test]
+    async fn strict_engines_passes_when_all_names_exist() {
+        let searcher = searcher(vec![FakeEngine::build("web engine", &["general"], 1, true)]);
+        let mut request = SearchRequest::new(query("cats", &searcher.registry));
+        request.engines = vec!["web engine".to_string()];
+        request.strict_engines = true;
+        let response = searcher.search(request).await;
+        assert!(response.error.is_none());
+    }
+
+    #[tokio::test]
+    async fn unknown_engine_names_fall_back_without_strict() {
+        let searcher = searcher(vec![FakeEngine::build("web engine", &["general"], 1, true)]);
+        let mut request = SearchRequest::new(query("cats", &searcher.registry));
+        request.engines = vec!["nope".to_string()];
+        let response = searcher.search(request).await;
+        assert!(response.error.is_none());
     }
 
     #[tokio::test]

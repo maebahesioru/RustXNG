@@ -20,15 +20,17 @@ function run(html, fetch, options = {}) {
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
       reject(new Error('renderer timed out: ' + diagnostics));
-    }, 15000);
+    }, options.timeoutMs || 15000);
     child.on('error', reject);
-    lines.on('line', line => {
+    lines.on('line', async line => {
       try {
         const message = JSON.parse(line);
         if (message.type === 'fetch') {
           requests.push(message);
-          const reply = fetch(message);
-          child.stdin.write(JSON.stringify({ id: message.id, ...reply }) + '\n');
+          const reply = await fetch(message);
+          if (!child.stdin.destroyed && !child.stdin.writableEnded) {
+            child.stdin.write(JSON.stringify({ id: message.id, ...reply }) + '\n');
+          }
         } else result = message;
       } catch (error) {
         child.kill('SIGKILL');
@@ -46,9 +48,14 @@ function run(html, fetch, options = {}) {
     url: options.url || 'https://fixture.invalid/article',
     html,
     max_bytes: options.maxBytes || 4 * 1024 * 1024,
+    budget_ms: options.budgetMs || renderBudget,
   }) + '\n');
   return { child, done };
 }
+
+  // Windows runners start Firefox and workers noticeably slower; give
+  // the worker round-trip tests a bigger render budget there.
+  const renderBudget = process.platform === 'win32' ? 20000 : 10000;
 
 function response(body, contentType = 'application/javascript') {
   return { status: 200, headers: { 'content-type': contentType }, body: Buffer.from(body).toString('base64') };
@@ -77,6 +84,57 @@ test('renders external scripts, fetches, and worker content beyond 8000 characte
   assert.ok(rendered.includes(`<main>${text}</main>`));
   assert.ok(rendered.includes('<aside>Worker text</aside>'));
   assert.equal(result.requests.length, 4);
+});
+
+test('waits for worker startup, its response, and the resulting page fetch', async () => {
+  const resources = {
+    '/worker.js': response(`
+      const until = performance.now() + 900;
+      while (performance.now() < until) {}
+      fetch('/worker.json').then(r => r.json()).then(v => postMessage(v.text));
+    `),
+    '/worker.json': response(JSON.stringify({ text: 'Worker text' }), 'application/json'),
+    '/details.txt': response('with details', 'text/plain'),
+  };
+  const { done } = run(`<main></main><script>
+    const worker = new Worker('/worker.js');
+    worker.onmessage = async e => {
+      const response = await fetch('/details.txt');
+      document.querySelector('main').textContent = e.data + ' ' + await response.text();
+    };
+  </script>`, async request => {
+    const pathname = new URL(request.url).pathname;
+    if (pathname === '/worker.json') await new Promise(resolve => setTimeout(resolve, 750));
+    return resources[pathname] || { error: 'unexpected resource' };
+  });
+  const result = await done;
+  assert.equal(result.type, 'html', result.message);
+  assert.equal(result.code, 0);
+  assert.ok(Buffer.from(result.body, 'base64').toString().includes('<main>Worker text with details</main>'));
+  assert.deepEqual(result.requests.map(request => new URL(request.url).pathname), [
+    '/worker.js', '/worker.json', '/details.txt',
+  ]);
+});
+
+test('idle and self-closing workers need not send a message', async () => {
+  for (const script of ['onmessage = event => postMessage(event.data);', 'close();']) {
+    const { done } = run('<main>ready</main><script>new Worker("/worker.js")</script>', () => response(script));
+    const result = await done;
+    assert.equal(result.type, 'html', result.message);
+    assert.ok(Buffer.from(result.body, 'base64').toString().includes('<main>ready</main>'));
+  }
+});
+
+test('a worker resource that never receives a broker reply reaches the deadline', async () => {
+  const { done } = run('<script>new Worker("/worker.js")</script>', request => {
+    if (new URL(request.url).pathname === '/worker.js') return response('fetch("/waiting.json");');
+    return new Promise(() => {});
+  }, { timeoutMs: 25000 });
+  const result = await done;
+  assert.equal(result.type, 'error');
+  assert.equal(result.code, 1);
+  assert.match(result.message, /rendering exceeded \d+ ms/);
+  assert.ok(result.requests.some(request => new URL(request.url).pathname === '/waiting.json'));
 });
 
 test('broker failures and redirected resources fail the whole render', async () => {
