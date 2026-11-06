@@ -44,3 +44,16 @@ disabled = false
 
 # Tested and left off: "bing Japan" repeats Bing's results; "reloado" was
 # rate-limited within minutes; "ayo" and "quark" often ran into the timeout.
+
+# Exa Search API: the strongest single source here. Paid and key-gated:
+# without a key the entry is skipped at startup with a warning. Add
+# api_key in your own overlay to use it (docs/audit/2026-11-05/).
+[[engines]]
+name = "exaapi"
+engine = "exaapi"
+disabled = false
+search_type = "lite"
+results_per_page = 10
+content_mode = "highlights"
+content_max_characters = 500
+weight = 2.0

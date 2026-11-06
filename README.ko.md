@@ -64,9 +64,8 @@ HTTP API는 `include_raw_content=1`로 본문을 가져올 수 있습니다. PDF
 | 프로필 | 명령 | 검색 원천 |
 | --- | --- | --- |
 | Standard | `rustxng` | 엔드포인트·사용 조건을 기록한 키 없는 항목 34개와 로컬 색인 |
-| API | `rustxng --profile api` | Standard에 명시적으로 설정한 유료 Exa Search 추가 (`EXA_API_KEY`) |
-| Clean | `rustxng --profile clean` | 선택된 공개 API와 로컬 색인 |
-| Full | `rustxng --profile full` | 자동 접근 제한 또는 허가가 확인되지 않은 HTML 검색 제공자도 포함 |
+| Clean | `rustxng --profile clean` | 외부 검색에 의존하지 않음. 자체 색인(크롤 색인과 Wikipedia 덤프 색인)만 정보원 |
+| Full | `rustxng --profile full` | 자동 접근 제한 또는 허가가 확인되지 않은 HTML 검색 제공자도 포함. 유료 Exa Search도 추가(`EXA_API_KEY`가 없으면 시작 시 건너뜀) |
 
 **Full을 사용해도 제공자 약관을 우회할 수 없습니다.** 필요한 허가를 확인하지 못한 제공자는 활성화하지 마세요. 개인용 서버도 이용 약관을 따라야 합니다. Clean 프로필 역시 법적 적합성을 보증하지 않습니다.
 

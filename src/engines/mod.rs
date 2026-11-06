@@ -224,7 +224,6 @@ pub mod stocksnap;
 pub mod swisscows;
 pub mod swisscows_news;
 pub mod tagesschau;
-pub mod tavily;
 pub mod tiger;
 pub mod tineye;
 pub mod tokyotoshokan;
@@ -477,7 +476,6 @@ pub fn build(config: &EngineConfig) -> Result<EngineHandle, String> {
         "vuhuv" => vuhuv::Vuhuv::from_config(config)?,
         "xprivo" => xprivo::Xprivo::from_config(config)?,
         "exaapi" => exaapi::ExaApi::from_config(config)?,
-        "tavily" => tavily::Tavily::from_config(config)?,
         "deepseek" => deepseek::DeepSeek::from_config(config)?,
         "freesound" => freesound::Freesound::from_config(config)?,
         "kagi" => kagi::Kagi::from_config(config)?,

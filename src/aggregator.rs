@@ -582,57 +582,10 @@ impl Searcher {
             response.error = Some("no engine selected for this request".to_string());
             return response;
         }
-        // Some upstream online processors only apply when the query carries
-        // their own syntax (for example currency conversion or a translation
-        // language pair). Skip those engines before requests and failure
-        // accounting instead of reporting an unrelated general query as an
-        // engine failure.
-        engines.retain(|engine| engine.is_applicable(&request.query));
-
-        // All providers share one deadline; completed results are retained.
-        let deadline = Instant::now()
-            + Duration::from_secs_f64(
-                request
-                    .timeout_limit
-                    .unwrap_or(self.settings.search.timeout_limit)
-                    .max(0.1),
-            );
-        // A general search that names a specialised source ("... arxiv",
-        // "... github") also asks that source, without the site's name.
-        let routed = self.site_routes(&request, &engines);
-        let mut index_tasks = tokio::task::JoinSet::new();
-        for (source, index, loose) in [
-            ("local_index", local_index, false),
-            ("wikipedia_index", wiki_index, true),
-        ] {
-            if let Some(index) = index {
-                let index = Arc::clone(index);
-                let text = if loose {
-                    crate::engine::util::search_keywords(
-                        &crate::engines::wikipedia::without_site_name(&request.query.query_text()),
-                    )
-                } else {
-                    request.query.query_text()
-                };
-                let include_domains = request.include_domains.clone();
-                let exclude_domains = request.exclude_domains.clone();
-                let pageno = request.pageno;
-                index_tasks.spawn(async move {
-                    (
-                        source,
-                        bounded_index_search(
-                            &index,
-                            text,
-                            loose,
-                            include_domains,
-                            exclude_domains,
-                            pageno,
-                            deadline,
-                        )
-                        .await,
-                    )
-                });
-            }
+||||||| e36f139
+        if engines.is_empty() {
+            response.error = Some("no engine selected for this request".to_string());
+            return response;
         }
         // The official-site lookup starts as soon as Wikipedia has answered,
         // not after the slowest engine.
@@ -819,6 +772,14 @@ impl Searcher {
             } else {
                 official_tasks.abort_all();
             }
+        }
+
+        // The local indexes are sources in their own right: a search with no
+        // engine still answers from them. Only a search with no engine and
+        // no indexed hit is an error.
+        if engines.is_empty() && !had_local && !had_wiki {
+            response.error = Some("no engine selected for this request".to_string());
+            return response;
         }
 
         container.close(

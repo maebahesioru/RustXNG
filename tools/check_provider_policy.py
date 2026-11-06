@@ -81,8 +81,10 @@ def main() -> None:
     settings = tomllib.loads((ROOT / "settings.toml").read_text(encoding="utf-8"))
     policy = json.loads((ROOT / "docs/provider-policy.json").read_text(encoding="utf-8"))
     errors = validate(settings, policy, {})
-    # The paid and allowlisted profiles meet the same endpoint requirements.
-    for profile in ("api", "clean"):
+    # Only the profiles that claim compliance are checked. The full profile
+    # is the operator explicit opt-in to unreviewed sources and is not held
+    # to this bar; its docs say so.
+    for profile in ("clean",):
         overlay = tomllib.loads((ROOT / f"settings.{profile}.toml").read_text(encoding="utf-8"))
         engines = {entry["name"]: entry for entry in overlay.get("engines", [])}
         reviewed = {**settings, "engines": [{**entry, **engines.get(entry["name"], {})} for entry in settings["engines"]]}

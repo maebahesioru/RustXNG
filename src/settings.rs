@@ -1133,12 +1133,10 @@ pub enum Profile {
     Full,
     /// `settings.clean.toml`: documented public APIs and our own crawl only.
     Clean,
-    /// Reviewed Standard providers plus the explicitly configured Exa Search API.
-    Api,
 }
 
 impl Profile {
-    pub const NAMES: &'static str = "standard, full, clean, api";
+    pub const NAMES: &'static str = "standard, full, clean";
 
     /// Parse a profile name (`default` and `normal` mean `standard`).
     pub fn parse(name: &str) -> Result<Profile, String> {
@@ -1146,7 +1144,6 @@ impl Profile {
             "standard" | "default" | "normal" => Ok(Profile::Standard),
             "full" => Ok(Profile::Full),
             "clean" => Ok(Profile::Clean),
-            "api" => Ok(Profile::Api),
             other => Err(format!(
                 "unknown profile {other:?} (choose one of: {})",
                 Profile::NAMES
@@ -1167,7 +1164,6 @@ impl Profile {
             Profile::Standard => "standard",
             Profile::Full => "full",
             Profile::Clean => "clean",
-            Profile::Api => "api",
         }
     }
 
@@ -1177,7 +1173,6 @@ impl Profile {
             Profile::Standard => None,
             Profile::Full => Some(include_str!("../settings.full.toml")),
             Profile::Clean => Some(include_str!("../settings.clean.toml")),
-            Profile::Api => Some(include_str!("../settings.api.toml")),
         }
     }
 }
@@ -1840,23 +1835,19 @@ engines:
         let standard = Settings::load_profile(None, Profile::Standard).unwrap();
         let full = Settings::load_profile(None, Profile::Full).unwrap();
         let clean = Settings::load_profile(None, Profile::Clean).unwrap();
-        let api = Settings::load_profile(None, Profile::Api).unwrap();
+
         let enabled = |settings: &Settings, name: &str| {
             settings.enabled_engines().any(|engine| engine.name == name)
         };
         assert!(!enabled(&standard, "exaapi"));
-        assert!(enabled(&api, "exaapi"));
-        assert_eq!(
-            api.engine("exaapi").unwrap().opt_str("search_type"),
-            Some("lite")
-        );
-        assert_eq!(Profile::parse("api"), Ok(Profile::Api));
         assert!(!enabled(&standard, "yahoo japan"));
         assert!(enabled(&full, "yahoo japan"));
+        assert!(enabled(&full, "exaapi"));
         assert!(enabled(&full, "wikipedia"));
-        assert!(!enabled(&clean, "bing"));
-        assert!(enabled(&clean, "wikipedia"));
-        assert_eq!(clean.outgoing.host_spacing_ms, 1100);
+        assert_eq!(clean.enabled_engines().count(), 0, "clean runs no engine");
+        assert_eq!(clean.search.local_index_path, "index-docs");
+        assert_eq!(clean.search.wikipedia_index_path, "index-wikipedia");
+        assert!(!clean.search.official_sites);
         assert_eq!(Profile::parse("normal"), Ok(Profile::Standard));
         assert!(Profile::parse("everything").is_err());
     }

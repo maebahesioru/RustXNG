@@ -64,9 +64,8 @@ Choose a provider configuration with `--profile`. The default is `standard`.
 | Profile | Command | Sources |
 | --- | --- | --- |
 | Standard | `rustxng` | 34 keyless entries with recorded endpoint/use conditions, plus local indexes |
-| API | `rustxng --profile api` | Standard plus explicitly configured, billed Exa Search (`EXA_API_KEY`) |
-| Clean | `rustxng --profile clean` | Selected public APIs and locally indexed sites |
-| Full | `rustxng --profile full` | Additional HTML providers, including sources with restrictive or unverified automation terms |
+| Clean | `rustxng --profile clean` | No external search at all: only our own indexes (the crawl index and the Wikipedia dump index) |
+| Full | `rustxng --profile full` | Additional HTML providers, including sources with restrictive or unverified automation terms, plus billed Exa Search (skipped at startup when `EXA_API_KEY` is absent) |
 
 **Full is not a permission bypass.** Do not enable a provider without the permissions required for your use. A private instance does not override provider terms. Clean is a configuration choice, not a certification of legal compliance.
 

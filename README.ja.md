@@ -66,9 +66,8 @@ HTTP APIでは`include_raw_content=1`で本文を取得できます。PDFの文�
 | 構成 | コマンド | 検索先 |
 | --- | --- | --- |
 | Standard | `rustxng` | 取得先と用途の条件を記録したキー不要の34エントリと自前索引 |
-| API | `rustxng --profile api` | Standard に明示設定した有料 Exa Search を追加（`EXA_API_KEY`） |
-| Clean | `rustxng --profile clean` | 選択した公開APIと自前の索引 |
-| Full | `rustxng --profile full` | 利用規約の制限や許可が未確認のHTML検索先も含む構成 |
+| Clean | `rustxng --profile clean` | 外部の検索に依存しない。自前の索引（クロール索引とWikipediaダンプ索引）だけが情報源 |
+| Full | `rustxng --profile full` | 利用規約の制限や許可が未確認のHTML検索先も含む構成。有料のExa Searchも追加（`EXA_API_KEY`が無いときは起動時に読み飛ばす） |
 
 Fullは利用許可を不要にする機能ではありません。個人利用やLAN内での運用でも検索元の規約が適用されます。必要な許可や契約を確認できない検索先は有効にしないでください。Cleanも法的な適合性を保証するものではありません。
 

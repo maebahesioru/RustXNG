@@ -49,21 +49,19 @@ class DocumentationConsistencyTests(unittest.TestCase):
         self.assertIsNotNone(documented)
         self.assertEqual(tuple(map(int, documented.groups())), (expected["en"], expected["ja"]))
 
-    def test_clean_allowlist_count(self) -> None:
+    def test_clean_profile_runs_no_engine(self) -> None:
         clean = tomllib.loads((ROOT / "settings.clean.toml").read_text(encoding="utf-8"))
-        allowlist = clean["search"]["engine_allowlist"]
-        self.assertEqual(len(allowlist), len(set(allowlist)))
+        self.assertTrue(clean.get("use_default_settings") is False)
+        self.assertNotIn("engines", clean)
         docs = (ROOT / "docs/CLEAN-PROFILE.md").read_text(encoding="utf-8")
-        documented = re.search(r"\*\*(\d+)件\*\*の検索元", docs)
-        self.assertIsNotNone(documented)
-        self.assertEqual(int(documented.group(1)), len(allowlist))
-
+        self.assertIn("外部エンジン 0", docs)
     def test_latest_sealqa_reference_is_not_old_run(self) -> None:
         summary = json.loads(
-            (ROOT / "bench/results/profiles-2026-11-04/clean/sealqa/summary.json").read_text(encoding="utf-8")
+            (ROOT / "bench/results/profiles-2026-11-05/clean/sealqa/summary.json").read_text(encoding="utf-8")
         )["splits"]["seal_hard"]
         docs = (ROOT / "docs/CLEAN-PROFILE.md").read_text(encoding="utf-8")
         self.assertIn(f'{summary["reference_hit@10"]}/{summary["questions"]}', docs)
+        self.assertIn("hit@10 | 85", docs)
         self.assertIn("結果ゼロの質問 | 0", docs)
         self.assertNotIn("結果ゼロが 33 問あります", docs)
 

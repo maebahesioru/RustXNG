@@ -1,0 +1,65 @@
+{
+  "metadata": {
+    "dataset": "https://huggingface.co/datasets/vtllms/sealqa",
+    "dataset_revision": "0c298f519c871579c75920189b3858da29fe2c81",
+    "dataset_files": {
+      "seal_0": {
+        "sha256": "381c9f86039c16570ee8d74ecbc3e687b553b21f7ebd7828a3d6a9e8f4705e7c",
+        "file": "seal-0.parquet"
+      },
+      "seal_hard": {
+        "sha256": "5bc6df2bf5012782675cbfc36a991d264320e4edcb332db60da2119b61383beb",
+        "file": "seal-hard.parquet"
+      }
+    },
+    "started_at": "2026-11-05T17:50:39.393623+00:00",
+    "base": "http://127.0.0.1:29840",
+    "commit": "305943d069c75bb6ed0813ccc3c40d658ef92fa1",
+    "settings_sha256": "6ddd5f65fa39b7ce5144a7336e937a25e0d657150a668961766e3c4277cf95e2",
+    "settings_sha256_scope": "repository settings.toml only; not the effective profile, overrides or index contents",
+    "worktree_has_tracked_changes": true,
+    "index_state": "not determined by this evaluator; document actual server configuration and index artifacts separately",
+    "protocol": "single question verbatim; default parallel strategy; max_results=10; no LLM requested by evaluator; no raw content requested; local index presence not checked; one persistent server; serial requests; shared observation for overlapping split questions",
+    "scoring": "exact canonical page; scheme/fragment/www/trailing slash ignored; path case and query preserved; no URL-prefix match; not official QA accuracy",
+    "delay_seconds": 0.0,
+    "client_timeout_seconds": 20,
+    "unique_questions": 254
+  },
+  "completed_at": "2026-11-05T17:50:51.634005+00:00",
+  "splits": {
+    "seal_0": {
+      "questions": 111,
+      "reference_hit@1": 21,
+      "reference_hit@5": 34,
+      "reference_hit@10": 40,
+      "reference_hit@1_pct": 18.92,
+      "reference_hit@5_pct": 30.63,
+      "reference_hit@10_pct": 36.04,
+      "reference_mrr@10": 0.2379,
+      "errors": 0,
+      "zero_results": 0,
+      "median_ms": 41.9,
+      "p95_ms": 98.9,
+      "median_results": 10,
+      "median_unresponsive": 0,
+      "benchmark_mirror_results": 0
+    },
+    "seal_hard": {
+      "questions": 254,
+      "reference_hit@1": 38,
+      "reference_hit@5": 68,
+      "reference_hit@10": 85,
+      "reference_hit@1_pct": 14.96,
+      "reference_hit@5_pct": 26.77,
+      "reference_hit@10_pct": 33.46,
+      "reference_mrr@10": 0.2035,
+      "errors": 0,
+      "zero_results": 0,
+      "median_ms": 42.7,
+      "p95_ms": 87.7,
+      "median_results": 10.0,
+      "median_unresponsive": 0.0,
+      "benchmark_mirror_results": 0
+    }
+  }
+}
