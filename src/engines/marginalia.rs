@@ -26,6 +26,9 @@ const DEFAULTS: EngineDefaults = EngineDefaults {
 };
 
 const BASE_URL: &str = "https://api2.marginalia-search.com";
+/// The keyless public endpoint lives on the old API host; the api2 host
+/// answers 404 for /public/search.
+const PUBLIC_BASE_URL: &str = "https://api.marginalia.nu";
 const RESULTS_PER_PAGE: i64 = 20;
 const USER_AGENT: &str =
     "Mozilla/5.0 (compatible; rustxng/0.2; +https://github.com/sahenjp/rustxng)";
@@ -54,25 +57,33 @@ impl Engine for Marginalia {
             .as_deref()
             .unwrap_or(BASE_URL)
             .trim_end_matches('/');
-        let mut pairs: Vec<(&str, String)> = vec![
-            ("page", pageno.max(1).to_string()),
-            ("count", RESULTS_PER_PAGE.to_string()),
-            ("nsfw", query.safesearch.min(1).to_string()),
-            ("query", query.query_text()),
-        ];
-        if let Some(filter) = self.meta.opt_str("filter_name") {
-            if !filter.is_empty() {
-                pairs.push(("filter", filter.to_string()));
-            }
-        }
         let key = self.meta.api_key.as_deref().unwrap_or_default().trim();
-        if key.is_empty() {
-            return Err(EngineError::Message(
-                "marginalia: an api_key is required (see about.marginalia-search.com)".into(),
-            ));
-        }
-        let mut request = EngineRequest::get(format!("{base}/search?{}", query_string(&pairs)));
-        request.set_header("API-Key", key);
+        let mut request = if key.is_empty() {
+            // The public endpoint needs no key. It takes the query as a path
+            // segment and only understands `page`; `count`, `nsfw` and
+            // `filter` make upstream stall until the socket times out.
+            EngineRequest::get(format!(
+                "{PUBLIC_BASE_URL}/public/search/{}?page={}",
+                encode(query.query_text().trim()),
+                pageno.max(1)
+            ))
+        } else {
+            let mut pairs: Vec<(&str, String)> = vec![
+                ("page", pageno.max(1).to_string()),
+                ("count", RESULTS_PER_PAGE.to_string()),
+                ("nsfw", query.safesearch.min(1).to_string()),
+                ("query", query.query_text()),
+            ];
+            if let Some(filter) = self.meta.opt_str("filter_name") {
+                if !filter.is_empty() {
+                    pairs.push(("filter", filter.to_string()));
+                }
+            }
+            let mut request =
+                EngineRequest::get(format!("{base}/search?{}", query_string(&pairs)));
+            request.set_header("API-Key", key);
+            request
+        };
         request.set_header("User-Agent", USER_AGENT);
         Ok(request)
     }
@@ -143,6 +154,18 @@ mod tests {
     }
 
     #[test]
+    fn the_public_endpoint_needs_no_key() {
+        let config = EngineConfig::new("marginalia", "marginalia", "mar", &["general"]);
+        let bare = Marginalia::from_config(&config).expect("engine");
+        let request = bare.build_request(&query("rust programming"), 2).unwrap();
+        assert_eq!(
+            request.url,
+            "https://api.marginalia.nu/public/search/rust%20programming?page=2"
+        );
+        assert!(request.headers.get("api-key").is_none());
+    }
+
+    #[test]
     fn request_carries_api_key_and_paging() {
         let mut request_query = query("rust");
         request_query.safesearch = 2;
@@ -166,13 +189,10 @@ mod tests {
     }
 
     #[test]
-    fn api_key_is_required_and_empty_bodies_are_ok() {
+    fn api_key_is_optional_and_empty_bodies_are_ok() {
         let config = EngineConfig::new("marginalia", "marginalia", "mar", &["general"]);
         let bare = Marginalia::from_config(&config).expect("engine");
-        assert!(matches!(
-            bare.build_request(&query("rust"), 1),
-            Err(EngineError::Message(_))
-        ));
+        assert!(bare.build_request(&query("rust"), 1).is_ok());
         let response = EngineResponse::new(200, BASE_URL, br##"{"license":"x"}"##.to_vec());
         assert!(
             engine()
