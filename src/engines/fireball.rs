@@ -59,7 +59,10 @@ impl Engine for Fireball {
     fn build_request(&self, query: &Query, _pageno: u32) -> Result<EngineRequest, EngineError> {
         // `/getResults/` answers 405 now; the results live in the HTML of the
         // search page itself (div.card.my-1 with a window.open() handler).
-        let args = [("f", "web".to_string()), ("q", query.query_text())];
+        let args = [
+            ("f", self.categ.clone()),
+            ("q", query.query_text()),
+        ];
         let query = query_string(&args);
         let mut request = EngineRequest::get(format!("{BASE_URL}/search?{query}"))
             .header("Referer", &format!("{BASE_URL}/"))
@@ -75,31 +78,28 @@ impl Engine for Fireball {
         response: &EngineResponse,
         _query: &Query,
     ) -> Result<Vec<EngineItem>, EngineError> {
-        let json = response.json()?;
-        let category = match self.categ.as_str() {
-            "news" => "news",
-            "videos" => "videos",
-            _ => "web",
-        };
-        let Some(items) =
-            json_path(&json, &format!("{category}.results")).and_then(serde_json::Value::as_array)
-        else {
-            return Ok(Vec::new());
-        };
+        // The search page is server rendered HTML: every hit is a
+        // `div.card.my-1` whose clickable `div[onclick]` carries the real URL
+        // inside `window.open('…')`. The `/getResults/` JSON endpoint this
+        // engine used to call answers 405.
+        let html = parse_html(&response.text());
         let mut results = Vec::new();
-        for item in items {
-            let title = strip_tags(&json_str(item, "title"));
-            let url = json_str(item, "url");
-            if title.is_empty() || !is_http_url(&url) {
+        for card in select_elements(&html, "div#webresults div.card")? {
+            let Some(url) = child(card, "div[onclick]")
+                .and_then(|node| attr(node, "onclick"))
+                .and_then(|script| window_open_target(&script))
+            else {
+                continue;
+            };
+            let Some(title) = text_of(card, "h4") else {
+                continue;
+            };
+            if !is_http_url(&url) {
                 continue;
             }
-            let mut builder =
-                ResultBuilder::new(url, title).content(strip_tags(&json_str(item, "description")));
-            if let Some(date) = json_path(item, "page_age").and_then(serde_json::Value::as_str) {
-                builder = builder.published_date(first_ten(date));
-            }
-            if category == "news" {
-                builder = builder.thumbnail(json_str(item, "thumbnail.src"));
+            let mut builder = ResultBuilder::new(url, title);
+            if let Some(content) = text_of(card, "p.mb-0") {
+                builder = builder.content(content);
             }
             results.push(builder.build());
         }
@@ -107,9 +107,15 @@ impl Engine for Fireball {
     }
 }
 
-/// `page_age` is an ISO-8601 timestamp; only the date part is kept.
-fn first_ten(value: &str) -> String {
-    value.chars().take(10).collect()
+/// The target of the first `window.open('…')` call in an inline handler.
+fn window_open_target(script: &str) -> Option<String> {
+    let start = script.find("window.open(")? + "window.open(".len();
+    let rest = script[start..].trim_start();
+    let quote = rest.chars().next().filter(|c| *c == '\'' || *c == '"')?;
+    let rest = &rest[quote.len_utf8()..];
+    let end = rest.find(quote)?;
+    let url = rest[..end].trim();
+    (!url.is_empty()).then(|| url.to_string())
 }
 
 fn is_http_url(url: &str) -> bool {
@@ -120,12 +126,21 @@ fn is_http_url(url: &str) -> bool {
 mod tests {
     use super::*;
 
-    const FIXTURE: &str = r#"{
-      "web": {"results": [
-        {"url": "https://example.com/rust", "title": "Rust <b>lang</b>",
-         "description": "A systems language", "page_age": "2024-04-01T10:00:00Z"}
-      ]}
-    }"#;
+    const FIXTURE: &str = r#"<html><body><div id="webresults">
+      <div class="card my-1" style="border: 0px;"><div class="card-body">
+        <div onclick="window.open('https://example.com/rust', '_blank');return false;">
+          <h4 class="mb-1 text-truncate">Rust Programming Language</h4>
+          <div class="font-13 text-muted mb-1 text-truncate">https://example.com/rust</div>
+          <p class="mb-0 mt-2">Rust is blazingly fast and memory-efficient.</p>
+        </div>
+      </div></div>
+      <div class="card my-1"><div class="card-body">
+        <div onclick="window.open('https://example.org/other', '_blank');return false;">
+          <h4>Second hit</h4>
+          <p class="mb-0 mt-2">Another description.</p>
+        </div>
+      </div></div>
+    </div></body></html>"#;
 
     fn engine() -> Arc<Fireball> {
         Fireball::from_config(&EngineConfig::new(
@@ -138,36 +153,53 @@ mod tests {
     }
 
     #[test]
-    fn parses_web_results() {
+    fn parses_the_server_rendered_cards() {
         let response = EngineResponse::new(
             200,
-            "https://fireball.com/getResults/",
+            "https://fireball.com/search?f=web&q=rust",
             FIXTURE.as_bytes().to_vec(),
         );
         let query = Query::parse("rust", &crate::engine::EngineRegistry::default(), &[]);
         let items = engine().parse(&response, &query).unwrap();
-        assert_eq!(items.len(), 1);
+        assert_eq!(items.len(), 2);
         match &items[0] {
             EngineItem::Result(result) => {
-                assert_eq!(result.title, "Rust lang");
+                assert_eq!(result.title, "Rust Programming Language");
                 assert_eq!(result.url, "https://example.com/rust");
-                assert_eq!(result.published_date.as_deref(), Some("2024-04-01"));
+                assert_eq!(
+                    Some(result.content.as_str()),
+                    Some("Rust is blazingly fast and memory-efficient.")
+                );
             }
             _ => panic!("expected a result"),
         }
+        match &items[1] {
+            EngineItem::Result(result) => assert_eq!(result.url, "https://example.org/other"),
+            _ => panic!("expected a result"),
+        }
+    }
+
+    #[test]
+    fn cards_without_a_window_open_target_are_skipped() {
+        let body = r#"<div id="webresults"><div class="card my-1">
+            <h4>No link here</h4></div></div>"#;
+        let response = EngineResponse::new(200, "https://fireball.com/search", body.as_bytes().to_vec());
+        let query = Query::parse("rust", &crate::engine::EngineRegistry::default(), &[]);
+        assert!(engine().parse(&response, &query).unwrap().is_empty());
     }
 
     #[test]
     fn builds_the_request_with_a_referer() {
         let query = Query::parse("rust", &crate::engine::EngineRegistry::default(), &[]);
         let request = engine().build_request(&query, 1).unwrap();
-        assert!(request.url.starts_with("https://fireball.com/getResults/?"));
+        assert!(request.url.starts_with("https://fireball.com/search?"));
+        assert!(request.url.ends_with("q=rust"));
         assert_eq!(
             request
                 .headers
                 .get("referer")
                 .map(|value| value.to_str().unwrap()),
-            Some("https://fireball.com/search?f=web&q=rust")
+            Some("https://fireball.com/")
         );
     }
 }
