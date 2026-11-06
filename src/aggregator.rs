@@ -12,11 +12,26 @@ use crate::cache::Cache;
 use crate::engine::state::{EngineSnapshot, EngineStates};
 use crate::engine::{EngineHandle, EngineItem, EngineRegistry, FailureKind};
 use crate::metrics::Metrics;
-use crate::network::Network;
+use crate::network::{Network, SolverAttempt};
 use crate::plugins::{PluginContext, PluginManager, UserInfo};
 use crate::query::{Query, TimeRange};
 use crate::results::{Infobox, ResultContainer, SearchResult, Timing, UnresponsiveEngine};
 use crate::settings::Settings;
+
+/// How much of the deadline must be left before an engine is allowed to spend
+/// a solver tab. A tab needs about three seconds to load a walled page and hand
+/// the results back; below this an attempt can only time out, so the engine
+/// reports its own failure instead and the search keeps its speed.
+const SOLVER_MIN_BUDGET: Duration = Duration::from_millis(3_500);
+
+/// The same floor for a search that names its engines.
+///
+/// A named engine is already being waited for, so a wall that takes a second to
+/// answer still leaves a tab worth taking. yandex answers its challenge page
+/// about 1.5s into a 4s budget: the general floor rejected that before the
+/// browser was ever asked, which is why every bang search reported "Solver
+/// busy" while the same solver cleared the same page moments earlier.
+const SOLVER_MIN_BUDGET_EXPLICIT: Duration = Duration::from_millis(1_200);
 
 /// Everything the searcher needs to know about one search request.
 #[derive(Debug, Clone)]
@@ -505,7 +520,7 @@ impl Searcher {
 
         if let Some((remaining, reason)) = self.states.suspension(&name) {
             let kind = failure_kind_from_error_type(reason.as_deref().unwrap_or("suspended"));
-            tracing::debug!(engine = %name, remaining = ?remaining, "engine suspended, skipping");
+            tracing::debug!(engine = %name, remaining = ?remaining, reason = ?reason, "engine suspended, skipping");
             return EngineOutcome {
                 engine: name,
                 weight,
@@ -516,6 +531,20 @@ impl Searcher {
         }
 
         let started = Instant::now();
+        // 明示指定された engine（engines=... か !bang）は全体締切の縛りから外し、
+        // 自身の timeout までは待つ。既定の timeout_limit は検索全体の応答時間を
+        // 守るための値なので、索引走査に数秒かかる engine（anaconda は 3〜10 秒）を
+        // 名指しで呼んだときまで打ち切ると、その engine は永久に 0 件になる。
+        let explicit = request
+            .engines
+            .iter()
+            .any(|wanted| wanted.eq_ignore_ascii_case(&name))
+            || request
+                .query
+                .engine_ref_names()
+                .iter()
+                .any(|wanted| wanted.eq_ignore_ascii_case(&name));
+        let deadline = engine_deadline(explicit, engine.timeout(), deadline, Instant::now());
         // engine ごとの timeout は残り時間で上限を切る。締め切りを過ぎていれば走らせない。
         let Some(timeout) = engine_budget(engine.timeout(), deadline, Instant::now()) else {
             return EngineOutcome {
@@ -528,7 +557,9 @@ impl Searcher {
         };
 
         Metrics::incr(&self.metrics.engine_requests, 1);
-        let items = self.run_engine_inner(engine, request, timeout).await;
+        let items = self
+            .run_engine_inner(engine, request, timeout, explicit)
+            .await;
         let elapsed = started.elapsed();
 
         match &items {
@@ -541,8 +572,15 @@ impl Searcher {
                 if *kind == FailureKind::Timeout {
                     Metrics::incr(&self.metrics.engine_timeouts, 1);
                 }
-                self.states
-                    .record_failure(&name, *kind, &self.settings.search);
+                // A tab that was not free says nothing about the engine.
+                if !matches!(*kind, FailureKind::SolverBusy | FailureKind::SolverSkipped) {
+                    self.states.record_failure(
+                        &name,
+                        *kind,
+                        &self.settings.search,
+                        self.settings.solver.suspension_cap(),
+                    );
+                }
             }
         }
 
@@ -555,11 +593,50 @@ impl Searcher {
         }
     }
 
+    /// How long this engine may wait for a solver tab, and whether it has
+    /// earned the run of them.
+    ///
+    /// Returns None when there is no time left for a tab worth taking.
+    ///
+    /// An engine the browser has already served waits out the whole remaining
+    /// budget and may take any tab: that tab is known to turn into results.
+    /// Everything else waits a bounded turn and is confined to the one tab set
+    /// aside for candidates. Refusing those outright kept them from ever
+    /// proving themselves, while queueing all of them freely let a dozen
+    /// hopeless challenges hold every tab on every search.
+    fn solver_turn(
+        &self,
+        engine: &str,
+        remaining: Duration,
+        explicit: bool,
+    ) -> Option<(Duration, bool)> {
+        let floor = if explicit {
+            SOLVER_MIN_BUDGET_EXPLICIT
+        } else {
+            SOLVER_MIN_BUDGET
+        };
+        if remaining < floor {
+            return None;
+        }
+        if self.states.solver_is_useful(engine) {
+            Some((remaining, true))
+        } else {
+            // The trial tab gets the configured budget, not a hard-coded one:
+            // a page that takes 4s in the production VM timed out a 3s trial
+            // while the same engine answered in 1.5s from a faster host.
+            Some((
+                remaining.min(Duration::from_millis(self.settings.solver.budget_ms)),
+                false,
+            ))
+        }
+    }
+
     async fn run_engine_inner(
         &self,
         engine: &EngineHandle,
         request: &SearchRequest,
         timeout: Duration,
+        explicit: bool,
     ) -> Result<Vec<EngineItem>, FailureKind> {
         // Database backed engines do their work on a blocking thread; the HTTP
         // path below only applies to network engines.
@@ -574,22 +651,205 @@ impl Searcher {
             .await;
             return match joined {
                 Ok(Ok(Ok(items))) => check_quality(engine.name(), &request.query, items),
-                Ok(Ok(Err(error))) => Err(FailureKind::from(&error)),
+                Ok(Ok(Err(error))) => {
+                    tracing::debug!(engine = %engine.name(), error = %error, "engine failed");
+                    Err(FailureKind::from(&error))
+                }
                 Ok(Err(_)) => Err(FailureKind::Other),
                 Err(_) => Err(FailureKind::Timeout),
             };
         }
         let engine_request = engine
             .build_request(&request.query, request.pageno)
-            .map_err(|error| FailureKind::from(&error))?;
-        let response = self
+            .map_err(|error| {
+                tracing::debug!(engine = %engine.name(), error = %error, "engine build_request failed");
+                FailureKind::from(&error)
+            })?;
+        let started = Instant::now();
+        // Saved before the fetch consumes the request: a CAPTCHA that only the
+        // engine can recognise is retried through the solver with this URL.
+        let target_url = engine_request.url.clone();
+        tracing::debug!(engine = %engine.name(), url = %target_url, "engine request");
+        let is_get = engine_request.method == crate::engine::Method::Get;
+        // Set once a browser tab stood in for the plain request, so a parse
+        // failure afterwards is known to be about the engine, not the wall.
+        let mut via_solver = false;
+        let mut response = match self
             .network
             .fetch(engine_request, timeout, Some(&self.cache), engine.proxy())
             .await
-            .map_err(|error| error.failure_kind())?;
-        let items = engine
-            .parse(&response, &request.query)
-            .map_err(|error| FailureKind::from(&error))?;
+        {
+            Ok(response) => response,
+            Err(error) => {
+                tracing::debug!(engine = %engine.name(), error = %error, "engine fetch failed");
+                let kind = error.failure_kind();
+                // A wall the network layer cannot recognise from the body (a
+                // bare 403/429, a body without a marker) still opens in a
+                // browser. One retry through the solver, then give up.
+                let retryable = matches!(
+                    kind,
+                    FailureKind::AccessDenied | FailureKind::Captcha | FailureKind::TooManyRequests
+                );
+                let remaining = timeout.saturating_sub(started.elapsed());
+                // API endpoints answer JSON; the browser cannot improve on
+                // that and every attempt costs one of the few solver tabs.
+                if !is_get
+                    || !retryable
+                    || !error.serves_html()
+                    || self.states.solver_cannot_help(engine.name())
+                {
+                    return Err(kind);
+                }
+                if remaining.is_zero() {
+                    // The request itself used up the budget, so no tab ever got
+                    // a chance to answer. Nothing was attempted, and suspending
+                    // the engine here would take a good engine away for nothing.
+                    return Err(FailureKind::SolverSkipped);
+                }
+                let Some((budget, proven)) = self.solver_turn(engine.name(), remaining, explicit)
+                else {
+                    return Err(FailureKind::SolverSkipped);
+                };
+                match self.network.solve_page(&target_url, budget, proven).await {
+                    SolverAttempt::Solved(page) => {
+                        via_solver = true;
+                        page
+                    }
+                    SolverAttempt::Busy => return Err(FailureKind::SolverBusy),
+                    SolverAttempt::Hopeless => {
+                        self.states.mark_solver_cannot_help(engine.name());
+                        tracing::debug!(
+                            engine = %engine.name(),
+                            "the solver is refused as well; no further attempts"
+                        );
+                        return Err(kind);
+                    }
+                }
+            }
+        };
+        // A wall the body itself gives away - a 200 interstitial that looks
+        // like a page, or a 403 the fetch already turned into a response - is
+        // retried in the browser here, where the engine's remaining budget and
+        // the breaker are known.
+        if !via_solver
+            && is_get
+            && crate::solver::looks_like_challenge(response.status, &response.body)
+            && !self.states.solver_cannot_help(engine.name())
+        {
+            let remaining = timeout.saturating_sub(started.elapsed());
+            if remaining.is_zero() {
+                return Err(FailureKind::SolverSkipped);
+            }
+            let Some((budget, proven)) = self.solver_turn(engine.name(), remaining, explicit)
+            else {
+                return Err(FailureKind::SolverSkipped);
+            };
+            match self.network.solve_page(&target_url, budget, proven).await {
+                SolverAttempt::Solved(page) => {
+                    via_solver = true;
+                    response = page;
+                }
+                SolverAttempt::Busy => return Err(FailureKind::SolverBusy),
+                SolverAttempt::Hopeless => {
+                    self.states.mark_solver_cannot_help(engine.name());
+                    tracing::debug!(
+                        engine = %engine.name(),
+                        "the solver is refused as well; no further attempts"
+                    );
+                    return Err(FailureKind::AccessDenied);
+                }
+            }
+        }
+        if via_solver && crate::solver::looks_like_challenge(response.status, &response.body) {
+            // The browser came back with the same wall: the site refuses it as
+            // well, and further tabs would only be spent on it.
+            self.states.mark_solver_cannot_help(engine.name());
+            tracing::debug!(
+                engine = %engine.name(),
+                "the solver got the same challenge page; no further attempts"
+            );
+            return Err(FailureKind::AccessDenied);
+        }
+        // A shell page that loads its results from a fragment: follow it with
+        // the time the first request left over.
+        if let Some(followup) = engine.followup_request(&response, &request.query).map_err(
+            |error| {
+                tracing::debug!(engine = %engine.name(), error = %error, "engine followup failed");
+                FailureKind::from(&error)
+            },
+        )? {
+            let remaining = timeout.saturating_sub(started.elapsed());
+            if remaining.is_zero() {
+                return Err(FailureKind::Timeout);
+            }
+            response = self
+                .network
+                .fetch(followup, remaining, Some(&self.cache), engine.proxy())
+                .await
+                .map_err(|error| {
+                    tracing::debug!(engine = %engine.name(), error = %error, "engine followup fetch failed");
+                    error.failure_kind()
+                })?;
+        }
+        let items = match engine.parse(&response, &request.query) {
+            Ok(items) => items,
+            Err(error) => {
+                // The engine itself decided the body is a verification wall.
+                // A real browser passes where a plain client does not, so the
+                // same URL goes to the solver once and the page it brings back
+                // is parsed again.
+                if !(is_get
+                    && response.serves_html()
+                    && matches!(error, crate::engine::EngineError::Captcha)
+                    && !self.states.solver_cannot_help(engine.name()))
+                {
+                    tracing::debug!(engine = %engine.name(), error = %error, "engine parse failed");
+                    return Err(FailureKind::from(&error));
+                }
+                let remaining = timeout.saturating_sub(started.elapsed());
+                if remaining.is_zero() {
+                    return Err(FailureKind::SolverSkipped);
+                }
+                let Some((budget, proven)) = self.solver_turn(engine.name(), remaining, explicit)
+                else {
+                    return Err(FailureKind::SolverSkipped);
+                };
+                match self.network.solve_page(&target_url, budget, proven).await {
+                    SolverAttempt::Solved(page) => match engine.parse(&page, &request.query) {
+                        Ok(items) => {
+                            // The browser earned this engine its results, so
+                            // from now on it may queue for a tab.
+                            via_solver = true;
+                            items
+                        }
+                        Err(error) => {
+                            // The browser got a fresh page and the engine still
+                            // could not read it: this engine speaks JSON, or the
+                            // wall is not a challenge. Stop spending a tab on it.
+                            self.states.mark_solver_cannot_help(engine.name());
+                            tracing::debug!(
+                                engine = %engine.name(),
+                                error = %error,
+                                "engine parse failed after the solver cleared the page"
+                            );
+                            return Err(FailureKind::from(&error));
+                        }
+                    },
+                    SolverAttempt::Busy => return Err(FailureKind::SolverBusy),
+                    SolverAttempt::Hopeless => {
+                        self.states.mark_solver_cannot_help(engine.name());
+                        tracing::debug!(
+                            engine = %engine.name(),
+                            "the solver is refused as well; no further attempts"
+                        );
+                        return Err(FailureKind::from(&error));
+                    }
+                }
+            }
+        };
+        if via_solver {
+            self.states.mark_solver_useful(engine.name());
+        }
         check_quality(engine.name(), &request.query, items)
     }
 
@@ -905,15 +1165,83 @@ fn check_quality(
     query: &crate::query::Query,
     items: Vec<crate::engine::EngineItem>,
 ) -> Result<Vec<crate::engine::EngineItem>, FailureKind> {
-    if let Some(suspicion) = crate::quality::inspect(query, &items) {
-        tracing::warn!(
-            %engine,
-            reason = suspicion.reason(),
-            "discarding a suspicious engine response"
-        );
-        return Err(FailureKind::Suspicious);
+    match crate::quality::inspect(query, &items) {
+        None => Ok(items),
+        // A duplicate-heavy answer is often an index that lists the same
+        // document under several URLs (erowid's scan list does exactly this).
+        // Collapse the copies and keep what is left when it still looks like a
+        // real answer; fabricated and unrelated answers are still dropped.
+        Some(crate::quality::Suspicion::Repeated) => {
+            let total = items.len();
+            let sample: Vec<String> = items
+                .iter()
+                .take(3)
+                .filter_map(|item| match item {
+                    crate::engine::EngineItem::Result(result) => Some(format!(
+                        "{} => {}",
+                        result.title.chars().take(40).collect::<String>(),
+                        result.url
+                    )),
+                    _ => None,
+                })
+                .collect();
+            let kept = dedupe_repeated_results(items);
+            if kept.len() < 3 || crate::quality::inspect(query, &kept).is_some() {
+                tracing::warn!(
+                    %engine,
+                    total,
+                    kept = kept.len(),
+                    ?sample,
+                    reason = "repeated results",
+                    "discarding a suspicious engine response"
+                );
+                return Err(FailureKind::Suspicious);
+            }
+            tracing::debug!(
+                %engine,
+                kept = kept.len(),
+                "keeping a duplicate-heavy engine response after dedupe"
+            );
+            Ok(kept)
+        }
+        Some(suspicion) => {
+            tracing::warn!(
+                %engine,
+                reason = suspicion.reason(),
+                "discarding a suspicious engine response"
+            );
+            Err(FailureKind::Suspicious)
+        }
     }
-    Ok(items)
+}
+
+/// Drop entries that repeat the same title.
+///
+/// Pages that list one document several times still carry distinct URLs and
+/// may even vary the snippet, so the copies survive the merge; collapsing them
+/// here keeps the first copy and lets the sanity check judge a deduplicated
+/// answer. The title is the field the repeated-results check looks at, so it is
+/// the field to collapse on.
+fn dedupe_repeated_results(
+    items: Vec<crate::engine::EngineItem>,
+) -> Vec<crate::engine::EngineItem> {
+    use std::collections::HashSet;
+
+    let mut seen: HashSet<String> = HashSet::new();
+    items
+        .into_iter()
+        .filter(|item| match item {
+            crate::engine::EngineItem::Result(result) => seen.insert(
+                result
+                    .title
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .to_lowercase(),
+            ),
+            _ => true,
+        })
+        .collect()
 }
 
 /// `[{"answer": "..."}]`, the shape upstream uses for answers.
@@ -945,16 +1273,7 @@ where
     let mut pairs: Vec<(String, String)> = engines
         .iter()
         .map(|engine| {
-            let mut text = match engine.error_type.as_str() {
-                "timeout" => "Timeout".to_string(),
-                "access denied" => "Access denied".to_string(),
-                "captcha" => "CAPTCHA".to_string(),
-                "too many requests" => "Too many requests".to_string(),
-                "http error" => "HTTP error".to_string(),
-                "parsing error" => "Parsing error".to_string(),
-                "suspended" => "Suspended".to_string(),
-                _ => "Unexpected error".to_string(),
-            };
+            let mut text = crate::engine::error_type_label(engine.error_type.as_str()).to_string();
             if engine.suspended && text != "Suspended" {
                 text = format!("Suspended: {text}");
             }
@@ -993,6 +1312,8 @@ fn failure_kind_from_error_type(error_type: &str) -> FailureKind {
         "access denied" => FailureKind::AccessDenied,
         "captcha" => FailureKind::Captcha,
         "too many requests" => FailureKind::TooManyRequests,
+        "solver busy" => FailureKind::SolverBusy,
+        "solver skipped" => FailureKind::SolverSkipped,
         "http error" => FailureKind::Http,
         "parsing error" => FailureKind::Parse,
         "suspicious response" => FailureKind::Suspicious,
@@ -1004,6 +1325,22 @@ fn failure_kind_from_error_type(error_type: &str) -> FailureKind {
 ///
 /// The engine's own timeout is the ceiling; the search deadline may cut it short.
 /// Returns `None` when the deadline has already passed (do not run at all).
+/// 明示指定（engines=... / !bang）された engine は検索全体の締切ではなく
+/// 自身の timeout まで待つ。索引走査に数秒かかる engine を名指ししたときに
+/// 締切で必ず 0 件になるのを避けるための例外。
+fn engine_deadline(
+    explicit: bool,
+    engine_timeout: Duration,
+    search_deadline: Instant,
+    now: Instant,
+) -> Instant {
+    if explicit {
+        search_deadline.max(now + engine_timeout)
+    } else {
+        search_deadline
+    }
+}
+
 fn engine_budget(engine_timeout: Duration, deadline: Instant, now: Instant) -> Option<Duration> {
     let remaining = deadline.saturating_duration_since(now);
     if remaining.is_zero() {
@@ -1121,6 +1458,26 @@ mod orchestration_tests {
         Query::parse(text, registry, &[])
     }
 
+    #[test]
+    fn a_named_engine_may_take_a_tab_the_general_floor_would_refuse() {
+        let searcher = searcher(vec![]);
+        // A wall that answers after 1.5s of a 4s budget leaves 2.4s: too little
+        // for the general floor, but the tab the search is already waiting for.
+        let left = Duration::from_millis(2_400);
+        assert!(searcher.solver_turn("yandex", left, false).is_none());
+        let (budget, proven) = searcher
+            .solver_turn("yandex", left, true)
+            .expect("a named engine waits for the tab");
+        assert_eq!(budget, left);
+        assert!(!proven, "a first attempt is confined to the trial tab");
+        // Even a named engine stops once the tab could not finish in time.
+        assert!(
+            searcher
+                .solver_turn("yandex", Duration::from_millis(900), true)
+                .is_none()
+        );
+    }
+
     #[tokio::test]
     async fn raw_content_refuses_private_result_urls() {
         let searcher = searcher(vec![]);
@@ -1226,6 +1583,47 @@ mod orchestration_tests {
         );
     }
 
+    /// An engine named explicitly (`engines=...` or `!bang`) is not cut by the
+    /// search deadline: it gets its own timeout instead. Measured: anaconda's
+    /// search API needs 3-10 s, so under the default 2.5 s deadline a named
+    /// request always returned zero results.
+    #[test]
+    fn an_explicit_engine_gets_its_own_timeout() {
+        let now = Instant::now();
+        let deadline = engine_deadline(
+            true,
+            Duration::from_secs(12),
+            now + Duration::from_millis(300),
+            now,
+        );
+        assert_eq!(deadline, now + Duration::from_secs(12));
+        assert_eq!(
+            engine_budget(Duration::from_secs(12), deadline, now),
+            Some(Duration::from_secs(12))
+        );
+    }
+
+    #[test]
+    fn a_non_explicit_engine_keeps_the_search_deadline() {
+        let now = Instant::now();
+        let search_deadline = now + Duration::from_millis(300);
+        assert_eq!(
+            engine_deadline(false, Duration::from_secs(12), search_deadline, now),
+            search_deadline
+        );
+    }
+
+    /// The explicit path must never shorten a generous search deadline.
+    #[test]
+    fn an_explicit_engine_never_shortens_the_search_deadline() {
+        let now = Instant::now();
+        let search_deadline = now + Duration::from_secs(30);
+        assert_eq!(
+            engine_deadline(true, Duration::from_secs(12), search_deadline, now),
+            search_deadline
+        );
+    }
+
     #[tokio::test]
     async fn failing_engines_are_reported_as_unresponsive() {
         let searcher = searcher(vec![FakeEngine::build("broken", &["general"], 0, true)]);
@@ -1306,6 +1704,7 @@ mod orchestration_tests {
             "broken",
             FailureKind::TooManyRequests,
             &searcher.settings.search,
+            None,
         );
         let request = SearchRequest::new(query("cats", &searcher.registry));
         let response = searcher.search(request).await;

@@ -2,7 +2,7 @@
 //! error handling in `searx/engines/__init__.py` (`ban_time_on_fail`,
 //! `max_ban_time_on_fail` and `suspended_times`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -65,11 +65,59 @@ pub struct EngineSnapshot {
 #[derive(Debug, Default)]
 pub struct EngineStates {
     states: Mutex<HashMap<String, EngineState>>,
+    /// Engines where a page fetched by the browser solver still failed to
+    /// parse. The browser cannot help them, so retrying only spends a tab.
+    solver_dead: Mutex<HashSet<String>>,
+    /// Engines the browser solver has already delivered results for. They are
+    /// worth queueing a tab for; every other blocked engine is not, until it
+    /// proves itself.
+    solver_useful: Mutex<HashSet<String>>,
 }
 
 impl EngineStates {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Whether an earlier solver attempt already proved useless for an engine.
+    pub fn solver_cannot_help(&self, engine: &str) -> bool {
+        self.solver_dead
+            .lock()
+            .expect("solver marks are not poisoned")
+            .contains(engine)
+    }
+
+    /// Whether the browser solver has already produced results for an engine.
+    pub fn solver_is_useful(&self, engine: &str) -> bool {
+        self.solver_useful
+            .lock()
+            .expect("solver marks are not poisoned")
+            .contains(engine)
+    }
+
+    /// Remember that a page cleared by the solver parsed into results.
+    pub fn mark_solver_useful(&self, engine: &str) {
+        let mut useful = self
+            .solver_useful
+            .lock()
+            .expect("solver marks are not poisoned");
+        if useful.insert(engine.to_string()) {
+            tracing::debug!(engine, "the solver works for this engine; it may queue");
+        }
+    }
+
+    /// Remember that a page cleared by the solver still did not parse.
+    pub fn mark_solver_cannot_help(&self, engine: &str) {
+        let mut dead = self
+            .solver_dead
+            .lock()
+            .expect("solver marks are not poisoned");
+        if dead.insert(engine.to_string()) {
+            tracing::debug!(
+                engine,
+                "the solver cannot help this engine; no further attempts"
+            );
+        }
     }
 
     fn with_state<T>(&self, engine: &str, action: impl FnOnce(&mut EngineState) -> T) -> T {
@@ -135,7 +183,17 @@ impl EngineStates {
     }
 
     /// Record a failure and return the suspension time in seconds (0 = none).
-    pub fn record_failure(&self, engine: &str, kind: FailureKind, settings: &Search) -> u64 {
+    ///
+    /// `cap` shortens the recorded suspension. It exists for the browser
+    /// solver: a challenge that the solver can clear should not bench the
+    /// engine for a day, because the very next search may get through.
+    pub fn record_failure(
+        &self,
+        engine: &str,
+        kind: FailureKind,
+        settings: &Search,
+        cap: Option<u64>,
+    ) -> u64 {
         self.with_state(engine, |state| {
             state.stats.errors += 1;
             if kind == FailureKind::Timeout {
@@ -158,6 +216,10 @@ impl EngineStates {
                         0
                     }
                 }
+            };
+            let suspension = match cap {
+                Some(cap) if cap > 0 => suspension.min(cap),
+                _ => suspension,
             };
             if suspension > 0 {
                 state.suspended_until = Some(Instant::now() + Duration::from_secs(suspension));
@@ -219,17 +281,30 @@ mod tests {
     fn access_denied_suspends_for_a_day() {
         let states = EngineStates::new();
         let settings = Search::default();
-        let seconds = states.record_failure("duckduckgo", FailureKind::AccessDenied, &settings);
+        let seconds =
+            states.record_failure("duckduckgo", FailureKind::AccessDenied, &settings, None);
         assert_eq!(seconds, 86_400);
         assert!(states.suspension("duckduckgo").is_some());
+    }
+
+    #[test]
+    fn a_solver_cap_shortens_a_day_long_ban() {
+        let states = EngineStates::new();
+        let settings = Search::default();
+        let seconds = states.record_failure("yandex", FailureKind::Captcha, &settings, Some(300));
+        assert_eq!(seconds, 300);
+        assert!(states.suspension("yandex").is_some());
     }
 
     #[test]
     fn two_soft_failures_trigger_a_short_suspension() {
         let states = EngineStates::new();
         let settings = Search::default();
-        assert_eq!(states.record_failure("x", FailureKind::Other, &settings), 0);
-        let second = states.record_failure("x", FailureKind::Other, &settings);
+        assert_eq!(
+            states.record_failure("x", FailureKind::Other, &settings, None),
+            0
+        );
+        let second = states.record_failure("x", FailureKind::Other, &settings, None);
         assert_eq!(second, 10);
         assert!(states.suspension("x").is_some());
     }
@@ -238,7 +313,7 @@ mod tests {
     fn success_clears_the_state() {
         let states = EngineStates::new();
         let settings = Search::default();
-        states.record_failure("x", FailureKind::TooManyRequests, &settings);
+        states.record_failure("x", FailureKind::TooManyRequests, &settings, None);
         states.record_success("x", 3, Duration::from_millis(100), &Search::default());
         assert!(states.suspension("x").is_none());
         let snapshot = states.snapshot();
@@ -372,7 +447,7 @@ mod tests {
         };
 
         // Trigger failure suspension
-        states.record_failure("a", FailureKind::AccessDenied, &settings);
+        states.record_failure("a", FailureKind::AccessDenied, &settings, None);
         let snap_a = states
             .snapshot()
             .into_iter()
@@ -407,7 +482,7 @@ mod tests {
         let settings = Search::default();
 
         // Create a suspension
-        states.record_failure("eng", FailureKind::AccessDenied, &settings);
+        states.record_failure("eng", FailureKind::AccessDenied, &settings, None);
         let snap = states
             .snapshot()
             .into_iter()

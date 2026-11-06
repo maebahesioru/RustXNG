@@ -56,6 +56,9 @@ pub struct Settings {
     /// Deep research: plan queries, search, fetch, synthesise a cited report.
     #[serde(default)]
     pub research: ResearchSettings,
+    /// Optional external browser solver for WAF / CAPTCHA guarded engines.
+    #[serde(default)]
+    pub solver: SolverSettings,
     /// Categories shown as tabs (upstream `categories_as_tabs`).
     pub categories_as_tabs: Vec<String>,
     /// Accepted for compatibility with SearXNG configs.
@@ -93,6 +96,63 @@ impl Default for ResearchSettings {
             max_sources: 10,
             timeout: 60,
         }
+    }
+}
+
+/// External challenge solver. Disabled by default: the engines are expected to
+/// work with plain HTTP, and driving a browser is slow compared to them.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct SolverSettings {
+    pub enabled: bool,
+    /// FlareSolverr-compatible JSON endpoint.
+    pub endpoint: String,
+    /// Browser session name, reused across searches.
+    pub session: String,
+    /// How many browser tabs may be driven at once.
+    ///
+    /// A search that hits three blocked engines at the same time would
+    /// otherwise serialise behind one page load and lose the engines to the
+    /// "busy" shortcut.
+    pub pool: usize,
+    /// How long one search may wait for the browser before falling back.
+    pub budget_ms: u64,
+    /// Ceiling for a single page load inside the browser.
+    pub max_timeout_ms: u64,
+    /// Ceiling for an engine suspension once the solver is enabled.
+    ///
+    /// A 24-hour ban is the right answer when plain HTTP hit a wall, because
+    /// nothing changes on the next search. With a browser in the pool it is
+    /// the wrong answer: the challenge the engine met is exactly the one the
+    /// solver clears, so an hour-long bench keeps a working engine out of
+    /// every answer. Zero keeps the upstream timings untouched.
+    pub suspension_cap_secs: u64,
+}
+
+impl Default for SolverSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: "http://127.0.0.1:8191/v1".into(),
+            session: "rustxng".into(),
+            pool: 2,
+            budget_ms: 2_500,
+            max_timeout_ms: 45_000,
+            suspension_cap_secs: 300,
+        }
+    }
+}
+
+impl SolverSettings {
+    /// The cap that applies to engine suspensions, if any.
+    ///
+    /// A switched-off solver changes nothing about how hard the engines are
+    /// hit, so the upstream suspension times stay in charge.
+    pub fn suspension_cap(&self) -> Option<u64> {
+        if !self.enabled || self.suspension_cap_secs == 0 {
+            return None;
+        }
+        Some(self.suspension_cap_secs)
     }
 }
 
@@ -765,6 +825,7 @@ impl Settings {
         base.plugins = merge_table(&base.plugins, &user.plugins)?;
         base.cache = merge_table(&base.cache, &user.cache)?;
         base.research = merge_table(&base.research, &user.research)?;
+        base.solver = merge_table(&base.solver, &user.solver)?;
         if !user.categories_as_tabs.is_empty() {
             base.categories_as_tabs = user.categories_as_tabs;
         }
@@ -967,6 +1028,14 @@ fn merge_engines_by_name(
         match merged.iter_mut().find(|entry| entry.name == engine.name) {
             Some(existing) => {
                 // User entries win field by field; unset fields keep the default.
+                // The implementation id is a plain string, so an explicit
+                // "engine = ..." in the user file must replace the default one:
+                // otherwise a user cannot swap an engine to another
+                // implementation (for example anaconda's HTML XPath version to
+                // its JSON API) and the override silently does nothing.
+                if !engine.engine.is_empty() {
+                    existing.engine = engine.engine.clone();
+                }
                 if engine.shortcut.is_some() {
                     existing.shortcut = engine.shortcut.clone();
                 }
@@ -1044,6 +1113,26 @@ proxy = "http://127.0.0.1:18888"
     }
 
     #[test]
+    fn a_user_solver_section_reaches_the_merged_settings() {
+        let defaults = Settings::defaults();
+        assert!(!defaults.solver.enabled, "the solver ships switched off");
+        let user: Settings = toml::from_str(
+            r#"
+[solver]
+enabled = true
+endpoint = "http://127.0.0.1:8191/v1"
+budget_ms = 4000
+"#,
+        )
+        .expect("user settings parse");
+        let merged = Settings::merge(defaults, user).expect("merge");
+        assert!(merged.solver.enabled, "the user section must be merged");
+        assert_eq!(merged.solver.budget_ms, 4000);
+        // untouched keys keep their defaults
+        assert_eq!(merged.solver.max_timeout_ms, 45_000);
+    }
+
+    #[test]
     fn a_user_can_enable_an_engine_that_ships_disabled() {
         let defaults = Settings::defaults();
         // exaapi ships disabled in the defaults
@@ -1066,6 +1155,33 @@ api_key = "test-key"
         let enabled = merged.engine("exaapi").expect("exaapi kept");
         assert_eq!(enabled.disabled, Some(false), "explicit false must win");
         assert_eq!(enabled.api_key.as_deref(), Some("test-key"));
+    }
+
+    #[test]
+    fn a_user_engine_entry_can_switch_the_implementation() {
+        let defaults = Settings::defaults();
+        // anaconda ships as an HTML XPath engine in the defaults
+        let shipped = defaults.engine("anaconda").expect("anaconda exists");
+        assert_eq!(shipped.engine, "xpath");
+
+        let user: Settings = toml::from_str(
+            r#"
+[[engines]]
+name = "anaconda"
+engine = "json_engine"
+search_url = "https://api.anaconda.org/search?name={query}"
+title_query = "full_name"
+disabled = false
+"#,
+        )
+        .expect("user settings parse");
+        let merged = Settings::merge(defaults, user).expect("merge");
+        let engine = merged.engine("anaconda").expect("anaconda kept");
+        assert_eq!(engine.engine, "json_engine", "implementation override wins");
+        assert_eq!(
+            engine.search_url.as_deref(),
+            Some("https://api.anaconda.org/search?name={query}")
+        );
     }
 
     #[test]
@@ -1159,5 +1275,25 @@ engines:
         clone.shortcut = settings.engines[0].shortcut.clone();
         settings.engines.push(clone);
         assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn a_shipped_engine_never_lists_single_letter_categories() {
+        // The shipped settings once spelled `["g", "e", "n", "e", "r", "a", "l"]`
+        // instead of `["general"]`, which silently dropped those engines from
+        // every category search. A category name is always longer than one
+        // character, so a lone letter is always that typo.
+        let settings = Settings::defaults();
+        let mut broken = Vec::new();
+        for engine in &settings.engines {
+            if engine
+                .categories
+                .iter()
+                .any(|category| category.chars().count() == 1)
+            {
+                broken.push(format!("{}: {:?}", engine.name, engine.categories));
+            }
+        }
+        assert!(broken.is_empty(), "single letter categories: {broken:?}");
     }
 }

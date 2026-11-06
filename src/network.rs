@@ -15,6 +15,7 @@ use tracing::debug;
 use crate::cache::{Cache, CachedResponse};
 use crate::engine::{EngineRequest, EngineResponse, FailureKind, Method};
 use crate::settings::Settings;
+use crate::solver::Solver;
 
 const USER_AGENT_OS: &[&str] = &[
     "Windows NT 10.0; Win64; x64",
@@ -23,6 +24,10 @@ const USER_AGENT_OS: &[&str] = &[
     "X11; Ubuntu; Linux x86_64",
 ];
 const USER_AGENT_VERSIONS: &[&str] = &["157.0", "156.0", "155.0", "154.0"];
+
+/// A shipped browser signature, used only to avoid an Anubis deep grade.
+const ANUBIS_PLAIN_USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 \
+     (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 const USER_AGENT_TEMPLATE: &str =
     "Mozilla/5.0 ({os}; rv:{version}) Gecko/20100101 Firefox/{version}";
 
@@ -50,6 +55,15 @@ impl NetworkError {
             Self::Build(_) => FailureKind::Other,
             Self::Transport(_) => FailureKind::Other,
             Self::Status { status, body, .. } => classify_status(*status, body),
+        }
+    }
+
+    /// Whether the failing response is a page a browser could render. A JSON
+    /// API that answers 403 stays a dead end even with a browser.
+    pub fn serves_html(&self) -> bool {
+        match self {
+            Self::Status { response, .. } => response.serves_html(),
+            _ => false,
         }
     }
 }
@@ -81,6 +95,45 @@ pub struct Network {
     suffix: String,
     retries: u32,
     counter: AtomicUsize,
+    /// Cookies won by solving an Anubis challenge, keyed by host.
+    anubis_cookies: std::sync::Mutex<BTreeMap<String, Vec<(String, String)>>>,
+    /// The user agent that won those cookies, keyed by host. Anubis binds its
+    /// auth cookie to the client signature, so every later request to that host
+    /// has to repeat the exact same one or the guard page comes back.
+    anubis_agents: std::sync::Mutex<BTreeMap<String, String>>,
+    /// Client that never follows redirects; a challenge round trip needs the
+    /// "Set-Cookie" of the intermediate response.
+    bare: reqwest::Client,
+    /// Optional browser solver for engines behind a WAF or a CAPTCHA.
+    solver: Option<std::sync::Arc<Solver>>,
+}
+
+/// What the browser could do about a blocked page.
+pub enum SolverAttempt {
+    /// The browser opened the page and handed back the rendered HTML.
+    Solved(EngineResponse),
+    /// No tab was free inside the engine budget. Not the site's fault.
+    Busy,
+    /// The site refuses the browser itself, so a tab cannot ever help.
+    Hopeless,
+}
+
+/// Whether the solver message says the site bans the browser's address.
+///
+/// FlareSolverr answers `status: "error"` both for a page it could not load and
+/// for a hard block, but only the second one makes further tabs pointless.
+fn refuses(error: &crate::solver::SolverError) -> bool {
+    // A hard block arrives in two shapes: FlareSolverr's own JSON error
+    // (`status: "error"`, mapped to Failed) and a non-200 reply to the API
+    // call itself, whose body still carries the same sentence (mapped to
+    // Transport by `ask`). Both mean every further tab is wasted.
+    let message = match error {
+        crate::solver::SolverError::Failed(message) => message,
+        crate::solver::SolverError::Transport(message) => message,
+        _ => return false,
+    };
+    let message = message.to_ascii_lowercase();
+    message.contains("banned") || message.contains("blocked")
 }
 
 /// Build a client from the outgoing settings, optionally through another proxy.
@@ -88,13 +141,35 @@ fn build_client(
     outgoing: &crate::settings::Outgoing,
     extra_proxy: Option<reqwest::Proxy>,
 ) -> Result<reqwest::Client, NetworkError> {
+    build_client_with(
+        outgoing,
+        extra_proxy,
+        reqwest::redirect::Policy::limited(outgoing.max_redirects),
+    )
+}
+
+/// ["build_client"] with an explicit redirect policy.
+fn build_client_with(
+    outgoing: &crate::settings::Outgoing,
+    extra_proxy: Option<reqwest::Proxy>,
+    redirect: reqwest::redirect::Policy,
+) -> Result<reqwest::Client, NetworkError> {
     let mut builder = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::limited(outgoing.max_redirects))
+        .redirect(redirect)
+        // Some sites answer the first request with a 302 back to the same URL
+        // that only plants cookies (goodreads does this). Without a jar the hop
+        // repeats until the redirect limit and the page never arrives.
+        .cookie_store(true)
         .timeout(Duration::from_secs_f64(
             outgoing.max_request_timeout.max(1.0),
         ))
+        // The connect budget must not be the binding limit: a few upstreams
+        // (directory.fsf.org) take 6-12 s just for TCP+TLS, and the old 5 s
+        // cap turned every such engine into a permanent timeout. The overall
+        // request timeout below still bounds the whole call, and every engine
+        // is additionally wrapped in its own per-engine budget.
         .connect_timeout(Duration::from_secs_f64(
-            (outgoing.request_timeout / 2.0).clamp(1.0, 5.0),
+            outgoing.max_request_timeout.clamp(5.0, 30.0),
         ))
         .pool_max_idle_per_host(outgoing.pool_maxsize)
         .danger_accept_invalid_certs(!outgoing.verify)
@@ -129,6 +204,27 @@ fn build_client(
         .build()
         .map_err(|error| NetworkError::Build(error.to_string()))
 }
+/// Build the optional browser solver, or None when it is switched off.
+fn build_solver(settings: &crate::settings::SolverSettings) -> Option<std::sync::Arc<Solver>> {
+    if !settings.enabled {
+        return None;
+    }
+    match Solver::new(settings) {
+        Ok(solver) => {
+            debug!(endpoint = %settings.endpoint, "browser solver enabled");
+            let solver = std::sync::Arc::new(solver);
+            // A browser that is only started by the first blocked search answers
+            // too late for the engine budget, so start it now.
+            solver.prewarm();
+            Some(solver)
+        }
+        Err(error) => {
+            tracing::warn!(%error, "browser solver disabled: it could not be built");
+            None
+        }
+    }
+}
+
 impl Network {
     pub fn from_settings(settings: &Settings) -> Result<Self, NetworkError> {
         let outgoing = &settings.outgoing;
@@ -141,6 +237,10 @@ impl Network {
             suffix: outgoing.useragent_suffix.clone(),
             retries: outgoing.retries,
             counter: AtomicUsize::new(0),
+            anubis_cookies: std::sync::Mutex::new(BTreeMap::new()),
+            anubis_agents: std::sync::Mutex::new(BTreeMap::new()),
+            bare: build_client_with(outgoing, None, reqwest::redirect::Policy::none())?,
+            solver: build_solver(&settings.solver),
         })
     }
 
@@ -168,6 +268,148 @@ impl Network {
             cache.insert(proxy.to_string(), client.clone());
         }
         client
+    }
+
+    /// Cookies remembered for the host of `url`.
+    fn jar_cookies(&self, url: &str) -> Vec<(String, String)> {
+        let host = url_host(url);
+        self.anubis_cookies
+            .lock()
+            .ok()
+            .and_then(|jar| jar.get(&host).cloned())
+            .unwrap_or_default()
+    }
+
+    /// Solve the Anubis challenge a guarded site served and remember the cookies.
+    ///
+    /// The flow mirrors `anubis`'s own JavaScript: the guard page carries a
+    /// `challenge` object, the browser hashes `randomData` with an increasing
+    /// nonce until the digest has enough leading zeros, then trades that proof
+    /// for a cookie at `pass-challenge`.
+    async fn solve_anubis(&self, url: &str, deadline: &tokio::time::Instant) -> bool {
+        let host = url_host(url);
+        if host.is_empty()
+            || self
+                .jar_cookies(url)
+                .iter()
+                .any(|(name, _)| name.contains("anubis-auth"))
+        {
+            return false;
+        }
+        let started = std::time::Instant::now();
+        // Anubis binds the cookie it hands out to the client signature, so the
+        // guard page, the proof and every later request have to repeat one and
+        // the same user agent. The rotated pool is intentionally ahead of the
+        // released browsers and earns grade 6 there (16x the hashes) where a
+        // shipped signature earns grade 2, so use the plain one and stay on it
+        // for this host.
+        let user_agent = ANUBIS_PLAIN_USER_AGENT.to_string();
+        let Some((body, verification)) =
+            self.anubis_guard(url, deadline, &user_agent).await
+        else {
+            debug!(url, "anubis: the guard page could not be fetched");
+            return false;
+        };
+        let Some(challenge) = anubis_challenge(body.as_bytes()) else {
+            debug!(
+                url,
+                bytes = body.len(),
+                "anubis: the guard page carried no supported challenge"
+            );
+            return false;
+        };
+        let Some((nonce, digest)) = solve_anubis_pow(&challenge, *deadline) else {
+            debug!(
+                url,
+                difficulty = challenge.difficulty,
+                "anubis: no nonce found"
+            );
+            return false;
+        };
+        let origin = url_origin(url);
+        let Ok(mut pass) = url::Url::parse(&format!(
+            "{origin}/.within.website/x/cmd/anubis/api/pass-challenge"
+        )) else {
+            return false;
+        };
+        pass.query_pairs_mut()
+            .append_pair("id", &challenge.id)
+            .append_pair("response", &digest)
+            .append_pair("nonce", &nonce.to_string())
+            .append_pair("redir", url)
+            .append_pair("elapsedTime", &started.elapsed().as_millis().to_string());
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return false;
+        }
+        let mut request = self
+            .bare
+            .get(pass)
+            .timeout(remaining)
+            .header(reqwest::header::USER_AGENT, user_agent.as_str());
+        if !verification.is_empty() {
+            let cookie = verification
+                .iter()
+                .map(|(name, value)| format!("{name}={value}"))
+                .collect::<Vec<_>>()
+                .join("; ");
+            if let Ok(value) = HeaderValue::from_str(&cookie) {
+                request = request.header(reqwest::header::COOKIE, value);
+            }
+        }
+        let Ok(response) = request.send().await else {
+            debug!(url, "anubis: pass-challenge could not be sent");
+            return false;
+        };
+        let mut cookies = set_cookie_pairs(response.headers());
+        if cookies.is_empty() {
+            debug!(
+                url,
+                status = response.status().as_u16(),
+                "anubis: pass-challenge returned no cookie"
+            );
+            return false;
+        }
+        cookies.extend(verification);
+        if let Ok(mut jar) = self.anubis_cookies.lock() {
+            jar.insert(host.clone(), cookies);
+        }
+        if let Ok(mut agents) = self.anubis_agents.lock() {
+            agents.insert(host, user_agent);
+        }
+        true
+    }
+
+    /// Fetch an Anubis guard page, keeping its cookies and body.
+    async fn anubis_guard(
+        &self,
+        url: &str,
+        deadline: &tokio::time::Instant,
+        user_agent: &str,
+    ) -> Option<(String, Vec<(String, String)>)> {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return None;
+        }
+        let response = self
+            .bare
+            .get(url)
+            .timeout(remaining)
+            .header(reqwest::header::USER_AGENT, user_agent)
+            .send()
+            .await
+            .ok()?;
+        if !response.status().is_success() {
+            debug!(
+                url,
+                status = response.status().as_u16(),
+                "anubis: the guard page was not a success"
+            );
+            return None;
+        }
+        let cookies = set_cookie_pairs(response.headers());
+        let body = response.text().await.ok()?;
+        Some((body, cookies))
     }
 
     /// A different user agent on every call, like upstream's rotation.
@@ -255,6 +497,37 @@ impl Network {
             let outcome = self.send(client.clone(), &request, remaining).await;
             match outcome {
                 Ok(response) => {
+                    let marker = String::from_utf8_lossy(&response.body);
+                    tracing::debug!(url = %request.url, status = response.status, bytes = response.body.len(), anubis_marker = marker.contains("anubis_challenge"), anubis_parsed = anubis_challenge(&response.body).is_some(), "fetch response");
+                    if marker.contains("anubis_challenge") && std::env::var("RUSTXNG_DUMP").is_ok() {
+                        let _ = std::fs::write("/tmp/anubis_body.html", &response.body);
+                    }
+                    // Anubis guarded sites answer 200 with a small proof of work
+                    // page instead of results. Solve it, keep the cookies and
+                    // replay the request once.
+                    let guard =
+                        response.status == 200 && anubis_challenge(&response.body).is_some();
+                    if guard
+                        && attempt <= 2
+                        && self.solve_anubis(&response.final_url, &deadline).await
+                    {
+                        debug!(url = %request.url, attempt, "solved an anubis challenge");
+                        continue;
+                    }
+                    if guard {
+                        debug!(
+                            url = %request.url,
+                            attempt,
+                            bytes = response.body.len(),
+                            cookies = self.jar_cookies(&response.final_url).len(),
+                            "anubis: the guard page survived the replay"
+                        );
+                    }
+                    // A WAF or CAPTCHA wall is not a page, but who retries it
+                    // is the aggregator: only it knows which engine is asking,
+                    // how much budget is left and which engines a tab cannot
+                    // help at all. Solving here as well spent the engine's
+                    // whole budget before the retry could even be decided.
                     if let Some(cache) = cache {
                         if response.status == 200
                             && !response.body.is_empty()
@@ -316,6 +589,90 @@ impl Network {
         }
     }
 
+    /// Ask the browser solver for a page, reusing the session it warmed up.
+    ///
+    /// The solve is spawned so the caller keeps its own deadline, and the task
+    /// is aborted when that deadline passes. Leaving it running looked like a
+    /// warm-up but was the opposite: a detached solve keeps its tab occupied for
+    /// up to `max_timeout_ms`, so the next search finds every tab busy instead
+    /// of warm.
+    ///
+    /// `proven` confines an engine the browser has never served to the one tab
+    /// set aside for trying new engines.
+    pub async fn solve_page(&self, url: &str, budget: Duration, proven: bool) -> SolverAttempt {
+        let Some(solver) = self.solver.clone() else {
+            return SolverAttempt::Busy;
+        };
+        let budget = solver.budget().min(budget);
+        if budget < Duration::from_millis(150) {
+            debug!(url, "solver skipped: engine budget already spent");
+            return SolverAttempt::Busy;
+        }
+        debug!(
+            url,
+            budget_ms = budget.as_millis(),
+            "solver: clearing a challenge"
+        );
+        let target = url.to_string();
+        // The wait is bounded by the same budget the caller is about to spend
+        // anyway: a tab that frees up in time rescues the engine, and one that
+        // does not costs nothing that was not already lost.
+        let handle =
+            tokio::spawn(async move { solver.solve_within(&target, budget, proven).await });
+        let canceller = handle.abort_handle();
+        match tokio::time::timeout(budget, handle).await {
+            Ok(Ok(Ok(solved))) => {
+                debug!(
+                    url,
+                    status = solved.status,
+                    len = solved.body.len(),
+                    head = %solved.body.chars().take(80).collect::<String>(),
+                    "solver: solved"
+                );
+                SolverAttempt::Solved(EngineResponse {
+                    status: solved.status,
+                    final_url: solved.url,
+                    headers: BTreeMap::new(),
+                    body: solved.body.into_bytes(),
+                })
+            }
+            Ok(Ok(Err(error))) => {
+                debug!(url, %error, "solver could not clear the challenge");
+                if refuses(&error) {
+                    SolverAttempt::Hopeless
+                } else {
+                    SolverAttempt::Busy
+                }
+            }
+            Ok(Err(error)) => {
+                debug!(url, %error, "solver task failed");
+                SolverAttempt::Busy
+            }
+            Err(_) => {
+                // Free the tab for the next search instead of letting the page
+                // load run to its own timeout with nobody waiting for it.
+                canceller.abort();
+                debug!(
+                    url,
+                    "solver exceeded the engine budget; the tab is released"
+                );
+                SolverAttempt::Busy
+            }
+        }
+    }
+
+    /// The user agent that already won this host past Anubis, if any.
+    fn pinned_agent(&self, url: &str) -> Option<String> {
+        let host = url_host(url);
+        if host.is_empty() {
+            return None;
+        }
+        self.anubis_agents
+            .lock()
+            .ok()
+            .and_then(|agents| agents.get(&host).cloned())
+    }
+
     async fn send(
         &self,
         client: reqwest::Client,
@@ -330,9 +687,21 @@ impl Network {
         for (name, value) in request.headers.iter() {
             headers.insert(name.clone(), value.clone());
         }
-        if !request.cookies.is_empty() {
-            let cookie = request
-                .cookies
+        // A solved Anubis session only survives while the signature stays the
+        // same, so that decision outranks whatever the engine asked for.
+        if let Some(agent) = self.pinned_agent(&request.url) {
+            if let Ok(value) = HeaderValue::from_str(&agent) {
+                headers.insert(reqwest::header::USER_AGENT, value);
+            }
+        }
+        let mut cookies = request.cookies.clone();
+        for (name, value) in self.jar_cookies(&request.url) {
+            if !cookies.iter().any(|(existing, _)| existing == &name) {
+                cookies.push((name, value));
+            }
+        }
+        if !cookies.is_empty() {
+            let cookie = cookies
                 .iter()
                 .map(|(name, value)| format!("{name}={value}"))
                 .collect::<Vec<_>>()
@@ -383,6 +752,146 @@ impl Network {
             Err(_) => Err(NetworkError::Timeout),
         }
     }
+}
+
+/// An Anubis proof of work challenge, as embedded in a guard page.
+struct AnubisChallenge {
+    difficulty: usize,
+    random_data: String,
+    id: String,
+}
+
+/// Pull the `#anubis_challenge` JSON blob out of a response body.
+fn anubis_challenge(body: &[u8]) -> Option<AnubisChallenge> {
+    let text = std::str::from_utf8(body).ok()?;
+    let start = text.find("id=\"anubis_challenge\"")?;
+    let rest = &text[start..];
+    let open = rest.find('>')? + 1;
+    let close = rest[open..].find("</script>")? + open;
+    let json: serde_json::Value = serde_json::from_str(&rest[open..close]).ok()?;
+    let rules = json.get("rules")?;
+    let challenge = json.get("challenge")?;
+    let algorithm = rules
+        .get("algorithm")
+        .and_then(|value| value.as_str())
+        .unwrap_or("fast");
+    let difficulty = rules.get("difficulty")?.as_u64().unwrap_or(0) as usize;
+    // "slow" rules hash far more than once per nonce, and a deep challenge
+    // would blow the engine's time budget; leave those to the browser.
+    if algorithm != "fast" || difficulty == 0 || difficulty > 7 {
+        return None;
+    }
+    Some(AnubisChallenge {
+        difficulty,
+        random_data: challenge.get("randomData")?.as_str()?.to_string(),
+        id: challenge.get("id")?.as_str()?.to_string(),
+    })
+}
+
+/// Find the nonce whose SHA-256 digest has `difficulty` leading hex zeros.
+///
+/// Anubis grades user agents it distrusts with a deeper challenge (a fake
+/// browser version earns grade 6 instead of 2), and a single-core sweep
+/// cannot finish 16^6 hashes inside an engine's time budget. The sweep is
+/// therefore fanned out over the available cores and abandoned at `deadline`.
+fn solve_anubis_pow(
+    challenge: &AnubisChallenge,
+    deadline: tokio::time::Instant,
+) -> Option<(u64, String)> {
+    let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+    if remaining.is_zero() {
+        return None;
+    }
+    let stop_at = std::time::Instant::now() + remaining;
+    let bytes = challenge.difficulty / 2;
+    let odd = challenge.difficulty % 2 == 1;
+    // A digest starts with the requested hex zeros when its leading whole
+    // bytes are zero and, for an odd grade, the high nibble of the next byte.
+    let matches = move |digest: &[u8]| {
+        digest[..bytes].iter().all(|byte| *byte == 0)
+            && (!odd || digest[bytes] & 0xF0 == 0)
+    };
+    let workers = std::thread::available_parallelism()
+        .map(|count| count.get())
+        .unwrap_or(4)
+        .clamp(1, 8) as u64;
+    let found = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (sender, receiver) = std::sync::mpsc::channel::<(u64, String)>();
+    let mut handles = Vec::with_capacity(workers as usize);
+    for worker in 0..workers {
+        let sender = sender.clone();
+        let data = challenge.random_data.clone();
+        let found = found.clone();
+        handles.push(std::thread::spawn(move || {
+            let mut nonce = worker;
+            let mut checked = 0u64;
+            while nonce < 5_000_000 && !found.load(std::sync::atomic::Ordering::Relaxed) {
+                let mut hasher = Sha256::new();
+                hasher.update(data.as_bytes());
+                hasher.update(nonce.to_string().as_bytes());
+                let digest = hasher.finalize();
+                if matches(&digest) {
+                    found.store(true, std::sync::atomic::Ordering::Relaxed);
+                    let _ = sender.send((nonce, format!("{digest:x}")));
+                    return;
+                }
+                nonce += workers;
+                checked += 1;
+                if checked % 4096 == 0 && std::time::Instant::now() >= stop_at {
+                    return;
+                }
+            }
+        }));
+    }
+    drop(sender);
+    let answer = receiver
+        .recv_timeout(stop_at.saturating_duration_since(std::time::Instant::now()))
+        .ok();
+    found.store(true, std::sync::atomic::Ordering::Relaxed);
+    for handle in handles {
+        let _ = handle.join();
+    }
+    answer
+}
+
+/// The "name=value" pairs of a response's "Set-Cookie" headers.
+fn set_cookie_pairs(headers: &HeaderMap) -> Vec<(String, String)> {
+    let mut pairs = Vec::new();
+    for header in headers.get_all(reqwest::header::SET_COOKIE).iter() {
+        let Ok(text) = header.to_str() else {
+            continue;
+        };
+        let pair = text.split(';').next().unwrap_or("").trim();
+        let Some((name, value)) = pair.split_once('=') else {
+            continue;
+        };
+        if name.trim().is_empty() {
+            continue;
+        }
+        pairs.push((name.trim().to_string(), value.trim().to_string()));
+    }
+    pairs
+}
+
+/// The "scheme://authority" prefix of an absolute URL.
+fn url_origin(url: &str) -> String {
+    let Some((scheme, rest)) = url.split_once("://") else {
+        return String::new();
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    format!("{scheme}://{authority}")
+}
+
+/// The host of an absolute URL, without scheme, port or path.
+fn url_host(url: &str) -> String {
+    let origin = url_origin(url);
+    let Some((_, authority)) = origin.split_once("://") else {
+        return String::new();
+    };
+    let host = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, rest)| rest);
+    host.split(':').next().unwrap_or("").to_string()
 }
 
 fn is_retryable(error: &NetworkError) -> bool {
@@ -516,11 +1025,34 @@ mod tests {
             suffix: String::new(),
             retries: 0,
             counter: AtomicUsize::new(0),
+            anubis_cookies: std::sync::Mutex::new(BTreeMap::new()),
+            anubis_agents: std::sync::Mutex::new(BTreeMap::new()),
+            bare: reqwest::Client::new(),
+            solver: None,
         };
         let first = network.user_agent();
         let second = network.user_agent();
         assert!(first.starts_with("Mozilla/5.0"));
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn a_solver_error_that_reports_a_ban_is_hopeless_whatever_its_shape() {
+        use crate::solver::SolverError;
+        // FlareSolverr's JSON error shape.
+        assert!(refuses(&SolverError::Failed(
+            "Error: Error solving the challenge. Cloudflare has blocked this request.".to_string()
+        )));
+        // A non-200 reply to the API call, with the same sentence in its body.
+        assert!(refuses(&SolverError::Transport(
+            "500 Internal Server Error: {\"status\": \"error\", \"message\": \"Error: Error solving the challenge. Cloudflare has blocked this request. Probably your IP is banned for this site\"}"
+                .to_string()
+        )));
+        // A page that merely failed to load says nothing about the address.
+        assert!(!refuses(&SolverError::Transport(
+            "request timed out".to_string()
+        )));
+        assert!(!refuses(&SolverError::Busy));
     }
 
     #[test]

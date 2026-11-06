@@ -114,6 +114,29 @@ impl EngineResponse {
         }
     }
 
+    /// Whether this is a page a browser can render rather than a machine
+    /// payload. The browser solver only helps with the former: handing it an
+    /// API endpoint that answered JSON just burns a tab.
+    pub fn serves_html(&self) -> bool {
+        if let Some(value) = self
+            .headers
+            .get("content-type")
+            .or_else(|| self.headers.get("Content-Type"))
+        {
+            let lowered = value.to_ascii_lowercase();
+            if lowered.contains("html") {
+                return true;
+            }
+            if !lowered.is_empty() {
+                return false;
+            }
+        }
+        let head = self.body.iter().take(64).copied().collect::<Vec<u8>>();
+        let head = String::from_utf8_lossy(&head);
+        let head = head.trim_start();
+        head.starts_with('<') && !head.starts_with("<?xml")
+    }
+
     /// The body as UTF-8 (lossy, like upstream's response text).
     pub fn text(&self) -> String {
         String::from_utf8_lossy(&self.body).to_string()
@@ -175,6 +198,14 @@ pub enum FailureKind {
     AccessDenied,
     Captcha,
     TooManyRequests,
+    /// The browser solver had no free tab for this engine. That is a capacity
+    /// limit, not a wall: the engine must not be suspended for it, or the next
+    /// searches lose it for nothing.
+    SolverBusy,
+    /// The search ran out of time before a tab was ever taken. This is the
+    /// normal outcome of a whole search with a three second deadline, where a
+    /// browser round trip cannot fit: the engine is fine, only unaffordable.
+    SolverSkipped,
     Http,
     Parse,
     /// The response parsed, but looks fabricated or unrelated (see \`quality\`).
@@ -190,6 +221,8 @@ impl FailureKind {
             Self::AccessDenied => "access denied",
             Self::Captcha => "captcha",
             Self::TooManyRequests => "too many requests",
+            Self::SolverBusy => "solver busy",
+            Self::SolverSkipped => "solver skipped",
             Self::Http => "http error",
             Self::Parse => "parsing error",
             Self::Suspicious => "suspicious response",
@@ -215,6 +248,27 @@ impl FailureKind {
             500..=599 => Some(Self::Http),
             _ => None,
         }
+    }
+}
+
+/// The label the UI and the JSON API show for an upstream error type string.
+///
+/// One table for every surface: the JSON feeds used to keep a second copy that
+/// quietly fell through to "Unexpected error" for anything new, which made a
+/// capacity problem look like a broken engine.
+pub fn error_type_label(error_type: &str) -> &'static str {
+    match error_type {
+        "timeout" => "Timeout",
+        "access denied" => "Access denied",
+        "captcha" => "CAPTCHA",
+        "too many requests" => "Too many requests",
+        "solver busy" => "Solver busy",
+        "solver skipped" => "Solver skipped",
+        "http error" => "HTTP error",
+        "parsing error" => "Parsing error",
+        "suspended" => "Suspended",
+        "suspicious response" => "Suspicious response",
+        _ => "Unexpected error",
     }
 }
 
@@ -418,6 +472,21 @@ pub trait Engine: Send + Sync {
         query: &Query,
     ) -> Result<Vec<EngineItem>, EngineError>;
 
+    /// A second request that has to be made before parsing.
+    ///
+    /// Some sites answer the search page with a shell that loads the actual
+    /// list from a signed fragment URL, so the first response holds no
+    /// results. Such an engine returns that URL here; the aggregator fetches it
+    /// with whatever is left of the engine timeout and parses *that* response.
+    /// The default performs a single request, like every ordinary engine.
+    fn followup_request(
+        &self,
+        _response: &EngineResponse,
+        _query: &Query,
+    ) -> Result<Option<EngineRequest>, EngineError> {
+        Ok(None)
+    }
+
     /// Whether this engine can answer the query at all.
     ///
     /// The default keeps ordinary engines unchanged. Syntax-gated engines can
@@ -605,6 +674,29 @@ impl EngineRegistry {
 mod tests {
     use super::*;
     use crate::settings::Settings;
+
+    #[test]
+    fn every_failure_kind_has_a_label_of_its_own() {
+        // A label that falls back to the generic text hides what happened: a
+        // tab shortage read as a broken engine for days.
+        for kind in [
+            FailureKind::Timeout,
+            FailureKind::AccessDenied,
+            FailureKind::Captcha,
+            FailureKind::TooManyRequests,
+            FailureKind::SolverBusy,
+            FailureKind::SolverSkipped,
+            FailureKind::Http,
+            FailureKind::Parse,
+            FailureKind::Suspicious,
+        ] {
+            let label = error_type_label(kind.error_type());
+            assert_ne!(label, "Unexpected error", "{kind:?} has no label");
+        }
+        assert_eq!(error_type_label("solver busy"), "Solver busy");
+        assert_eq!(error_type_label("solver skipped"), "Solver skipped");
+        assert_eq!(error_type_label("unexpected error"), "Unexpected error");
+    }
 
     #[test]
     fn registry_contains_the_default_engines() {
