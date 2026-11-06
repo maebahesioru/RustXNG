@@ -63,10 +63,16 @@ impl Engine for Flaticon {
             query_string(&pairs)
         );
         let referer = format!("{base}/search?word={}", encode(&text));
+        // The AJAX endpoint answers 403 unless the request looks like a
+        // browser navigation: at least two Sec-Fetch-* hints must be present
+        // (one alone is not enough), so all three are sent.
         Ok(EngineRequest::get(url)
             .header("Referer", &referer)
             .header("X-Requested-With", "XMLHttpRequest")
-            .header("Accept", "application/json"))
+            .header("Accept", "application/json, text/plain, */*")
+            .header("Sec-Fetch-Dest", "empty")
+            .header("Sec-Fetch-Mode", "cors")
+            .header("Sec-Fetch-Site", "same-origin"))
     }
 
     fn parse(

@@ -74,7 +74,15 @@ impl Engine for SearchZee {
             };
             pairs.push(("freshness", value.to_string()));
         }
-        let url = format!("{}/api/search?{}", self.base_url(), query_string(&pairs));
+        // The API path is not fixed: it is the first twelve hex digits of
+        // sha256("sz:" + the UTC date), so it changes every day. The old
+        // /api/search path answers with the SPA shell instead of JSON.
+        let url = format!(
+            "{}/api/s/{}?{}",
+            self.base_url(),
+            api_token(),
+            query_string(&pairs)
+        );
         let request = EngineRequest::get(url)
             .cookie("szs", &session_id())
             .header("Accept", "application/json");
@@ -107,6 +115,17 @@ impl Engine for SearchZee {
         }
         Ok(results)
     }
+}
+
+/// The daily API path token: sha256("sz:" + YYYY-MM-DD)[..12], in UTC.
+fn api_token() -> String {
+    let day = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let digest = Sha256::digest(format!("sz:{day}").as_bytes());
+    let hex = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    hex[..12].to_string()
 }
 
 /// A UUID shaped session id; upstream sends a random uuid4 as the szs cookie.
@@ -192,7 +211,12 @@ mod tests {
         let mut request_query = query();
         request_query.time_range = Some(TimeRange::Week);
         let request = engine.build_request(&request_query, 2).unwrap();
-        assert!(request.url.starts_with("https://searchzee.com/api/search?"));
+        assert!(
+            request.url.starts_with("https://searchzee.com/api/s/"),
+            "{}",
+            request.url
+        );
+        assert_eq!(api_token().len(), 12);
         assert!(request.url.contains("type=news"));
         assert!(request.url.contains("offset=1"));
         assert!(request.url.contains("freshness=pw"));

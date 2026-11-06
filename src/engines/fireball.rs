@@ -57,11 +57,13 @@ impl Engine for Fireball {
     }
 
     fn build_request(&self, query: &Query, _pageno: u32) -> Result<EngineRequest, EngineError> {
+        // `/getResults/` answers 405 now; the results live in the HTML of the
+        // search page itself (div.card.my-1 with a window.open() handler).
         let args = [("f", "web".to_string()), ("q", query.query_text())];
         let query = query_string(&args);
-        let mut request = EngineRequest::get(format!("{BASE_URL}/getResults/?{query}"))
-            // The Referer header is required, otherwise the requests get blocked.
-            .header("Referer", &format!("{BASE_URL}/search?{query}"));
+        let mut request = EngineRequest::get(format!("{BASE_URL}/search?{query}"))
+            .header("Referer", &format!("{BASE_URL}/"))
+            .header("Accept", "text/html,application/xhtml+xml");
         if let Some(cookie) = self.meta.opt_str("fireball_cookie") {
             request = request.cookie("fireball", cookie);
         }

@@ -2,6 +2,8 @@
 
 use std::sync::Arc;
 
+use sha2::{Digest, Sha256};
+
 use crate::engine::util::*;
 use crate::engine::{
     Engine, EngineDefaults, EngineError, EngineItem, EngineMeta, EngineRequest, EngineResponse,
@@ -65,6 +67,30 @@ impl Engine for Mojeek {
         )
     }
 
+    /// Mojeek answers with an Altcha proof-of-work page instead of a CAPTCHA.
+    /// The widget is solvable without a browser: the challenge carries a
+    /// PBKDF2/SHA-256 puzzle, and the answer is posted to /captcha/verify.
+    fn followup_request(
+        &self,
+        response: &EngineResponse,
+        _query: &Query,
+    ) -> Result<Option<EngineRequest>, EngineError> {
+        let body = response.text();
+        if !body.contains("altcha") {
+            return Ok(None);
+        }
+        let Some(challenge) = altcha_challenge(&body) else {
+            return Ok(None);
+        };
+        let Some(solution) = solve_altcha(&challenge) else {
+            return Ok(None);
+        };
+        Ok(Some(
+            EngineRequest::post(format!("{BASE_URL}/captcha/verify"))
+                .form(vec![("altcha".to_string(), solution)]),
+        ))
+    }
+
     fn parse(
         &self,
         response: &EngineResponse,
@@ -96,4 +122,76 @@ impl Engine for Mojeek {
         }
         Ok(results)
     }
+}
+
+/// The base64 challenge the Altcha widget embeds in its `challenge` attribute.
+fn altcha_challenge(body: &str) -> Option<String> {
+    let marker = "challenge";
+    let mut rest = body;
+    while let Some(index) = rest.find(marker) {
+        let after = &rest[index + marker.len()..];
+        let quote_at = after.find(|c: char| c == char::from(39) || c == char::from(34));
+        if let Some(quote) = quote_at {
+            let value = &after[quote + 1..];
+            if let Some(end) = value.find(|c: char| c == char::from(39) || c == char::from(34)) {
+                let candidate = &value[..end];
+                if candidate.len() > 40
+                    && candidate
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
+                {
+                    return Some(candidate.to_string());
+                }
+            }
+        }
+        rest = &rest[index + marker.len()..];
+    }
+    None
+}
+
+/// Solve the Altcha proof of work and return the JSON answer the widget posts.
+fn solve_altcha(challenge_b64: &str) -> Option<String> {
+    let raw = base64_decode(challenge_b64)?;
+    let json: serde_json::Value = serde_json::from_slice(&raw).ok()?;
+    let algorithm = json.get("algorithm")?.as_str()?;
+    if algorithm != "SHA-256" {
+        return None;
+    }
+    let challenge = json.get("challenge")?.as_str()?.to_string();
+    let salt = json.get("salt")?.as_str()?.to_string();
+    let signature = json.get("signature")?.as_str()?.to_string();
+    let max = json.get("maxnumber")?.as_u64().unwrap_or(1_000_000);
+    let cost = json.get("cost")?.as_u64().unwrap_or(0);
+    let zeros = vec![0u8; (cost as usize).div_ceil(2)];
+    let mut number = 0u64;
+    let mut hasher = Sha256::new();
+    while number <= max {
+        hasher.update(format!("{salt}{number}").as_bytes());
+        let digest = hasher.finalize_reset();
+        if digest[..].starts_with(&zeros) {
+            break;
+        }
+        number += 1;
+    }
+    if number > max {
+        return None;
+    }
+    let payload = serde_json::json!({
+        "algorithm": algorithm,
+        "challenge": challenge,
+        "number": number,
+        "salt": salt,
+        "signature": signature,
+    });
+    Some(base64_encode(payload.to_string().as_bytes()))
+}
+
+fn base64_decode(value: &str) -> Option<Vec<u8>> {
+    use base64::Engine as _;
+    base64::engine::general_purpose::STANDARD.decode(value).ok()
+}
+
+fn base64_encode(value: &[u8]) -> String {
+    use base64::Engine as _;
+    base64::engine::general_purpose::STANDARD.encode(value)
 }

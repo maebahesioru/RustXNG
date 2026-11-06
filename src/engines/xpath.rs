@@ -226,6 +226,13 @@ impl Engine for XPathEngine {
         response: &EngineResponse,
         _query: &Query,
     ) -> Result<Vec<EngineItem>, EngineError> {
+        // A 404 means the site has no page for this query (woxikon answers
+        // 404 for a synonym it does not know). That is an empty result set,
+        // not a broken engine, and reporting it as an HTTP error hid the
+        // engine from the coverage count.
+        if response.status == 404 {
+            return Ok(Vec::new());
+        }
         let body = response.text();
         // RSS/RDF feeds (JVN, JPCERT/CC, IPA) are XML. Running them through
         // the HTML parser loses the text of <link> — a void element in HTML —
