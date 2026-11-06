@@ -23,7 +23,7 @@ const DEFAULTS: EngineDefaults = EngineDefaults {
 };
 
 const BASE_URL: &str = "https://pic.sogou.com";
-const STATE_RE: &str = "(?s)window\\.__INITIAL_STATE__\\s*=\\s*(\\{.*?\\});";
+const STATE_MARKER: &str = "window.__INITIAL_STATE__";
 
 /// Sogou image search.
 pub struct SogouImages {
@@ -59,15 +59,10 @@ impl Engine for SogouImages {
         _query: &Query,
     ) -> Result<Vec<EngineItem>, EngineError> {
         let body = response.text();
-        let pattern = regex::Regex::new(STATE_RE)
-            .map_err(|error| EngineError::Parse(format!("invalid state pattern: {error}")))?;
-        let Some(captures) = pattern.captures(&body) else {
+        let Some(payload) = extract_state(&body) else {
             return Ok(Vec::new());
         };
-        let Some(payload) = captures.get(1) else {
-            return Ok(Vec::new());
-        };
-        let Ok(json) = serde_json::from_str::<serde_json::Value>(payload.as_str()) else {
+        let Ok(json) = serde_json::from_str::<serde_json::Value>(payload) else {
             return Ok(Vec::new());
         };
         let Some(items) =
@@ -94,6 +89,45 @@ impl Engine for SogouImages {
         }
         Ok(results)
     }
+}
+
+/// Pulls the JSON object assigned to `window.__INITIAL_STATE__` out of the page.
+///
+/// The blob is not terminated by `};` (sogou writes `}</script>`), so a regex
+/// cannot delimit it: walk the braces instead, skipping over string literals.
+fn extract_state(body: &str) -> Option<&str> {
+    let marker = body.find(STATE_MARKER)?;
+    let rest = &body[marker + STATE_MARKER.len()..];
+    let open = rest.find('{')?;
+    let bytes = rest.as_bytes();
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    for (offset, byte) in bytes.iter().enumerate().skip(open) {
+        let byte = *byte;
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match byte {
+            b'"' => in_string = true,
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return rest.get(open..=offset);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 fn is_http_url(url: &str) -> bool {
@@ -141,6 +175,26 @@ mod tests {
             }
             _ => panic!("expected an image result"),
         }
+    }
+
+    #[test]
+    fn parses_a_state_blob_without_a_trailing_semicolon() {
+        // sogou writes "</script>" straight after the closing brace, so the
+        // blob cannot be delimited by a regex looking for "};".
+        let body = r##"<script>window.__INITIAL_STATE__={"route":{"name":"searchList"},"searchList":{"searchList":[{"url":"http://www.duitang.com/people/mblog/1/detail/","picUrl":"https://img.example.com/a.jpg","title":"cat","content_major":"","ch_site_name":"堆糖"}]}}</script><script src="//x.js"></script>"##;
+        let response = EngineResponse::new(200, BASE_URL, body.as_bytes().to_vec());
+        let query = Query::parse("cat", &crate::engine::EngineRegistry::default(), &[]);
+        let items = engine().parse(&response, &query).unwrap();
+        assert_eq!(items.len(), 1);
+    }
+
+    #[test]
+    fn braces_inside_strings_do_not_end_the_blob() {
+        let body = r##"<script>window.__INITIAL_STATE__={"searchList":{"searchList":[{"url":"https://example.com/a","title":"a } b","content_major":"{x}"}]}}</script>"##;
+        let response = EngineResponse::new(200, BASE_URL, body.as_bytes().to_vec());
+        let query = Query::parse("cat", &crate::engine::EngineRegistry::default(), &[]);
+        let items = engine().parse(&response, &query).unwrap();
+        assert_eq!(items.len(), 1);
     }
 
     #[test]
