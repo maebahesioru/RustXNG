@@ -72,11 +72,16 @@ impl Engine for Vimeo {
     }
 
     fn needs_render(&self, response: &EngineResponse) -> bool {
-        // Plain HTTP clients get a 403 whose body is Vimeo's
-        // "CAPTCHA Challenge" page. There is no result markup in it, so the
-        // only way to read the hits is to let the browser load the page.
+        // Plain HTTP clients get either a 403 whose body is Vimeo's
+        // "CAPTCHA Challenge" page, or - once the solver's clearance cookie is
+        // in the jar - a 200 that is only the Next.js shell: the markup is
+        // 142 KB of __NEXT_DATA__ with no result card in it. Both mean the
+        // hits only exist after the browser has run the app.
         let body = response.text();
-        !body.contains("clip-result") && (response.status == 403 || body.contains("CAPTCHA Challenge"))
+        if body.contains("clip-result") {
+            return false;
+        }
+        response.status == 403 || body.contains("CAPTCHA Challenge") || body.contains("__NEXT_DATA__")
     }
 
     fn parse(
