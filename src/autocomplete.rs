@@ -8,7 +8,7 @@ use crate::network::Network;
 use crate::settings::Settings;
 
 /// Autocomplete backends, in the order they are tried.
-pub static BACKENDS: &[&str] = &["duckduckgo", "wikipedia", "mwmbl"];
+pub static BACKENDS: &[&str] = &["duckduckgo", "google", "wikipedia", "mwmbl"];
 
 /// Fetch suggestions for `query` from `backend`.
 pub async fn suggest(
@@ -37,6 +37,13 @@ pub async fn suggest(
         "mwmbl" => (
             format!(
                 "https://api.mwmbl.org/api/v1/search/?s={}",
+                crate::engine::util::encode(query)
+            ),
+            true,
+        ),
+        "google" => (
+            format!(
+                "https://suggestqueries.google.com/complete/search?client=firefox&q={}",
                 crate::engine::util::encode(query)
             ),
             true,
@@ -88,7 +95,7 @@ pub fn parse_suggestions(backend: &str, response: &EngineResponse) -> Vec<String
                 }
             }
         }
-        // duckduckgo: [{"phrase": "..."}], array responses: ["query", ["...", ...]]
+        // google: ["query", ["...", ...]] (client=firefox), duckduckgo: [{"phrase": "..."}]
         _ => {
             if let Some(items) = json.as_array() {
                 for item in items {

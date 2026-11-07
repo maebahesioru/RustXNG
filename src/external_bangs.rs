@@ -155,7 +155,7 @@ mod tests {
     }
 
     #[test]
-    fn google_bangs_are_removed() {
+    fn google_bangs_are_available() {
         for bang in [
             "g",
             "google",
@@ -165,7 +165,7 @@ mod tests {
             "ytfr",
             "invidious",
         ] {
-            assert!(lookup(bang).is_none(), "{bang}");
+            assert!(lookup(bang).is_some(), "{bang}");
         }
     }
 

@@ -4202,6 +4202,7 @@ fyndiq	https://fyndiq.se/search/?q={query}	0
 fyt	https://www.fiyatlab.com/?s={query}	0
 fyyd	https://fyyd.de/search?search={query}	0
 fz	https://duckduckgo.com/?q=site%3Afz.se+{query}	0
+g	https://www.google.com/search?q={query}	1750254
 g2a	https://www.g2a.com/?search={query}	5
 g2p	http://www.g2play.net/catalogsearch/result/index/?q={query}	0
 g2play	http://www.g2play.net/catalogsearch/result/index/?q={query}	0
@@ -4533,6 +4534,7 @@ goodguys	https://www.thegoodguys.com.au/SearchDisplay?categoryId=&storeId=900&ca
 goodreads	http://www.goodreads.com/search/search?search_type=books&search[query]={query}	752
 goodreadslist	https://www.goodreads.com/search?search_type=lists&q={query}	0
 goodsearch	http://www.goodsearch.com/search-web?keywords={query}	0
+google	https://www.google.com/search?q={query}	1750254
 gooj	http://dictionary.goo.ne.jp/srch/all/{query}/m0u/	0
 gookokugo	http://dictionary.goo.ne.jp/srch/jn/{query} /m0u/	0
 goood	https://thegooodshop.com/?s={query}&post_type=product	0
@@ -4652,6 +4654,7 @@ gtin	https://www.gepir.de/?search={query}	0
 gtlib	https://gatech-primo.hosted.exlibrisgroup.com/primo-explore/search?vid=01GALI_GIT&search_scope=Everything&query=any,contains,{query}	0
 gtm	https://fr.gta5-mods.com/search/{query}	0
 gtmz	https://geektimes.ru/search/?q={query}	0
+gtranslate	https://translate.google.com/#auto/en/{query}	234
 gtwiki	http://growtopia.wikia.com/wiki/Special:Search?query={query}	0
 gu	https://duckduckgo.com/?q=site%3Awww.theguardian.com+{query}	170
 guardian	https://www.theguardian.com/{query}	164
@@ -5340,6 +5343,7 @@ invest	https://www.investopedia.com/search/?search-terms={query}	0
 investing	https://www.investing.com/search/?q={query}	4
 investopedia	https://www.investopedia.com/search/?search-terms={query}	0
 investorwords	http://www.investorwords.com/search_cse.php?q={query}	0
+invidious	https://www.invidio.us/search?q={query}	21
 inwx	http://www.inwx.com/en/domain/check#search={query}#region=DEFAULT	0
 io9	http://io9.com/search?q={query}	0
 iol	https://www.iol.co.za/search?q={query}	0
@@ -12502,6 +12506,7 @@ yourglish	https://youglish.com/search/{query}?	0
 yours	https://www.yours.org/search?q={query}	0
 yourtv	http://www.yourtv.com.au/guide/search.aspx?q={query}	0
 yout	https://yout.com/search?terms={query}	4
+youtube	https://www.youtube.com/results?search_query={query}	920
 youtv	https://www.youtv.de/suche?search[q]={query}	0
 youversion	https://www.bible.com/search/bible?q={query}	0
 yp	https://www.yellowpages.com/search?search_terms={query}	5
@@ -12514,6 +12519,8 @@ yrtjp	https://search.yahoo.co.jp/realtime/search?p={query}	1875
 ys	https://slovari.yandex.ru/{query}	0
 ysports	https://search.yahoo.com/search?p=/{query}	0
 ystream	https://ystream.tv/q/?s={query}	0
+yt	https://www.youtube.com/results?search_query={query}	920
+ytfr	http://www.youtube.fr/results?search_query={query}	212
 ytj	https://travel.yahoo.co.jp/dhotel/search/?qry={query}	0
 ytmnd	http://ytmnd.com/search?q={query}	6
 ytr	https://translate.yandex.ru/?text={query}	148

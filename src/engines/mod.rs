@@ -108,6 +108,13 @@ pub mod github_code;
 pub mod gitlab;
 pub mod gmx;
 pub mod goodreads;
+pub mod google;
+pub mod google_cse;
+pub mod google_images;
+pub mod google_news;
+pub mod google_play;
+pub mod google_scholar;
+pub mod google_videos;
 pub mod grokipedia;
 pub mod hackernews;
 pub mod hex;
@@ -117,6 +124,7 @@ pub mod il_post;
 pub mod imdb;
 pub mod imgur;
 pub mod ina;
+pub mod invidious;
 pub mod ipernity;
 pub mod iqiyi;
 pub mod iseek;
@@ -129,13 +137,14 @@ pub mod kickass;
 pub mod lemmy;
 pub mod lib_rs;
 pub mod libretranslate;
+pub mod lingva;
 pub mod lucide;
 pub mod luxxle;
 pub mod magnific;
 pub mod marginalia;
-#[cfg(feature = "db-engines")]
 pub mod mariadb_server;
 pub mod mastodon;
+pub mod material_icons;
 pub mod mediathekviewweb;
 pub mod mediawiki;
 pub mod meilisearch;
@@ -143,18 +152,16 @@ pub mod metacpan;
 pub mod microsoft_learn;
 pub mod mixcloud;
 pub mod mojeek;
-#[cfg(feature = "db-engines")]
 pub mod mongodb;
 pub mod moviepilot;
+pub mod mozhi;
 pub mod mwmbl;
-#[cfg(feature = "db-engines")]
 pub mod mysql_server;
 pub mod naver;
 pub mod neocities;
 pub mod neosearch;
 pub mod niconico;
 pub mod nine_gag;
-pub mod youtube_noapi;
 pub mod npm;
 pub mod nvd;
 pub mod nyaa;
@@ -173,12 +180,12 @@ pub mod pexels;
 pub mod photon;
 pub mod picjumbo;
 pub mod pinterest;
+pub mod piped;
 pub mod piratebay;
 pub mod pixabay;
 pub mod pixiv;
 pub mod pkg_go_dev;
 pub mod podchaser;
-#[cfg(feature = "db-engines")]
 pub mod postgresql;
 pub mod privacywall;
 pub mod public_domain_image_archive;
@@ -197,8 +204,10 @@ pub mod resulthunter;
 pub mod reuters;
 pub mod rottentomatoes;
 pub mod rumble;
+pub mod s1search;
 pub mod s1search_rampjs;
 pub mod scanr_structures;
+pub mod searchrockit;
 pub mod searchzee;
 pub mod seekninja;
 pub mod selfhst;
@@ -217,9 +226,10 @@ pub mod soundcloud;
 pub mod sourcehut;
 pub mod spotify;
 pub mod springer;
-#[cfg(feature = "db-engines")]
 pub mod sqlite;
 pub mod stackexchange;
+pub mod startpage;
+pub mod startpagina;
 pub mod steam;
 pub mod stocksnap;
 pub mod swisscows;
@@ -228,13 +238,13 @@ pub mod tagesschau;
 pub mod tiger;
 pub mod tineye;
 pub mod tokyotoshokan;
+pub mod tonline;
 pub mod tootfinder;
 pub mod torznab;
 pub mod translated;
 pub mod tusksearch;
 pub mod unsplash;
 pub mod uxwing;
-#[cfg(feature = "db-engines")]
 pub mod valkey_server;
 pub mod vimeo;
 pub mod voidlinux;
@@ -258,6 +268,8 @@ pub mod yandex;
 pub mod yandex_api;
 pub mod yandex_music;
 pub mod yep;
+pub mod youtube_api;
+pub mod youtube_noapi;
 pub mod zlibrary;
 
 use crate::engine::EngineHandle;
@@ -506,6 +518,24 @@ pub fn build(config: &EngineConfig) -> Result<EngineHandle, String> {
         "sqlite" => sqlite::Sqlite::from_config(config)?,
         #[cfg(feature = "db-engines")]
         "valkey_server" => valkey_server::ValkeyServer::from_config(config)?,
+        "google" => google::Google::from_config(config)?,
+        "google_cse" => google_cse::GoogleCse::from_config(config)?,
+        "google_images" => google_images::GoogleImages::from_config(config)?,
+        "google_news" => google_news::GoogleNews::from_config(config)?,
+        "google_play" => google_play::GooglePlay::from_config(config)?,
+        "google_scholar" => google_scholar::GoogleScholar::from_config(config)?,
+        "google_videos" => google_videos::GoogleVideos::from_config(config)?,
+        "invidious" => invidious::Invidious::from_config(config)?,
+        "lingva" => lingva::Lingva::from_config(config)?,
+        "material_icons" => material_icons::MaterialIcons::from_config(config)?,
+        "mozhi" => mozhi::Mozhi::from_config(config)?,
+        "piped" => piped::Piped::from_config(config)?,
+        "s1search" => s1search::S1Search::from_config(config)?,
+        "searchrockit" => searchrockit::Searchrockit::from_config(config)?,
+        "startpage" => startpage::Startpage::from_config(config)?,
+        "startpagina" => startpagina::Startpagina::from_config(config)?,
+        "tonline" => tonline::TOnline::from_config(config)?,
+        "youtube_api" => youtube_api::YouTubeApi::from_config(config)?,
         other => {
             return Err(format!(
                 "engine {:?} uses the unknown engine type {other:?}",
