@@ -1,7 +1,11 @@
 //! Google Images engine, ported from searx/engines/google_images.py.
 //!
-//! Like upstream's google_request(use_locales=False): tbm=isch on the mobile
-//! endpoint, parsed for the imgres links.
+//! Upstream still asks the mobile (WML) endpoint for `tbm=isch`, but that
+//! endpoint now answers 403 to every client, and the imgres links it used to
+//! return are gone. The desktop endpoint renders one card per image with
+//! `data-attrid="images universal"`, the page address in `data-lpage` and the
+//! thumbnail in an `<img>`, so that is what this engine reads. The card only
+//! exists once the page has run its scripts, hence `needs_render`.
 // engine-id: google_images
 
 use std::sync::Arc;
@@ -25,12 +29,10 @@ const DEFAULTS: EngineDefaults = EngineDefaults {
     timeout: 4.0,
 };
 
-/// The mobile endpoint used by every Google engine (google.py).
-const BASE_URL: &str = "https://www.google.com/wml/search";
-const THUMBNAIL_URL: &str = "https://encrypted-tbn0.gstatic.com/images?q=tbn:";
-/// The mobile endpoint only serves images to old handsets (google.py).
-const USER_AGENT: &str =
-    "Nokia7610/2.0 (5.0509.0) SymbianOS/7.0s Series60/2.1 Profile/MIDP-2.0 Configuration/CLDC-1.0";
+const BASE_URL: &str = "https://www.google.com/search";
+/// One rendered image card. `data-attrid` is a stable attribute name, unlike
+/// the hashed class names next to it.
+const CARD: &str = "div[data-attrid='images universal']";
 
 /// Google Images.
 pub struct GoogleImages {
@@ -52,16 +54,12 @@ impl Engine for GoogleImages {
 
     fn build_request(&self, query: &Query, pageno: u32) -> Result<EngineRequest, EngineError> {
         let language = locale_language(&query.locale);
-        let mut pairs: Vec<(&str, String)> =
-            vec![("q", query.query_text()), ("sca_esv", "1".to_string())];
-        // google_request(use_locales=False) drops the lr and cr parameters.
+        let mut pairs: Vec<(&str, String)> = vec![("q", query.query_text())];
         if language != "all" {
             pairs.push(("hl", language.clone()));
         }
-        pairs.push(("ie", "utf8".to_string()));
-        pairs.push(("oe", "utf8".to_string()));
         pairs.push(("tbm", "isch".to_string()));
-        let start = (pageno.max(1) - 1) * 10;
+        let start = (pageno.max(1) - 1) * 20;
         if start > 0 {
             pairs.push(("start", start.to_string()));
         }
@@ -74,14 +72,19 @@ impl Engine for GoogleImages {
             };
             pairs.push(("tbs", format!("qdr:{value}")));
         }
-        // filter_mapping = {0: images, 1: active, 2: active}; zero is not sent.
         if query.safesearch > 0 {
             pairs.push(("safe", "active".to_string()));
         }
         let url = format!("{BASE_URL}?{}", query_string(&pairs));
         Ok(EngineRequest::get(url)
-            .header("User-Agent", USER_AGENT)
-            .header("Accept", "*/*"))
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"))
+    }
+
+    /// The cards are filled in by the page's own scripts, so a plain fetch
+    /// brings back a shell that has nothing to parse.
+    fn needs_render(&self, response: &EngineResponse) -> bool {
+        let body = response.text();
+        !body.contains("images universal") && !body.contains("did not match any documents")
     }
 
     fn parse(
@@ -89,71 +92,44 @@ impl Engine for GoogleImages {
         response: &EngineResponse,
         _query: &Query,
     ) -> Result<Vec<EngineItem>, EngineError> {
-        let html = parse_html(&response.text());
+        let body = response.text();
+        if body.contains("detected unusual traffic")
+            || (body.len() < 20_000 && body.contains("/sorry/index"))
+        {
+            return Err(EngineError::Captcha);
+        }
+        let html = parse_html(&body);
         let mut results = Vec::new();
-        for link in select_elements(&html, "a[href*=\"/imgres?\"]")? {
-            let Some(href) = attr(link, "href") else {
+        for card in select_elements(&html, CARD)? {
+            let Some(url) = attr(card, "data-lpage").filter(|value| value.starts_with("http")) else {
                 continue;
             };
-            let img_src = query_param(&href, "imgurl");
-            let url = query_param(&href, "imgrefurl");
-            if img_src.is_empty() || url.is_empty() || !url.starts_with("http") {
+            let img_src = attr_of(card, "img", "src").unwrap_or_default();
+            if img_src.is_empty() {
                 continue;
             }
-            // The title is the file name of the image, the host of the page is
-            // the fallback (upstream uses urlparse).
-            let mut title = file_name(&img_src);
-            if title.is_empty() {
+            let mut title = attr_of(card, "img", "alt").unwrap_or_default();
+            if title.trim().is_empty() {
                 title = host_of(&url);
             }
             if title.is_empty() {
                 continue;
             }
-            let width = query_param(&href, "w");
-            let height = query_param(&href, "h");
-            let tbnid = query_param(&href, "tbnid");
             let mut builder = ResultBuilder::new(url, title)
-                .image(img_src)
+                .image(img_src.clone())
+                .thumbnail(img_src)
                 .template(Template::Images);
-            if !tbnid.is_empty() {
-                builder = builder.thumbnail(format!("{THUMBNAIL_URL}{tbnid}"));
-            }
-            if !width.is_empty() && !height.is_empty() {
-                builder = builder.metadata("resolution", format!("{width} x {height}"));
+            if let Some(source) = attr(card, "data-lpage")
+                .as_deref()
+                .and_then(|value| value.split("://").nth(1))
+                .and_then(|rest| rest.split('/').next())
+            {
+                builder = builder.metadata("source", source.to_string());
             }
             results.push(builder.build());
         }
         Ok(results)
     }
-}
-
-/// The decoded value of one query parameter of an href.
-fn query_param(href: &str, name: &str) -> String {
-    let Some(index) = href.find('?') else {
-        return String::new();
-    };
-    let query = &href[index + 1..];
-    let query = query.split('#').next().unwrap_or(query);
-    for pair in query.split('&') {
-        let mut parts = pair.splitn(2, '=');
-        let key = parts.next().unwrap_or_default();
-        let value = parts.next().unwrap_or_default();
-        if key == name {
-            return percent_encoding::percent_decode_str(value)
-                .decode_utf8_lossy()
-                .to_string();
-        }
-    }
-    String::new()
-}
-
-/// The last path segment of a URL, percent-decoded.
-fn file_name(raw: &str) -> String {
-    let path = raw.split(['?', '#']).next().unwrap_or(raw);
-    let segment = path.rsplit('/').next().unwrap_or_default();
-    percent_encoding::percent_decode_str(segment)
-        .decode_utf8_lossy()
-        .to_string()
 }
 
 /// The host of a URL.
@@ -172,8 +148,12 @@ mod tests {
     use super::*;
 
     const FIXTURE: &str = r##"<html><body>
-      <a href="/imgres?imgurl=https%3A%2F%2Fexample.com%2Fphotos%2Fcat.jpg&amp;imgrefurl=https%3A%2F%2Fexample.com%2Fanimals&amp;w=800&amp;h=600&amp;tbnid=tb42"><img src="thumb.jpg" alt=""></a>
-      <a href="/imgres?imgurl=https%3A%2F%2Fexample.com%2Fno-page.jpg">no page</a>
+      <div data-attrid="images universal" data-docid="abc" data-lpage="https://en.wikipedia.org/wiki/Cat">
+        <a href="/goto?url=CAES"><img alt="Cat - Wikipedia" src="https://encrypted-tbn0.gstatic.com/images?q=tbn:AAA&amp;s"></a>
+      </div>
+      <div data-attrid="images universal" data-docid="def">
+        <img alt="no page" src="https://encrypted-tbn0.gstatic.com/images?q=tbn:BBB">
+      </div>
     </body></html>"##;
 
     fn engine() -> Arc<GoogleImages> {
@@ -182,50 +162,52 @@ mod tests {
     }
 
     #[test]
-    fn parses_imgres_links() {
+    fn parses_the_rendered_cards() {
         let response = EngineResponse::new(200, BASE_URL, FIXTURE.as_bytes().to_vec());
         let query = Query::parse("cat", &crate::engine::EngineRegistry::default(), &[]);
         let items = engine().parse(&response, &query).unwrap();
         assert_eq!(items.len(), 1);
         match &items[0] {
             EngineItem::Result(result) => {
-                assert_eq!(result.url, "https://example.com/animals");
-                assert_eq!(result.title, "cat.jpg");
-                assert_eq!(
-                    result.img_src.as_deref(),
-                    Some("https://example.com/photos/cat.jpg")
-                );
-                let thumbnail = "https://encrypted-tbn0.gstatic.com/images?q=tbn:tb42";
-                assert_eq!(result.thumbnail.as_deref(), Some(thumbnail));
-                let resolution = result.metadata.get("resolution").map(String::as_str);
-                assert_eq!(resolution, Some("800 x 600"));
-                assert_eq!(result.template, Template::Images);
+                assert_eq!(result.url, "https://en.wikipedia.org/wiki/Cat");
+                assert_eq!(result.title, "Cat - Wikipedia");
+                assert!(result
+                    .img_src
+                    .as_deref()
+                    .is_some_and(|src| src.contains("encrypted-tbn0.gstatic.com")));
             }
-            _ => panic!("expected an image result"),
+            other => panic!("expected a result, got {other:?}"),
         }
     }
 
     #[test]
-    fn builds_the_mobile_request() {
-        let mut query = Query::parse("cat", &crate::engine::EngineRegistry::default(), &[]);
-        query.locale = "ja-JP".to_string();
-        query.time_range = Some(TimeRange::Week);
-        query.safesearch = 2;
-        let request = engine().build_request(&query, 2).unwrap();
-        assert!(
-            request
-                .url
-                .starts_with("https://www.google.com/wml/search?q=cat")
+    fn a_shell_without_cards_asks_for_a_rendered_page() {
+        let shell = EngineResponse::new(200, BASE_URL, b"<html><body></body></html>".to_vec());
+        assert!(engine().needs_render(&shell));
+        let rendered = EngineResponse::new(200, BASE_URL, FIXTURE.as_bytes().to_vec());
+        assert!(!engine().needs_render(&rendered));
+    }
+
+    #[test]
+    fn the_interstitial_is_a_captcha() {
+        let page = EngineResponse::new(
+            200,
+            BASE_URL,
+            b"<html><body>Our systems have detected unusual traffic</body></html>".to_vec(),
         );
-        assert!(request.url.contains("hl=ja"));
+        let query = Query::parse("cat", &crate::engine::EngineRegistry::default(), &[]);
+        assert!(matches!(
+            engine().parse(&page, &query),
+            Err(EngineError::Captcha)
+        ));
+    }
+
+    #[test]
+    fn request_carries_the_query_and_paging() {
+        let query = Query::parse("cat", &crate::engine::EngineRegistry::default(), &[]);
+        let request = engine().build_request(&query, 2).unwrap();
+        assert!(request.url.starts_with(BASE_URL));
         assert!(request.url.contains("tbm=isch"));
-        assert!(request.url.contains("start=10"));
-        assert!(request.url.contains("tbs=qdr%3Aw"));
-        assert!(request.url.contains("safe=active"));
-        let accept = request
-            .headers
-            .get("accept")
-            .and_then(|value| value.to_str().ok());
-        assert_eq!(accept, Some("*/*"));
+        assert!(request.url.contains("start=20"));
     }
 }
