@@ -167,6 +167,11 @@ async fn main() -> ExitCode {
     let activity = std::sync::Arc::new(AtomicU64::new(unix_now()));
     let touched = activity.clone();
     let app = web::router(state)
+        // A search page is ~320 KB of HTML and a third of it is repeated
+        // markup, so it compresses to about a quarter of its size. The layer
+        // negotiates from Accept-Encoding and leaves the body untouched when
+        // the client does not ask for a compressed response.
+        .layer(tower_http::compression::CompressionLayer::new())
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .layer(axum::middleware::from_fn(
             move |request: axum::extract::Request, next: axum::middleware::Next| {
