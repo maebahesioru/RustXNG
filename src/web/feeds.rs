@@ -50,6 +50,10 @@ pub fn upstream_json(response: &SearchResponse) -> serde_json::Value {
                     object["raw_content_truncated"] = serde_json::json!(truncated);
                 }
             }
+            // Only present when search.canonical_rerank checked this result.
+            if let Some(canonical) = &result.canonical_url {
+                object["canonical_url"] = serde_json::json!(canonical);
+            }
             object
         })
         .collect();
