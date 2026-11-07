@@ -328,6 +328,12 @@ pub struct EngineMeta {
     pub base_url: Option<String>,
     /// Per-engine proxy URL, when the settings ask for one.
     pub proxy: Option<String>,
+    /// Seconds the browser should let the page settle before reading it.
+    ///
+    /// A site whose results are drawn by script answers 200 with an empty
+    /// shell, so the solver has no challenge to recognise and hands the shell
+    /// back. Naming the settle time here is the only signal that page needs.
+    pub solver_dwell: Option<u64>,
     pub search_url: Option<String>,
     pub api_key: Option<String>,
     pub extra: toml::Table,
@@ -366,6 +372,10 @@ impl EngineMeta {
                 .clone()
                 .or_else(|| config.opt_str("base_url").map(str::to_string)),
             proxy: config.proxy.clone(),
+            solver_dwell: config
+                .opt_i64("solver_dwell")
+                .filter(|seconds| *seconds > 0)
+                .map(|seconds| seconds.min(60) as u64),
             search_url: config.search_url.clone(),
             api_key: config.api_key.clone(),
             extra: config.extra.clone(),
@@ -462,6 +472,19 @@ pub trait Engine: Send + Sync {
     /// Per engine proxy URL, when the settings give this engine one.
     fn proxy(&self) -> Option<&str> {
         self.meta().proxy.as_deref()
+    }
+    /// Seconds the browser should wait before reading this engine's page.
+    fn solver_dwell(&self) -> Option<u64> {
+        self.meta().solver_dwell
+    }
+    /// Whether this body is a shell that only a rendered page can replace.
+    ///
+    /// A site can answer 200 with a page whose results are drawn by script.
+    /// That is not a challenge, so nothing in the response says a browser is
+    /// needed; the engine is the only one that knows its own shell. Returning
+    /// true here sends the same URL to the browser with `solver_dwell`.
+    fn needs_render(&self, _response: &EngineResponse) -> bool {
+        false
     }
     /// Build the HTTP request for the query.
     fn build_request(&self, query: &Query, pageno: u32) -> Result<EngineRequest, EngineError>;

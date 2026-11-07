@@ -291,7 +291,7 @@ impl Solver {
     /// matter how well the solver works. Clearing it once, off the request path,
     /// leaves the cookie in the jar: the next search fetches the engine with a
     /// plain HTTP request and answers in milliseconds.
-    pub fn warm_in_background(self: &std::sync::Arc<Self>, url: &str) {
+    pub fn warm_in_background(self: &std::sync::Arc<Self>, url: &str, dwell: Option<u64>) {
         if !self.warm || tokio::runtime::Handle::try_current().is_err() {
             return;
         }
@@ -310,7 +310,7 @@ impl Solver {
             let _serial = solver.warm_gate.lock().await;
             let wait = Duration::from_millis(solver.max_timeout_ms.saturating_mul(2).max(30_000));
             let started = Instant::now();
-            let outcome = solver.solve_within(&target, wait, false).await;
+            let outcome = solver.solve_within(&target, wait, false, dwell).await;
             match outcome {
                 Ok(solved) => debug!(
                     url = %target,
@@ -414,6 +414,7 @@ impl Solver {
         url: &str,
         wait: Duration,
         proven: bool,
+        dwell: Option<u64>,
     ) -> Result<Solved, SolverError> {
         let deadline = tokio::time::Instant::now() + wait;
         let last = self.slots.len() - 1;
@@ -425,7 +426,7 @@ impl Solver {
             };
             for slot in candidates {
                 if let Ok(guard) = slot.gate.try_lock() {
-                    let result = self.solve_in(slot, url).await;
+                    let result = self.solve_in(slot, url, dwell).await;
                     drop(guard);
                     return result;
                 }
@@ -437,13 +438,21 @@ impl Solver {
         }
     }
 
-    async fn solve_in(&self, slot: &Slot, url: &str) -> Result<Solved, SolverError> {
+    async fn solve_in(
+        &self,
+        slot: &Slot,
+        url: &str,
+        dwell: Option<u64>,
+    ) -> Result<Solved, SolverError> {
         let mut fresh_profile_used = false;
         let mut dwelt = false;
         loop {
             let session = self.session(slot).await?;
-            let dwell = dwelt.then_some(SLOW_CHALLENGE_SECONDS);
-            match self.get(&session, url, dwell).await {
+            // An engine that names its own settle time has a page whose results
+            // are drawn by script: there is no challenge to recognise, so the
+            // wait has to happen on the first read or the shell is all we get.
+            let settle = dwell.or(dwelt.then_some(SLOW_CHALLENGE_SECONDS));
+            match self.get(&session, url, settle).await {
                 Ok(solved) => {
                     // A CloudFront-style refusal has no challenge to clear: the
                     // page says the browser is not welcome, so another tab cannot
@@ -1072,7 +1081,7 @@ mod tests {
         let _busy = solver.slots[0].gate.try_lock().expect("free gate");
         let started = std::time::Instant::now();
         let result = solver
-            .solve_within("http://example.invalid/", Duration::from_millis(120), false)
+            .solve_within("http://example.invalid/", Duration::from_millis(120), false, None)
             .await;
         assert!(matches!(result, Err(SolverError::Busy)));
         assert!(started.elapsed() >= Duration::from_millis(100));

@@ -713,7 +713,7 @@ impl Searcher {
                 else {
                     return Err(FailureKind::SolverSkipped);
                 };
-                match self.network.solve_page(&target_url, budget, proven).await {
+                match self.network.solve_page(&target_url, budget, proven, engine.solver_dwell()).await {
                     SolverAttempt::Solved(page) => {
                         via_solver = true;
                         page
@@ -730,6 +730,38 @@ impl Searcher {
                 }
             }
         };
+        // A shell page is not a challenge - nothing in the response says the
+        // results are missing - but only a browser can fill it. The engine
+        // recognises its own shell and the same URL goes to the solver with the
+        // settle time the engine asks for.
+        if !via_solver
+            && is_get
+            && engine.needs_render(&response)
+            && engine.solver_dwell().is_some()
+            && !self.states.solver_cannot_help(engine.name())
+        {
+            let remaining = timeout.saturating_sub(started.elapsed());
+            if !remaining.is_zero() {
+                if let Some((budget, proven)) = self.solver_turn(engine.name(), remaining, explicit)
+                {
+                    match self
+                        .network
+                        .solve_page(&target_url, budget, proven, engine.solver_dwell())
+                        .await
+                    {
+                        SolverAttempt::Solved(page) => {
+                            via_solver = true;
+                            response = page;
+                        }
+                        SolverAttempt::Busy => return Err(FailureKind::SolverBusy),
+                        SolverAttempt::Hopeless => {
+                            self.states.mark_solver_cannot_help(engine.name());
+                            return Err(FailureKind::AccessDenied);
+                        }
+                    }
+                }
+            }
+        }
         // A wall the body itself gives away - a 200 interstitial that looks
         // like a page, or a 403 the fetch already turned into a response - is
         // retried in the browser here, where the engine's remaining budget and
@@ -747,7 +779,7 @@ impl Searcher {
             else {
                 return Err(FailureKind::SolverSkipped);
             };
-            match self.network.solve_page(&target_url, budget, proven).await {
+            match self.network.solve_page(&target_url, budget, proven, engine.solver_dwell()).await {
                 SolverAttempt::Solved(page) => {
                     via_solver = true;
                     response = page;
@@ -817,7 +849,7 @@ impl Searcher {
                 else {
                     return Err(FailureKind::SolverSkipped);
                 };
-                match self.network.solve_page(&target_url, budget, proven).await {
+                match self.network.solve_page(&target_url, budget, proven, engine.solver_dwell()).await {
                     SolverAttempt::Solved(page) => match engine.parse(&page, &request.query) {
                         Ok(items) => {
                             // The browser earned this engine its results, so

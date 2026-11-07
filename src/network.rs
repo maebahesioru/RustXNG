@@ -699,7 +699,13 @@ impl Network {
     ///
     /// `proven` confines an engine the browser has never served to the one tab
     /// set aside for trying new engines.
-    pub async fn solve_page(&self, url: &str, budget: Duration, proven: bool) -> SolverAttempt {
+    pub async fn solve_page(
+        &self,
+        url: &str,
+        budget: Duration,
+        proven: bool,
+        dwell: Option<u64>,
+    ) -> SolverAttempt {
         let Some(solver) = self.solver.clone() else {
             return SolverAttempt::Busy;
         };
@@ -725,7 +731,7 @@ impl Network {
         // anyway: a tab that frees up in time rescues the engine, and one that
         // does not costs nothing that was not already lost.
         let handle =
-            tokio::spawn(async move { solver.solve_within(&target, budget, proven).await });
+            tokio::spawn(async move { solver.solve_within(&target, budget, proven, dwell).await });
         let canceller = handle.abort_handle();
         match tokio::time::timeout(budget, handle).await {
             Ok(Ok(Ok(solved))) => {
@@ -749,7 +755,7 @@ impl Network {
                     SolverAttempt::Hopeless
                 } else {
                     if may_warm {
-                        warmer.warm_in_background(&warm_target);
+                        warmer.warm_in_background(&warm_target, dwell);
                     }
                     SolverAttempt::Busy
                 }
@@ -767,7 +773,7 @@ impl Network {
                     "solver exceeded the engine budget; the tab is released"
                 );
                 if may_warm {
-                    warmer.warm_in_background(&warm_target);
+                    warmer.warm_in_background(&warm_target, dwell);
                 }
                 SolverAttempt::Busy
             }

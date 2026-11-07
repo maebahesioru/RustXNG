@@ -77,6 +77,14 @@ impl Engine for Luxxle {
         )))
     }
 
+    fn needs_render(&self, response: &EngineResponse) -> bool {
+        // The page ships the whole search UI and then fills #mainResults from
+        // `/load_search.php`. Until that script has run the body is a shell:
+        // it names the endpoint but carries no result container.
+        let body = response.text();
+        body.contains("load_search.php") && !body.contains("resultsContainer")
+    }
+
     fn parse(
         &self,
         response: &EngineResponse,
@@ -143,11 +151,10 @@ mod tests {
 
     const FIXTURE: &str = r#"<html><body><div id="mainResults">
       <div class="resultsContainer">
-        <div class="urlAddressLink">
-          <a href="/redirect?url=https%3A%2F%2Fexample.com%2Frust">example.com</a>
+        <div class="searchResultContent">
+          <a class="urlnamelink" href="/redirect?url=https%3A%2F%2Fexample.com%2Frust">Rust Programming</a>
+          <div class="urlSnippet">A fast systems language.</div>
         </div>
-        <div class="urlname">Rust Programming</div>
-        <div class="urlSnippet">A fast systems language.</div>
       </div>
     </div></body></html>"#;
 
@@ -175,16 +182,25 @@ mod tests {
     }
 
     #[test]
-    fn builds_a_post_request_with_the_safesearch_setting() {
-        let mut query = Query::parse("rust", &crate::engine::EngineRegistry::default(), &[]);
-        query.safesearch = 2;
-        query.locale = "de-DE".into();
+    fn builds_a_get_request_for_the_rendered_search_page() {
+        // The load_search.php endpoint answers 403 to every client that does
+        // not carry Luxxle\u{27}s own telemetry, so the engine reads the page the
+        // browser renders instead.
+        let query = Query::parse("rust", &crate::engine::EngineRegistry::default(), &[]);
         let request = engine().build_request(&query, 1).unwrap();
-        assert_eq!(request.method, crate::engine::Method::Post);
-        assert_eq!(request.url, "https://luxxle.com/load_search.php");
-        let body = request.json.expect("json body");
-        assert_eq!(body["searchData"]["query"], "rust");
-        assert_eq!(body["searchData"]["safeSearch"], "Strict");
-        assert_eq!(body["searchData"]["market"], "de-DE");
+        assert_eq!(request.method, crate::engine::Method::Get);
+        assert_eq!(request.url, "https://luxxle.com/luxsearch?q=rust");
+    }
+
+    #[test]
+    fn a_shell_without_results_is_empty_not_an_error() {
+        // The unrendered page is a 200 shell: no result container, no items.
+        let response = EngineResponse::new(
+            200,
+            "https://luxxle.com/luxsearch?q=rust",
+            b"<html><body><div id=\"mainResults\"></div></body></html>".to_vec(),
+        );
+        let query = Query::parse("rust", &crate::engine::EngineRegistry::default(), &[]);
+        assert!(engine().parse(&response, &query).unwrap().is_empty());
     }
 }
