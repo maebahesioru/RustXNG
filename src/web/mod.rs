@@ -152,6 +152,8 @@ pub struct ResultView {
     pub has_image: bool,
     pub img_src_proxy: String,
     pub thumbnail_proxy: String,
+    pub iframe_src: String,
+    pub has_iframe: bool,
     pub metadata: Vec<(String, String)>,
 }
 
@@ -175,6 +177,18 @@ impl ResultView {
             thumbnail_proxy: String::new(),
             img_src: result.img_src.clone().unwrap_or_default(),
             thumbnail: result.thumbnail.clone().unwrap_or_default(),
+            // Twenty-two engines publish a player URL (Vimeo, AcFun, Bilibili,
+            // BitChute, ...) but nothing used to render it, so video hits
+            // looked like plain links.
+            iframe_src: result
+                .metadata
+                .get("iframe_src")
+                .cloned()
+                .unwrap_or_default(),
+            has_iframe: result
+                .metadata
+                .get("iframe_src")
+                .is_some_and(|value| !value.is_empty()),
             metadata: result
                 .metadata
                 .iter()

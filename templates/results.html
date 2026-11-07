@@ -64,6 +64,7 @@
     <div class="result-url">{{ result.pretty_url }}</div>
 {% endif %}
 {% if result.has_image %}<p><img src="{% if result.img_src_proxy != "" %}{{ result.img_src_proxy }}{% else %}{{ result.img_src }}{% endif %}" alt="{{ result.title }}" loading="lazy" style="max-height:8rem"></p>{% endif %}
+{% if result.has_iframe %}<p><iframe src="{{ result.iframe_src }}" title="{{ result.title }}" loading="lazy" allowfullscreen referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-presentation" style="width:100%;max-width:32rem;aspect-ratio:16/9;border:0"></iframe></p>{% endif %}
 {% if result.content != "" %}<p class="result-content">{{ result.content }}</p>{% endif %}
     <div class="result-meta">
 {% if result.published_date != "" %}<span>{{ result.published_date }}</span> · {% endif %}

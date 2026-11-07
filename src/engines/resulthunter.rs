@@ -104,6 +104,19 @@ impl Engine for Resulthunter {
     ) -> Result<Vec<EngineItem>, EngineError> {
         let html = response.html()?;
         let base = self.base_url();
+        // A refusal page has no result container at all. Without this check the
+        // engine reported "no hits" and the circuit breaker never saw the
+        // block, so every later search paid the same refused request.
+        if !response.text().contains("organic-results-container") {
+            let body = response.text().to_ascii_lowercase();
+            if body.contains("captcha")
+                || body.contains("access denied")
+                || body.contains("forbidden")
+                || body.contains("are you a robot")
+            {
+                return Err(EngineError::AccessDenied);
+            }
+        }
         let mut results = Vec::new();
         if self.category() == "images" {
             let cards = "div[class*='organic-results-container'] a[class*='group']";
@@ -177,6 +190,20 @@ mod tests {
         let engine = build(category, Some("abc")).unwrap();
         let response = EngineResponse::new(200, BASE_URL, body.to_vec());
         engine.parse(&response, &query()).unwrap()
+    }
+
+    #[test]
+    fn a_refusal_page_is_a_block_not_an_empty_result() {
+        let engine = build("web", Some("abc")).unwrap();
+        let body = b"<html><body><h1>Access denied</h1><p>Please solve the CAPTCHA.</p></body></html>";
+        let response = EngineResponse::new(200, BASE_URL, body.to_vec());
+        assert!(matches!(
+            engine.parse(&response, &query()),
+            Err(EngineError::AccessDenied)
+        ));
+        // A page that simply has no hits stays an empty success.
+        let empty = EngineResponse::new(200, BASE_URL, b"<html><body>nothing</body></html>".to_vec());
+        assert!(engine.parse(&empty, &query()).unwrap().is_empty());
     }
 
     fn result_at(items: &[EngineItem], index: usize) -> &crate::results::SearchResult {

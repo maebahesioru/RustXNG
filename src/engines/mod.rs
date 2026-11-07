@@ -154,6 +154,7 @@ pub mod neocities;
 pub mod neosearch;
 pub mod niconico;
 pub mod nine_gag;
+pub mod youtube_noapi;
 pub mod npm;
 pub mod nvd;
 pub mod nyaa;
@@ -350,6 +351,7 @@ pub fn build(config: &EngineConfig) -> Result<EngineHandle, String> {
         "360search_videos" => r360search_videos::Videoscarch360::from_config(config)?,
         "iqiyi" => iqiyi::Iqiyi::from_config(config)?,
         "niconico" => niconico::Niconico::from_config(config)?,
+        "youtube_noapi" => youtube_noapi::YoutubeNoapi::from_config(config)?,
         "odysee" => odysee::Odysee::from_config(config)?,
         "rumble" => rumble::Rumble::from_config(config)?,
         "vimeo" => vimeo::Vimeo::from_config(config)?,

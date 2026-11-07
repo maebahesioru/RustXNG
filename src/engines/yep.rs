@@ -76,6 +76,9 @@ impl Engine for Yep {
         Ok(
             EngineRequest::get(format!("{base}{SEARCH_PATH}?{}", query_string(&pairs)))
                 .header("accept", "application/json")
+                // The web app always sends this CSRF marker; without it the
+                // endpoint answers with the SPA shell instead of JSON.
+                .header("x-csrf-protection", "1")
                 .header("referer", "https://yep.com/web")
                 .header("origin", BASE_URL),
         )
