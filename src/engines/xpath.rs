@@ -144,13 +144,19 @@ impl XPathEngine {
         }))
     }
 
-    fn template(&self, query: &Query, pageno: u32) -> String {
-        let language = locale_language(&query.locale);
-        let pageno_value = if pageno <= 1 {
+    /// The number the site expects for this page. `first_page_num` defaults to
+    /// 1, so the first page is 1 and every later page advances by one.
+    fn page_number(&self, pageno: u32) -> u32 {
+        if pageno <= 1 {
             self.first_page_num
         } else {
             (pageno - 1) + self.first_page_num
-        };
+        }
+    }
+
+    fn template(&self, query: &Query, pageno: u32) -> String {
+        let language = locale_language(&query.locale);
+        let pageno_value = self.page_number(pageno);
         let time_range = query
             .time_range
             .map(|range| range.as_str())
@@ -208,7 +214,12 @@ impl Engine for XPathEngine {
         }
         if let Some(body) = &self.request_body {
             let encoded_query = encode(&query.query_text());
-            let body = body.replace("{query}", &encoded_query);
+            // `{pageno}` is substituted here as well as in the URL: some sites
+            // page through a POST body (searchmysite answers 403 to any GET
+            // that carries ?page=).
+            let body = body
+                .replace("{query}", &encoded_query)
+                .replace("{pageno}", &self.page_number(pageno).to_string());
             request = request
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .form(

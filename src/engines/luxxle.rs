@@ -60,32 +60,21 @@ impl Engine for Luxxle {
     }
 
     fn build_request(&self, query: &Query, _pageno: u32) -> Result<EngineRequest, EngineError> {
-        let market =
-            if query.locale.trim().is_empty() || query.locale == "all" || query.locale == "auto" {
-                "en-US".to_string()
-            } else {
-                query.locale.clone()
-            };
-        let safe_search = match query.safesearch {
-            0 => "Off",
-            1 => "Moderate",
-            _ => "Strict",
-        };
-        let search_data = serde_json::json!({
-            "ip": self.meta.opt_str("ip").unwrap_or_default(),
-            "timeOf": self.meta.opt_str("time_of").unwrap_or_default(),
-            "authorization": self.meta.opt_str("authorization").unwrap_or_default(),
-            "preferencesCookie": self.meta.opt_str("preferences_cookie").unwrap_or_default(),
-            "query": query.query_text(),
-            "market": market,
-            "safeSearch": safe_search,
-            "freshness": "",
-            "language": "english",
-        });
-        Ok(
-            EngineRequest::post(format!("{BASE_URL}/load_{}.php", self.categ))
-                .json_body(serde_json::json!({ "searchData": search_data })),
-        )
+        // `/load_search.php` is the JSON endpoint the page calls from script and
+        // it rejects every request that does not carry Luxxle's own telemetry
+        // (`ip`, `timeOf`, `authorization`) — it answers 403 for all of them.
+        // The server-rendered `/luxsearch?q=` page carries the same hits and is
+        // reachable once the Cloudflare challenge is passed.
+        if self.categ != "search" {
+            return Err(EngineError::Message(
+                "luxxle: only the web search page is implemented".to_string(),
+            ));
+        }
+        let pairs: Vec<(&str, String)> = vec![("q", query.query_text())];
+        Ok(EngineRequest::get(format!(
+            "{BASE_URL}/luxsearch?{}",
+            query_string(&pairs)
+        )))
     }
 
     fn parse(
@@ -97,16 +86,25 @@ impl Engine for Luxxle {
             return Ok(Vec::new());
         }
         let html = parse_html(&response.text());
-        let Ok(items) = select_elements(&html, "div#mainResults > div[class~='resultsContainer']")
-        else {
+        // The current result markup is
+        //   div#mainResults > div.resultsContainer > div.searchResultContent
+        //     a.urlnamelink[href="/redirect?url=…"]  (title)
+        //     div.urlSnippet                          (snippet)
+        // The previous selectors (`div[class~='urlAddressLink'] a`,
+        // `div[class~='urlname']`) matched the *displayed* URL widget, which
+        // no longer carries the anchor, so every item was dropped.
+        let Ok(items) = select_elements(&html, "div#mainResults div.resultsContainer") else {
             return Ok(Vec::new());
         };
         let mut results = Vec::new();
         for item in items {
-            let url = unwrap_redirect(
-                &attr_of(item, "div[class~='urlAddressLink'] a", "href").unwrap_or_default(),
-            );
-            let title = text_of(item, "div[class~='urlname']").unwrap_or_default();
+            let Some(anchor) = child(item, "a.urlnamelink")
+                .or_else(|| child(item, "a[href*='/redirect?url=']"))
+            else {
+                continue;
+            };
+            let url = unwrap_redirect(&attr(anchor, "href").unwrap_or_default());
+            let title = text(anchor);
             if title.is_empty() || !is_http_url(&url) {
                 continue;
             }
