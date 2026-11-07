@@ -72,9 +72,7 @@ impl Cookie {
 /// statuses may also be a plain CAPTCHA interstitial.
 const STRONG_MARKERS: &[&str] = &[
     "just a moment",
-    "cf-chl",
     "cf_chl_opt",
-    "challenge-platform",
     "checking your browser",
     "verify you are human",
     "are you a robot",
@@ -89,6 +87,18 @@ const STRONG_MARKERS: &[&str] = &[
     // few seconds. The marker is unique to the interstitial.
     "azure waf js challenge",
 ];
+
+/// Markers a real page can carry as well.
+///
+/// Cloudflare's interstitial and its normal bot-management script share the
+/// `/cdn-cgi/challenge-platform/` path: Vimeo's own result page loads
+/// `.../challenge-platform/scripts/precursor/main.js`, so the marker alone
+/// says nothing. The interstitial is always a small page, so these only count
+/// while the body is short.
+const SCRIPT_MARKERS: &[&str] = &["cf-chl", "challenge-platform"];
+
+/// Above this size a page is a document, not a challenge interstitial.
+const INTERSTITIAL_MAX_BYTES: usize = 64 * 1024;
 
 const SOFT_MARKERS: &[&str] = &[
     "captcha",
@@ -119,6 +129,11 @@ pub fn looks_like_challenge(status: u16, body: &[u8]) -> bool {
     let text = String::from_utf8_lossy(window).to_lowercase();
     let strong = STRONG_MARKERS.iter().any(|marker| text.contains(marker));
     if strong {
+        return true;
+    }
+    if body.len() <= INTERSTITIAL_MAX_BYTES
+        && SCRIPT_MARKERS.iter().any(|marker| text.contains(marker))
+    {
         return true;
     }
     status != 200 && SOFT_MARKERS.iter().any(|marker| text.contains(marker))
@@ -908,6 +923,21 @@ mod tests {
         let body = br#"<title>Just a moment...</title><div id="cf-chl-widget"></div>"#;
         assert!(looks_like_challenge(403, body));
         assert!(looks_like_challenge(200, body));
+    }
+
+    #[test]
+    fn a_real_page_that_loads_the_bot_management_script_is_not_a_challenge() {
+        // Vimeo's result page loads
+        // /cdn-cgi/challenge-platform/scripts/precursor/main.js as a normal
+        // asset, so the path alone cannot mean "interstitial".
+        let mut body = String::from("<html><body><script src=\"/cdn-cgi/challenge-platform/scripts/precursor/main.js\"></script>");
+        body.push_str(&"<a href=\"/x\">result</a>".repeat(4_000));
+        body.push_str("</body></html>");
+        assert!(body.len() > INTERSTITIAL_MAX_BYTES);
+        assert!(!looks_like_challenge(200, body.as_bytes()));
+        // The interstitial itself is small and still counts.
+        let wall = b"<html><head><title>Just a moment...</title></head><body><script src=\"/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1\"></script></body></html>";
+        assert!(looks_like_challenge(403, wall));
     }
 
     #[test]

@@ -1,10 +1,12 @@
-//! Vimeo engine, ported from searx/engines/vimeo.py.
+//! Vimeo engine.
 //!
-//! Upstream fetches a JWT from https://vimeo.com/_next/jwt before every
-//! search. The synchronous request builder cannot perform that fetch, so the
-//! token is read from the engine configuration instead: the jwt option first,
-//! then api_key. Without a configured token the request is sent without an
-//! authorization header.
+//! The public API (`api.vimeo.com/search`) rejects every anonymous caller with
+//! `8003` and needs a JWT that the site mints per session, so this engine reads
+//! the server-rendered search page instead. The page itself is behind a
+//! "CAPTCHA Challenge" wall for plain HTTP clients; the browser solver passes it
+//! and the rendered DOM carries `a[data-testid="clip-result"]` cards, which is
+//! what `parse` reads. `needs_render` recognises the wall so the aggregator
+//! sends the URL to the solver with the engine's `solver_dwell`.
 // engine-id: vimeo
 
 use std::sync::Arc;
@@ -28,11 +30,10 @@ const DEFAULTS: EngineDefaults = EngineDefaults {
     timeout: 4.0,
 };
 
-const BASE_URL: &str = "https://api.vimeo.com";
-const RESULTS_PER_PAGE: u32 = 20;
-const ACCEPT: &str = "application/vnd.vimeo.*+json;version=3.3";
+const BASE_URL: &str = "https://vimeo.com";
+const ACCEPT: &str = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
 
-/// Vimeo's clip search API.
+/// Vimeo's clip search page.
 pub struct Vimeo {
     meta: EngineMeta,
 }
@@ -52,14 +53,6 @@ impl Vimeo {
             .trim_end_matches('/')
             .to_string()
     }
-
-    fn token(&self) -> Option<&str> {
-        self.meta
-            .opt_str("jwt")
-            .or(self.meta.api_key.as_deref())
-            .map(str::trim)
-            .filter(|token| !token.is_empty())
-    }
 }
 
 impl Engine for Vimeo {
@@ -68,23 +61,22 @@ impl Engine for Vimeo {
     }
 
     fn build_request(&self, query: &Query, pageno: u32) -> Result<EngineRequest, EngineError> {
-        let pairs: Vec<(&str, String)> = vec![
-            ("filter_type", "clip".to_string()),
-            ("query", query.query_text()),
-            ("page", pageno.max(1).to_string()),
-            ("per_page", RESULTS_PER_PAGE.to_string()),
-        ];
-        let mut request = EngineRequest::get(format!(
-            "{}/search?{}",
-            self.base_url(),
-            query_string(&pairs)
-        ))
-        .header("content-type", "application/json")
-        .header("Accept", ACCEPT);
-        if let Some(token) = self.token() {
-            request = request.header("authorization", &format!("jwt {token}"));
+        let mut pairs: Vec<(&str, String)> = vec![("q", query.query_text())];
+        if pageno > 1 {
+            pairs.push(("page", pageno.to_string()));
         }
-        Ok(request)
+        Ok(
+            EngineRequest::get(format!("{}/search?{}", self.base_url(), query_string(&pairs)))
+                .header("Accept", ACCEPT),
+        )
+    }
+
+    fn needs_render(&self, response: &EngineResponse) -> bool {
+        // Plain HTTP clients get a 403 whose body is Vimeo's
+        // "CAPTCHA Challenge" page. There is no result markup in it, so the
+        // only way to read the hits is to let the browser load the page.
+        let body = response.text();
+        !body.contains("clip-result") && (response.status == 403 || body.contains("CAPTCHA Challenge"))
     }
 
     fn parse(
@@ -92,30 +84,52 @@ impl Engine for Vimeo {
         response: &EngineResponse,
         _query: &Query,
     ) -> Result<Vec<EngineItem>, EngineError> {
-        let json = response.json()?;
-        let Some(items) = json_path(&json, "data").and_then(serde_json::Value::as_array) else {
+        let html = parse_html(&response.text());
+        // The rendered markup is a Chakra card per clip:
+        //   a[data-testid="clip-result"][href="https://vimeo.com/<id>"]
+        //     img[src="https://i.vimeocdn.com/video/…"]
+        //     p[title="RUST"]                 (title)
+        //     p                               (author)
+        //     p                               (views • date)
+        // The class names are build hashes, so only the test id and the
+        // `title` attribute are stable.
+        let Ok(cards) = select_elements(&html, "a[data-testid='clip-result']") else {
             return Ok(Vec::new());
         };
         let mut results = Vec::new();
-        for item in items {
-            let Some(clip) = item.get("clip") else {
-                continue;
-            };
-            let title = json_str(clip, "name");
-            let url = json_str(clip, "link");
+        for card in cards {
+            let url = attr(card, "href").unwrap_or_default();
+            let title = attr_of(card, "p[title]", "title")
+                .or_else(|| text_of(card, "p[title]"))
+                .unwrap_or_default();
             if title.is_empty() || !is_http_url(&url) {
                 continue;
             }
+            let paragraphs = children(card, "p");
+            let author = paragraphs
+                .get(1)
+                .map(|element| text(*element))
+                .unwrap_or_default();
+            let meta_line = paragraphs
+                .get(2)
+                .map(|element| text(*element))
+                .unwrap_or_default();
             let mut builder = ResultBuilder::new(url.clone(), title)
                 .template(Template::Videos)
-                .author(json_str(clip, "user.name"))
-                .thumbnail(json_str(clip, "pictures.base_link"))
-                .published_date(iso_date(&json_str(clip, "created_time")))
-                .metadata("length", duration(json_path(clip, "duration")));
-            let video_id = video_id(&url);
-            if !video_id.is_empty() {
-                let iframe = format!("https://player.vimeo.com/video/{video_id}");
-                builder = builder.metadata("iframe_src", iframe);
+                .author(author)
+                .content(meta_line.clone())
+                .thumbnail(attr_of(card, "img", "src").unwrap_or_default());
+            if let Some((views, date)) = meta_line.split_once('•') {
+                builder = builder
+                    .metadata("views", views.trim().to_string())
+                    .published_date(parse_listed_date(date.trim()));
+            }
+            let id = video_id(&url);
+            if !id.is_empty() {
+                builder = builder.metadata(
+                    "iframe_src",
+                    format!("https://player.vimeo.com/video/{id}"),
+                );
             }
             results.push(builder.build());
         }
@@ -134,49 +148,32 @@ fn video_id(url: &str) -> String {
         .unwrap_or_default()
 }
 
-/// Normalise the created_time of the API to RFC 3339.
-fn iso_date(value: &str) -> String {
-    chrono::DateTime::parse_from_rfc3339(value)
-        .map(|date| date.to_rfc3339())
+/// The card prints the upload date as "September 7, 2015".
+fn parse_listed_date(value: &str) -> String {
+    chrono::NaiveDate::parse_from_str(value, "%B %e, %Y")
+        .map(|date| date.to_string())
         .unwrap_or_default()
-}
-
-/// The duration formatted as MM:SS or HH:MM:SS.
-fn duration(value: Option<&serde_json::Value>) -> String {
-    let Some(seconds) = value.and_then(serde_json::Value::as_u64) else {
-        return String::new();
-    };
-    let hours = seconds / 3600;
-    let minutes = (seconds % 3600) / 60;
-    let seconds = seconds % 60;
-    if hours > 0 {
-        format!("{hours:02}:{minutes:02}:{seconds:02}")
-    } else {
-        format!("{minutes:02}:{seconds:02}")
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const FIXTURE: &str = r##"{
-      "total": 1,
-      "page": 1,
-      "per_page": 20,
-      "data": [
-        {
-          "clip": {
-            "name": "Rust in 100 seconds",
-            "link": "https://vimeo.com/123456",
-            "duration": 125,
-            "created_time": "2024-05-01T12:00:00+00:00",
-            "user": {"name": "Fireship"},
-            "pictures": {"base_link": "https://i.vimeocdn.com/video/123.jpg"}
-          }
-        }
-      ]
-    }"##;
+    const FIXTURE: &str = r#"<html><body>
+      <a class="chakra-card" data-testid="clip-result" href="https://vimeo.com/263989277">
+        <img src="https://i.vimeocdn.com/video/1.jpg" alt="">
+        <div class="chakra-card__body">
+          <p class="chakra-text" title="RUST">RUST</p>
+          <p class="chakra-text">Ariane Prin</p>
+          <p class="chakra-text">13.2K views • September 7, 2015</p>
+        </div>
+      </a>
+      <a class="chakra-card" data-testid="clip-result" href="https://vimeo.com/2">
+        <p class="chakra-text" title="Rust Harvest">Rust Harvest</p>
+        <p class="chakra-text">Yuhei Kodaka</p>
+        <p class="chakra-text">6,772 views • April 10, 2018</p>
+      </a>
+    </body></html>"#;
 
     fn engine() -> Arc<Vimeo> {
         Vimeo::from_config(&EngineConfig::new("vimeo", "vimeo", "vm", &["videos"])).unwrap()
@@ -187,31 +184,28 @@ mod tests {
     }
 
     #[test]
-    fn parses_the_clip_list() {
+    fn parses_the_rendered_clip_cards() {
         let response = EngineResponse::new(200, BASE_URL, FIXTURE.as_bytes().to_vec());
         let items = engine().parse(&response, &query()).unwrap();
-        assert_eq!(items.len(), 1);
+        assert_eq!(items.len(), 2);
         match &items[0] {
             EngineItem::Result(result) => {
-                assert_eq!(result.title, "Rust in 100 seconds");
-                assert_eq!(result.url, "https://vimeo.com/123456");
+                assert_eq!(result.title, "RUST");
+                assert_eq!(result.url, "https://vimeo.com/263989277");
                 assert_eq!(result.template, Template::Videos);
-                assert_eq!(result.author.as_deref(), Some("Fireship"));
+                assert_eq!(result.author.as_deref(), Some("Ariane Prin"));
                 assert_eq!(
                     result.thumbnail.as_deref(),
-                    Some("https://i.vimeocdn.com/video/123.jpg")
+                    Some("https://i.vimeocdn.com/video/1.jpg")
                 );
+                assert_eq!(result.published_date.as_deref(), Some("2015-09-07"));
                 assert_eq!(
-                    result.published_date.as_deref(),
-                    Some("2024-05-01T12:00:00+00:00")
-                );
-                assert_eq!(
-                    result.metadata.get("length").map(String::as_str),
-                    Some("02:05")
+                    result.metadata.get("views").map(String::as_str),
+                    Some("13.2K views")
                 );
                 assert_eq!(
                     result.metadata.get("iframe_src").map(String::as_str),
-                    Some("https://player.vimeo.com/video/123456")
+                    Some("https://player.vimeo.com/video/263989277")
                 );
             }
             _ => panic!("expected a result"),
@@ -219,26 +213,21 @@ mod tests {
     }
 
     #[test]
-    fn request_carries_paging_and_the_jwt() {
-        let mut config = EngineConfig::new("vimeo", "vimeo", "vm", &["videos"]);
-        config.api_key = Some("token123".to_string());
-        let request = Vimeo::from_config(&config)
-            .unwrap()
-            .build_request(&query(), 2)
-            .unwrap();
-        assert_eq!(
-            request.url,
-            "https://api.vimeo.com/search?filter_type=clip&query=rust&page=2&per_page=20"
+    fn the_captcha_wall_asks_for_a_rendered_page() {
+        let wall = EngineResponse::new(
+            403,
+            BASE_URL,
+            b"<html><title>Vimeo / CAPTCHA Challenge</title></html>".to_vec(),
         );
-        assert_eq!(
-            request
-                .headers
-                .get("authorization")
-                .unwrap()
-                .to_str()
-                .unwrap(),
-            "jwt token123"
-        );
+        assert!(engine().needs_render(&wall));
+        let rendered = EngineResponse::new(200, BASE_URL, FIXTURE.as_bytes().to_vec());
+        assert!(!engine().needs_render(&rendered));
+    }
+
+    #[test]
+    fn request_carries_the_query_and_paging() {
+        let request = engine().build_request(&query(), 2).unwrap();
+        assert_eq!(request.url, "https://vimeo.com/search?q=rust&page=2");
         assert_eq!(
             request.headers.get("Accept").unwrap().to_str().unwrap(),
             ACCEPT
@@ -246,8 +235,14 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_container_is_not_an_error() {
-        let response = EngineResponse::new(200, BASE_URL, b"{\"total\": 0}".to_vec());
+    fn the_first_page_omits_the_page_parameter() {
+        let request = engine().build_request(&query(), 1).unwrap();
+        assert_eq!(request.url, "https://vimeo.com/search?q=rust");
+    }
+
+    #[test]
+    fn a_page_without_cards_is_not_an_error() {
+        let response = EngineResponse::new(200, BASE_URL, b"<html></html>".to_vec());
         assert!(engine().parse(&response, &query()).unwrap().is_empty());
     }
 }
