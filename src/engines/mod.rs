@@ -272,6 +272,8 @@ pub mod yep;
 pub mod youtube_api;
 pub mod youtube_noapi;
 pub mod zlibrary;
+pub mod north_rip;
+pub mod yahoo_realtime;
 
 use crate::engine::EngineHandle;
 use crate::settings::EngineConfig;
@@ -365,6 +367,8 @@ pub fn build(config: &EngineConfig) -> Result<EngineHandle, String> {
         "iqiyi" => iqiyi::Iqiyi::from_config(config)?,
         "niconico" => niconico::Niconico::from_config(config)?,
         "youtube_noapi" => youtube_noapi::YoutubeNoapi::from_config(config)?,
+        "yahoo_realtime" => yahoo_realtime::YahooRealtime::from_config(config)?,
+        "north_rip" => north_rip::NorthRip::from_config(config)?,
         "odysee" => odysee::Odysee::from_config(config)?,
         "rumble" => rumble::Rumble::from_config(config)?,
         "vimeo" => vimeo::Vimeo::from_config(config)?,
