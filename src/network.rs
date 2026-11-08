@@ -999,9 +999,13 @@ fn solve_anubis_pow(
             let mut checked = 0u64;
             // A grade 6 challenge needs about 16.7 million hashes on average,
             // so a five million cap gave up before the sweep had a real chance
-            // (Startpage grades this client 6). The deadline above still bounds
-            // the work; the cap only stops a sweep that can never succeed.
-            while nonce < 60_000_000 && !found.load(std::sync::atomic::Ordering::Relaxed) {
+            // (Startpage grades this client 6). A sixty million cap was still
+            // too small on a three-core host, where the whole sweep is only
+            // about eight seconds of work: the cap ended the search before the
+            // deadline did and the engine reported a captcha. The deadline is
+            // the real bound, so the cap only has to stop a sweep that can
+            // never succeed.
+            while nonce < 500_000_000 && !found.load(std::sync::atomic::Ordering::Relaxed) {
                 let mut hasher = Sha256::new();
                 hasher.update(data.as_bytes());
                 hasher.update(nonce.to_string().as_bytes());

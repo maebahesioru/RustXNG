@@ -235,6 +235,7 @@ pub mod stocksnap;
 pub mod swisscows;
 pub mod swisscows_news;
 pub mod tagesschau;
+pub mod tavily;
 pub mod tiger;
 pub mod tineye;
 pub mod tokyotoshokan;
@@ -470,6 +471,7 @@ pub fn build(config: &EngineConfig) -> Result<EngineHandle, String> {
         "gmx" => gmx::Gmx::from_config(config)?,
         "ina" => ina::Ina::from_config(config)?,
         "lucide" => lucide::Lucide::from_config(config)?,
+        "tavily" => tavily::Tavily::from_config(config)?,
         "tiger" => tiger::Tiger::from_config(config)?,
         "tineye" => tineye::Tineye::from_config(config)?,
         "uxwing" => uxwing::Uxwing::from_config(config)?,
