@@ -92,6 +92,14 @@ impl SearchRequest {
             query,
         }
     }
+
+    fn explicit_engines(&self) -> Vec<String> {
+        if self.engines.is_empty() {
+            self.query.engine_ref_names()
+        } else {
+            self.engines.clone()
+        }
+    }
 }
 
 /// The result of a search, mirroring the fields of upstream's JSON response.
