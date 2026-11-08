@@ -418,25 +418,63 @@ impl Network {
         if remaining.is_zero() {
             return None;
         }
-        let response = self
-            .bare
-            .get(url)
-            .timeout(remaining)
-            .header(reqwest::header::USER_AGENT, user_agent)
-            .send()
-            .await
-            .ok()?;
-        if !response.status().is_success() {
-            debug!(
-                url,
-                status = response.status().as_u16(),
-                "anubis: the guard page was not a success"
-            );
-            return None;
+        // A guarded site may answer the search URL with a redirect to the page
+        // that carries the challenge (Startpage sends /sp/search to /?sc=...).
+        // The bare client never follows redirects because the challenge round
+        // trip needs the intermediate "Set-Cookie", so walk the hops here and
+        // keep every cookie the site handed out on the way.
+        let mut target = url.to_string();
+        let mut cookies: Vec<(String, String)> = Vec::new();
+        let mut body = String::new();
+        for hop in 0..4 {
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                return None;
+            }
+            let response = self
+                .bare
+                .get(&target)
+                .timeout(remaining)
+                .header(reqwest::header::USER_AGENT, user_agent)
+                .send()
+                .await
+                .ok()?;
+            let status = response.status();
+            for pair in set_cookie_pairs(response.headers()) {
+                if !cookies.iter().any(|(name, _)| name == &pair.0) {
+                    cookies.push(pair);
+                }
+            }
+            if status.is_redirection() {
+                let Some(location) = response
+                    .headers()
+                    .get(reqwest::header::LOCATION)
+                    .and_then(|value| value.to_str().ok())
+                    .map(str::to_string)
+                else {
+                    debug!(url, hop, status = status.as_u16(), "anubis: a redirect without a location");
+                    return None;
+                };
+                target = if location.starts_with("http") {
+                    location
+                } else {
+                    format!("{}{}", url_origin(&target), location)
+                };
+                continue;
+            }
+            if !status.is_success() {
+                debug!(
+                    url,
+                    status = status.as_u16(),
+                    "anubis: the guard page was not a success"
+                );
+                return None;
+            }
+            body = response.text().await.ok()?;
+            return Some((body, cookies));
         }
-        let cookies = set_cookie_pairs(response.headers());
-        let body = response.text().await.ok()?;
-        Some((body, cookies))
+        debug!(url, "anubis: too many redirects before the guard page");
+        None
     }
 
     /// A different user agent on every call, like upstream's rotation.
@@ -959,7 +997,11 @@ fn solve_anubis_pow(
         handles.push(std::thread::spawn(move || {
             let mut nonce = worker;
             let mut checked = 0u64;
-            while nonce < 5_000_000 && !found.load(std::sync::atomic::Ordering::Relaxed) {
+            // A grade 6 challenge needs about 16.7 million hashes on average,
+            // so a five million cap gave up before the sweep had a real chance
+            // (Startpage grades this client 6). The deadline above still bounds
+            // the work; the cap only stops a sweep that can never succeed.
+            while nonce < 60_000_000 && !found.load(std::sync::atomic::Ordering::Relaxed) {
                 let mut hasher = Sha256::new();
                 hasher.update(data.as_bytes());
                 hasher.update(nonce.to_string().as_bytes());
